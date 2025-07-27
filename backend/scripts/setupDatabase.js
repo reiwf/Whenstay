@@ -1,5 +1,5 @@
 // Load environment variables
-require('../$node_modules/dotenv/lib/main.js').config({ path: require('path').join(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
 const { supabaseAdmin } = require('../config/supabase');
 const { v4: uuidv4 } = require('../$node_modules/uuid/dist/index.js');
@@ -205,3 +205,5 @@ setupDatabase().then(() => {
   console.error('❌ Setup script failed:', error);
   process.exit(1);
 });
+
+

@@ -1,4 +1,4 @@
-const express = require('../$node_modules/express/index.js');
+const express = require('express');
 const router = express.Router();
 const databaseService = require('../services/databaseService');
 const beds24Service = require('../services/beds24Service');
@@ -610,9 +610,215 @@ router.delete('/properties/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Room Management Routes
+// Room Type Management Routes
 
-// Create room for a property
+// Get all room types for a property
+router.get('/properties/:propertyId/room-types', adminAuth, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const { withUnits } = req.query;
+    
+    let roomTypes;
+    if (withUnits === 'true') {
+      roomTypes = await databaseService.getRoomTypesWithUnits(propertyId);
+    } else {
+      roomTypes = await databaseService.getRoomTypesByProperty(propertyId);
+    }
+    
+    res.status(200).json({
+      message: 'Room types retrieved successfully',
+      roomTypes
+    });
+  } catch (error) {
+    console.error('Error fetching room types:', error);
+    res.status(500).json({ error: 'Failed to fetch room types' });
+  }
+});
+
+// Create room type for a property
+router.post('/properties/:propertyId/room-types', adminAuth, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const {
+      name,
+      description,
+      maxGuests,
+      basePrice,
+      currency,
+      roomAmenities,
+      bedConfiguration,
+      roomSizeSqm,
+      hasBalcony,
+      hasKitchen,
+      isAccessible
+    } = req.body;
+    
+    // Validate required fields
+    if (!name || !maxGuests) {
+      return res.status(400).json({ error: 'Name and max guests are required' });
+    }
+    
+    const roomTypeData = {
+      name,
+      description,
+      maxGuests,
+      basePrice,
+      currency: currency || 'USD',
+      roomAmenities,
+      bedConfiguration,
+      roomSizeSqm,
+      hasBalcony,
+      hasKitchen,
+      isAccessible
+    };
+    
+    const roomType = await databaseService.createRoomType(propertyId, roomTypeData);
+    
+    res.status(201).json({
+      message: 'Room type created successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error creating room type:', error);
+    res.status(500).json({ error: 'Failed to create room type' });
+  }
+});
+
+// Update room type
+router.put('/room-types/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const roomType = await databaseService.updateRoomType(id, updateData);
+    
+    res.status(200).json({
+      message: 'Room type updated successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error updating room type:', error);
+    res.status(500).json({ error: 'Failed to update room type' });
+  }
+});
+
+// Delete room type
+router.delete('/room-types/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const roomType = await databaseService.deleteRoomType(id);
+    
+    res.status(200).json({
+      message: 'Room type deleted successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error deleting room type:', error);
+    res.status(500).json({ error: 'Failed to delete room type' });
+  }
+});
+
+// Room Unit Management Routes
+
+// Get all room units for a room type
+router.get('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    
+    const roomUnits = await databaseService.getRoomUnitsByRoomType(roomTypeId);
+    
+    res.status(200).json({
+      message: 'Room units retrieved successfully',
+      roomUnits
+    });
+  } catch (error) {
+    console.error('Error fetching room units:', error);
+    res.status(500).json({ error: 'Failed to fetch room units' });
+  }
+});
+
+// Create room unit for a room type
+router.post('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const {
+      unitNumber,
+      floorNumber,
+      accessCode,
+      accessInstructions,
+      wifiName,
+      wifiPassword,
+      unitAmenities,
+      maintenanceNotes
+    } = req.body;
+    
+    // Validate required fields
+    if (!unitNumber) {
+      return res.status(400).json({ error: 'Unit number is required' });
+    }
+    
+    const roomUnitData = {
+      unitNumber,
+      floorNumber,
+      accessCode,
+      accessInstructions,
+      wifiName,
+      wifiPassword,
+      unitAmenities,
+      maintenanceNotes
+    };
+    
+    const roomUnit = await databaseService.createRoomUnit(roomTypeId, roomUnitData);
+    
+    res.status(201).json({
+      message: 'Room unit created successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error creating room unit:', error);
+    res.status(500).json({ error: 'Failed to create room unit' });
+  }
+});
+
+// Update room unit
+router.put('/room-units/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const roomUnit = await databaseService.updateRoomUnit(id, updateData);
+    
+    res.status(200).json({
+      message: 'Room unit updated successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error updating room unit:', error);
+    res.status(500).json({ error: 'Failed to update room unit' });
+  }
+});
+
+// Delete room unit
+router.delete('/room-units/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const roomUnit = await databaseService.deleteRoomUnit(id);
+    
+    res.status(200).json({
+      message: 'Room unit deleted successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error deleting room unit:', error);
+    res.status(500).json({ error: 'Failed to delete room unit' });
+  }
+});
+
+// Legacy Room Management Routes (for backward compatibility)
+
+// Create room for a property (deprecated - use room types/units instead)
 router.post('/properties/:propertyId/rooms', adminAuth, async (req, res) => {
   try {
     const { propertyId } = req.params;
@@ -669,7 +875,7 @@ router.post('/properties/:propertyId/rooms', adminAuth, async (req, res) => {
   }
 });
 
-// Update room
+// Update room (deprecated)
 router.put('/rooms/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -687,7 +893,7 @@ router.put('/rooms/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Delete room
+// Delete room (deprecated)
 router.delete('/rooms/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;

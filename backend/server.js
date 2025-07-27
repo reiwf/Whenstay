@@ -1,8 +1,8 @@
-const express = require('./$node_modules/express/index.js');
-const cors = require('./$node_modules/cors/lib/index.js');
-const helmet = require('./$node_modules/helmet/index.d.cts');
-const rateLimit = require('./$node_modules/express-rate-limit/dist/index.d.cts');
-require('./$node_modules/dotenv/lib/main.js').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -70,3 +70,5 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
+

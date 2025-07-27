@@ -1,4 +1,4 @@
-require('../$node_modules/dotenv/lib/main.js').config();
+require('dotenv').config();
 const { supabaseAdmin } = require('../config/supabase');
 
 async function setupStorage() {
@@ -69,3 +69,5 @@ if (require.main === module) {
 }
 
 module.exports = { setupStorage };
+
+

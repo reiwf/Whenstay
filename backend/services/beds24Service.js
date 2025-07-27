@@ -134,3 +134,5 @@ class Beds24Service {
 }
 
 module.exports = new Beds24Service();
+
+

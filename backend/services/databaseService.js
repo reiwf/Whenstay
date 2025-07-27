@@ -738,13 +738,32 @@ class DatabaseService {
     }
   }
 
-  // Get properties with statistics
+  // Get properties with statistics (updated for V5 schema)
   async getPropertiesWithStats() {
     try {
       const { data, error } = await supabaseAdmin
         .from('properties')
         .select(`
           *,
+          room_types (
+            id,
+            name,
+            max_guests,
+            base_price,
+            is_active,
+            room_units (
+              id,
+              unit_number,
+              is_active,
+              reservations (
+                id,
+                status,
+                check_in_date,
+                check_out_date,
+                total_amount
+              )
+            )
+          ),
           rooms (
             id,
             room_number,
@@ -770,21 +789,44 @@ class DatabaseService {
 
       // Calculate statistics for each property
       const propertiesWithStats = data.map(property => {
-        const activeRooms = property.rooms.filter(room => room.is_active);
-        const allReservations = activeRooms.flatMap(room => room.reservations || []);
+        // Handle both new V5 structure (room_types/room_units) and legacy (rooms)
+        let totalRoomUnits = 0;
+        let allReservations = [];
+
+        // V5 structure: room_types -> room_units
+        if (property.room_types && property.room_types.length > 0) {
+          const activeRoomTypes = property.room_types.filter(rt => rt.is_active);
+          const activeRoomUnits = activeRoomTypes.flatMap(rt => 
+            rt.room_units?.filter(ru => ru.is_active) || []
+          );
+          totalRoomUnits = activeRoomUnits.length;
+          allReservations = activeRoomUnits.flatMap(ru => ru.reservations || []);
+        }
+
+        // Legacy structure: direct rooms
+        if (property.rooms && property.rooms.length > 0) {
+          const activeRooms = property.rooms.filter(room => room.is_active);
+          totalRoomUnits += activeRooms.length;
+          allReservations = allReservations.concat(
+            activeRooms.flatMap(room => room.reservations || [])
+          );
+        }
+
         const completedReservations = allReservations.filter(res => res.status === 'completed');
         const upcomingReservations = allReservations.filter(res => 
           res.status === 'invited' && new Date(res.check_in_date) >= new Date()
         );
 
         const totalRevenue = completedReservations.reduce((sum, res) => sum + (res.total_amount || 0), 0);
-        const occupancyRate = activeRooms.length > 0 ? 
-          (completedReservations.length / (activeRooms.length * 30)) * 100 : 0; // Rough monthly occupancy
+        const occupancyRate = totalRoomUnits > 0 ? 
+          (completedReservations.length / (totalRoomUnits * 30)) * 100 : 0; // Rough monthly occupancy
 
         return {
           ...property,
           stats: {
-            totalRooms: activeRooms.length,
+            totalRoomTypes: property.room_types?.filter(rt => rt.is_active).length || 0,
+            totalRoomUnits: totalRoomUnits,
+            totalRooms: totalRoomUnits, // For backward compatibility
             totalReservations: allReservations.length,
             completedReservations: completedReservations.length,
             upcomingReservations: upcomingReservations.length,
@@ -797,6 +839,257 @@ class DatabaseService {
       return propertiesWithStats;
     } catch (error) {
       console.error('Database error fetching properties with stats:', error);
+      throw error;
+    }
+  }
+
+  // Room Type Management Methods
+
+  // Get room types by property
+  async getRoomTypesByProperty(propertyId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .select('*')
+        .eq('property_id', propertyId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching room types:', error);
+        throw new Error('Failed to fetch room types');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error fetching room types:', error);
+      throw error;
+    }
+  }
+
+  // Get room types with their room units
+  async getRoomTypesWithUnits(propertyId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .select(`
+          *,
+          room_units (*)
+        `)
+        .eq('property_id', propertyId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching room types with units:', error);
+        throw new Error('Failed to fetch room types with units');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error fetching room types with units:', error);
+      throw error;
+    }
+  }
+
+  // Create room type
+  async createRoomType(propertyId, roomTypeData) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .insert({
+          property_id: propertyId,
+          name: roomTypeData.name,
+          description: roomTypeData.description,
+          max_guests: roomTypeData.maxGuests,
+          base_price: roomTypeData.basePrice,
+          currency: roomTypeData.currency || 'USD',
+          room_amenities: roomTypeData.roomAmenities,
+          bed_configuration: roomTypeData.bedConfiguration,
+          room_size_sqm: roomTypeData.roomSizeSqm,
+          has_balcony: roomTypeData.hasBalcony || false,
+          has_kitchen: roomTypeData.hasKitchen || false,
+          is_accessible: roomTypeData.isAccessible || false
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating room type:', error);
+        throw new Error('Failed to create room type');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error creating room type:', error);
+      throw error;
+    }
+  }
+
+  // Update room type
+  async updateRoomType(roomTypeId, roomTypeData) {
+    try {
+      const updateData = {};
+      
+      if (roomTypeData.name !== undefined) updateData.name = roomTypeData.name;
+      if (roomTypeData.description !== undefined) updateData.description = roomTypeData.description;
+      if (roomTypeData.maxGuests !== undefined) updateData.max_guests = roomTypeData.maxGuests;
+      if (roomTypeData.basePrice !== undefined) updateData.base_price = roomTypeData.basePrice;
+      if (roomTypeData.currency !== undefined) updateData.currency = roomTypeData.currency;
+      if (roomTypeData.roomAmenities !== undefined) updateData.room_amenities = roomTypeData.roomAmenities;
+      if (roomTypeData.bedConfiguration !== undefined) updateData.bed_configuration = roomTypeData.bedConfiguration;
+      if (roomTypeData.roomSizeSqm !== undefined) updateData.room_size_sqm = roomTypeData.roomSizeSqm;
+      if (roomTypeData.hasBalcony !== undefined) updateData.has_balcony = roomTypeData.hasBalcony;
+      if (roomTypeData.hasKitchen !== undefined) updateData.has_kitchen = roomTypeData.hasKitchen;
+      if (roomTypeData.isAccessible !== undefined) updateData.is_accessible = roomTypeData.isAccessible;
+
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .update(updateData)
+        .eq('id', roomTypeId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating room type:', error);
+        throw new Error('Failed to update room type');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error updating room type:', error);
+      throw error;
+    }
+  }
+
+  // Delete room type (soft delete)
+  async deleteRoomType(roomTypeId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .update({ is_active: false })
+        .eq('id', roomTypeId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error deleting room type:', error);
+        throw new Error('Failed to delete room type');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error deleting room type:', error);
+      throw error;
+    }
+  }
+
+  // Room Unit Management Methods
+
+  // Get room units by room type
+  async getRoomUnitsByRoomType(roomTypeId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .select('*')
+        .eq('room_type_id', roomTypeId)
+        .eq('is_active', true)
+        .order('unit_number', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching room units:', error);
+        throw new Error('Failed to fetch room units');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error fetching room units:', error);
+      throw error;
+    }
+  }
+
+  // Create room unit
+  async createRoomUnit(roomTypeId, roomUnitData) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .insert({
+          room_type_id: roomTypeId,
+          unit_number: roomUnitData.unitNumber,
+          floor_number: roomUnitData.floorNumber,
+          access_code: roomUnitData.accessCode,
+          access_instructions: roomUnitData.accessInstructions,
+          wifi_name: roomUnitData.wifiName,
+          wifi_password: roomUnitData.wifiPassword,
+          unit_amenities: roomUnitData.unitAmenities,
+          maintenance_notes: roomUnitData.maintenanceNotes
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating room unit:', error);
+        throw new Error('Failed to create room unit');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error creating room unit:', error);
+      throw error;
+    }
+  }
+
+  // Update room unit
+  async updateRoomUnit(roomUnitId, roomUnitData) {
+    try {
+      const updateData = {};
+      
+      if (roomUnitData.unitNumber !== undefined) updateData.unit_number = roomUnitData.unitNumber;
+      if (roomUnitData.floorNumber !== undefined) updateData.floor_number = roomUnitData.floorNumber;
+      if (roomUnitData.accessCode !== undefined) updateData.access_code = roomUnitData.accessCode;
+      if (roomUnitData.accessInstructions !== undefined) updateData.access_instructions = roomUnitData.accessInstructions;
+      if (roomUnitData.wifiName !== undefined) updateData.wifi_name = roomUnitData.wifiName;
+      if (roomUnitData.wifiPassword !== undefined) updateData.wifi_password = roomUnitData.wifiPassword;
+      if (roomUnitData.unitAmenities !== undefined) updateData.unit_amenities = roomUnitData.unitAmenities;
+      if (roomUnitData.maintenanceNotes !== undefined) updateData.maintenance_notes = roomUnitData.maintenanceNotes;
+
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .update(updateData)
+        .eq('id', roomUnitId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating room unit:', error);
+        throw new Error('Failed to update room unit');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error updating room unit:', error);
+      throw error;
+    }
+  }
+
+  // Delete room unit (soft delete)
+  async deleteRoomUnit(roomUnitId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .update({ is_active: false })
+        .eq('id', roomUnitId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error deleting room unit:', error);
+        throw new Error('Failed to delete room unit');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error deleting room unit:', error);
       throw error;
     }
   }
