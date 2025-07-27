@@ -170,12 +170,13 @@ router.post('/sync/beds24', adminAuth, async (req, res) => {
   }
 });
 
-// Get all reservations (with filters)
+// Get all reservations (with filters) - V5 Enhanced
 router.get('/reservations', adminAuth, async (req, res) => {
   try {
     const {
       status,
       propertyId,
+      roomTypeId,
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
@@ -188,6 +189,7 @@ router.get('/reservations', adminAuth, async (req, res) => {
     const filters = {
       status,
       propertyId,
+      roomTypeId,
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
@@ -210,6 +212,7 @@ router.get('/reservations', adminAuth, async (req, res) => {
       filters: {
         status,
         propertyId,
+        roomTypeId,
         checkInDate,
         checkInDateFrom,
         checkInDateTo,

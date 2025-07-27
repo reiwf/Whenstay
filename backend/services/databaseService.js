@@ -208,12 +208,13 @@ class DatabaseService {
     }
   }
 
-  // Get reservations with filtering for admin dashboard
+  // Get reservations with filtering for admin dashboard (V5 enhanced with fallback)
   async getReservationsWithFilters(filters = {}) {
     try {
       const {
         status,
         propertyId,
+        roomTypeId,
         checkInDateFrom,
         checkInDateTo,
         checkInDate,
@@ -223,8 +224,12 @@ class DatabaseService {
         sortOrder = 'desc'
       } = filters;
 
-      let query = supabaseAdmin
-        .from('reservations_with_details')
+      // Try V5 view first, fallback to basic table if it fails
+      let query;
+      let useV5View = true;
+
+      query = supabaseAdmin
+        .from('reservations_details')
         .select('*');
 
       // Apply filters
@@ -233,7 +238,19 @@ class DatabaseService {
       }
 
       if (propertyId) {
-        query = query.eq('property_id', propertyId);
+        if (useV5View) {
+          query = query.eq('property_id', propertyId);
+        } else {
+          // For basic table, we might need to filter differently
+          query = query.eq('room_id', propertyId); // This might need adjustment
+        }
+      }
+
+      if (roomTypeId) {
+        if (useV5View) {
+          query = query.eq('room_type_id', roomTypeId);
+        }
+        // Skip room type filtering for basic table
       }
 
       if (checkInDate) {
@@ -260,12 +277,310 @@ class DatabaseService {
 
       if (error) {
         console.error('Error fetching reservations with filters:', error);
+        
+        // If V5 view failed, try basic table
+        if (useV5View) {
+          console.log('Retrying with basic reservations table...');
+          return this.getReservationsWithFiltersBasic(filters);
+        }
+        
         throw new Error('Failed to fetch reservations');
       }
 
-      return data;
+      // Transform data based on whether we're using V5 view or basic table
+      const transformedData = data.map(reservation => {
+        if (useV5View) {
+          return {
+            ...reservation,
+            // Map V5 fields to frontend-expected names for backward compatibility
+            guest_name: reservation.booking_name,
+            guest_email: reservation.booking_email,
+            guest_phone: reservation.booking_phone,
+            room_number: reservation.unit_number || reservation.room_number || 'TBD',
+            room_name: reservation.room_type_name || 'Standard Room',
+            // Keep all V5 fields for enhanced display with proper fallbacks
+            booking_name: reservation.booking_name,
+            property_name: reservation.property_name || 'Unknown Property',
+            room_type_name: reservation.room_type_name || 'Standard',
+            room_type_description: reservation.room_type_description,
+            unit_number: reservation.unit_number,
+            floor_number: reservation.floor_number,
+            access_code: reservation.access_code,
+            access_instructions: reservation.access_instructions,
+            room_type_amenities: reservation.room_type_amenities,
+            unit_amenities: reservation.unit_amenities,
+            bed_configuration: reservation.bed_configuration,
+            room_size_sqm: reservation.room_size_sqm,
+            has_balcony: reservation.room_type_has_balcony,
+            has_kitchen: reservation.room_type_has_kitchen,
+            is_accessible: reservation.room_type_is_accessible,
+            // Guest information fields
+            guest_firstname: reservation.guest_firstname,
+            guest_lastname: reservation.guest_lastname,
+            guest_contact: reservation.guest_contact,
+            guest_personal_email: reservation.guest_mail,
+            guest_address: reservation.guest_address,
+            estimated_checkin_time: reservation.estimated_checkin_time,
+            travel_purpose: reservation.travel_purpose,
+            emergency_contact_name: reservation.emergency_contact_name,
+            emergency_contact_phone: reservation.emergency_contact_phone,
+            passport_url: reservation.passport_url,
+            agreement_accepted: reservation.agreement_accepted,
+            checkin_submitted_at: reservation.checkin_submitted_at,
+            admin_verified: reservation.admin_verified,
+            verified_at: reservation.verified_at,
+            verified_by_name: reservation.verified_by_name,
+            verified_by_lastname: reservation.verified_by_lastname
+          };
+        } else {
+          // This branch should not be reached anymore since we have proper fallback methods
+          return {
+            ...reservation,
+            guest_name: reservation.booking_name,
+            guest_email: reservation.booking_email,
+            guest_phone: reservation.booking_phone,
+            guest_personal_email: reservation.guest_mail,
+            property_name: 'Property Information Unavailable',
+            room_number: reservation.room_number || 'TBD',
+            room_name: 'Standard Room',
+            room_type_name: 'Standard',
+          };
+        }
+      });
+
+      return transformedData;
     } catch (error) {
       console.error('Database error fetching reservations with filters:', error);
+      throw error;
+    }
+  }
+
+  // Fallback method for basic reservations table with property lookup
+  async getReservationsWithFiltersBasic(filters = {}) {
+    try {
+      const {
+        status,
+        checkInDateFrom,
+        checkInDateTo,
+        checkInDate,
+        limit = 50,
+        offset = 0,
+        sortBy = 'check_in_date',
+        sortOrder = 'desc'
+      } = filters;
+
+      // Try to get reservations with property information via joins
+      let query = supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          room_units (
+            unit_number,
+            floor_number,
+            access_code,
+            access_instructions,
+            wifi_name,
+            wifi_password,
+            unit_amenities,
+            room_types (
+              name,
+              description,
+              max_guests,
+              base_price,
+              currency,
+              room_amenities,
+              bed_configuration,
+              room_size_sqm,
+              has_balcony,
+              has_kitchen,
+              is_accessible,
+              properties (
+                name,
+                address,
+                wifi_name,
+                wifi_password,
+                property_amenities
+              )
+            )
+          ),
+          rooms (
+            room_number,
+            room_name,
+            room_type,
+            max_guests,
+            access_code,
+            access_instructions,
+            room_amenities,
+            properties (
+              name,
+              address,
+              wifi_name,
+              wifi_password
+            )
+          )
+        `);
+
+      // Apply basic filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (checkInDate) {
+        query = query.eq('check_in_date', checkInDate);
+      } else {
+        if (checkInDateFrom) {
+          query = query.gte('check_in_date', checkInDateFrom);
+        }
+        if (checkInDateTo) {
+          query = query.lte('check_in_date', checkInDateTo);
+        }
+      }
+
+      // Apply sorting
+      const ascending = sortOrder === 'asc';
+      query = query.order(sortBy, { ascending });
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching basic reservations with joins:', error);
+        // If joins fail, try simple query without property info
+        return this.getReservationsWithFiltersSimple(filters);
+      }
+
+      // Transform data with proper property information
+      const transformedData = data.map(reservation => {
+        // Check if we have V5 structure (room_units -> room_types -> properties)
+        const roomUnit = reservation.room_units?.[0];
+        const roomType = roomUnit?.room_types;
+        const property = roomType?.properties;
+
+        // Check if we have legacy structure (rooms -> properties)
+        const room = reservation.rooms?.[0];
+        const legacyProperty = room?.properties;
+
+        // Use V5 data if available, otherwise fall back to legacy
+        const propertyData = property || legacyProperty;
+        const roomData = roomUnit || room;
+
+        return {
+          ...reservation,
+          // Basic guest mapping
+          guest_name: reservation.booking_name,
+          guest_email: reservation.booking_email,
+          guest_phone: reservation.booking_phone,
+          guest_personal_email: reservation.guest_mail,
+          
+          // Property information
+          property_name: propertyData?.name || 'Unknown Property',
+          property_address: propertyData?.address || null,
+          property_wifi_name: propertyData?.wifi_name || null,
+          property_amenities: propertyData?.property_amenities || null,
+          
+          // Room/Unit information
+          room_number: roomData?.room_number || roomUnit?.unit_number || 'TBD',
+          room_name: roomData?.room_name || roomType?.name || 'Standard Room',
+          room_type_name: roomType?.name || roomData?.room_type || 'Standard',
+          room_type_description: roomType?.description || null,
+          unit_number: roomUnit?.unit_number || null,
+          floor_number: roomUnit?.floor_number || roomData?.floor_number || null,
+          
+          // Access information
+          access_code: roomData?.access_code || null,
+          access_instructions: roomData?.access_instructions || null,
+          wifi_name: roomData?.wifi_name || propertyData?.wifi_name || null,
+          
+          // Room details
+          max_guests: roomType?.max_guests || roomData?.max_guests || null,
+          bed_configuration: roomType?.bed_configuration || roomData?.bed_configuration || null,
+          room_size_sqm: roomType?.room_size_sqm || roomData?.room_size_sqm || null,
+          has_balcony: roomType?.has_balcony || roomData?.has_balcony || false,
+          has_kitchen: roomType?.has_kitchen || roomData?.has_kitchen || false,
+          is_accessible: roomType?.is_accessible || roomData?.is_accessible || false,
+          room_type_amenities: roomType?.room_amenities || roomData?.room_amenities || null,
+          unit_amenities: roomUnit?.unit_amenities || null
+        };
+      });
+
+      return transformedData;
+    } catch (error) {
+      console.error('Database error fetching basic reservations:', error);
+      throw error;
+    }
+  }
+
+  // Simple fallback method without joins
+  async getReservationsWithFiltersSimple(filters = {}) {
+    try {
+      const {
+        status,
+        checkInDateFrom,
+        checkInDateTo,
+        checkInDate,
+        limit = 50,
+        offset = 0,
+        sortBy = 'check_in_date',
+        sortOrder = 'desc'
+      } = filters;
+
+      let query = supabaseAdmin
+        .from('reservations')
+        .select('*');
+
+      // Apply basic filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (checkInDate) {
+        query = query.eq('check_in_date', checkInDate);
+      } else {
+        if (checkInDateFrom) {
+          query = query.gte('check_in_date', checkInDateFrom);
+        }
+        if (checkInDateTo) {
+          query = query.lte('check_in_date', checkInDateTo);
+        }
+      }
+
+      // Apply sorting
+      const ascending = sortOrder === 'asc';
+      query = query.order(sortBy, { ascending });
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching simple reservations:', error);
+        throw new Error('Failed to fetch reservations');
+      }
+
+      // Transform basic data with minimal property info
+      const transformedData = data.map(reservation => ({
+        ...reservation,
+        guest_name: reservation.booking_name,
+        guest_email: reservation.booking_email,
+        guest_phone: reservation.booking_phone,
+        guest_personal_email: reservation.guest_mail,
+        // Use more descriptive fallbacks instead of "N/A"
+        property_name: 'Property Information Unavailable',
+        room_number: reservation.room_number || 'TBD',
+        room_name: 'Standard Room',
+        room_type_name: 'Standard',
+      }));
+
+      return transformedData;
+    } catch (error) {
+      console.error('Database error fetching simple reservations:', error);
       throw error;
     }
   }
@@ -280,37 +595,42 @@ class DatabaseService {
         checkInDate
       } = filters;
 
-      let baseQuery = supabaseAdmin.from('reservations');
-
-      // Apply same filters as main query
-      if (propertyId) {
-        baseQuery = baseQuery.eq('room_id', propertyId); // Note: This needs to be adjusted for property filtering
-      }
-
-      if (checkInDate) {
-        baseQuery = baseQuery.eq('check_in_date', checkInDate);
-      } else {
-        if (checkInDateFrom) {
-          baseQuery = baseQuery.gte('check_in_date', checkInDateFrom);
+      // Create base query builder function to avoid the .eq issue
+      const createBaseQuery = () => {
+        let query = supabaseAdmin.from('reservations');
+        
+        // Apply same filters as main query
+        if (propertyId) {
+          query = query.eq('room_id', propertyId); // Keep using room_id for now
         }
-        if (checkInDateTo) {
-          baseQuery = baseQuery.lte('check_in_date', checkInDateTo);
+
+        if (checkInDate) {
+          query = query.eq('check_in_date', checkInDate);
+        } else {
+          if (checkInDateFrom) {
+            query = query.gte('check_in_date', checkInDateFrom);
+          }
+          if (checkInDateTo) {
+            query = query.lte('check_in_date', checkInDateTo);
+          }
         }
-      }
+        
+        return query;
+      };
 
       // Get counts by status
       const [totalResult, pendingResult, invitedResult, completedResult, cancelledResult] = await Promise.all([
-        baseQuery.select('*', { count: 'exact', head: true }),
-        baseQuery.select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        baseQuery.select('*', { count: 'exact', head: true }).eq('status', 'invited'),
-        baseQuery.select('*', { count: 'exact', head: true }).eq('status', 'completed'),
-        baseQuery.select('*', { count: 'exact', head: true }).eq('status', 'cancelled')
+        createBaseQuery().select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'pending').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'invited').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'completed').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'cancelled').select('*', { count: 'exact', head: true })
       ]);
 
       // Get revenue for completed reservations
-      const { data: revenueData, error: revenueError } = await baseQuery
-        .select('total_amount')
-        .eq('status', 'completed');
+      let revenueQuery = createBaseQuery();
+      revenueQuery = revenueQuery.eq('status', 'completed');
+      const { data: revenueData, error: revenueError } = await revenueQuery.select('total_amount');
 
       if (revenueError) {
         console.error('Error fetching revenue data:', revenueError);

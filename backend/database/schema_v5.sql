@@ -282,7 +282,7 @@ CREATE TRIGGER IF NOT EXISTS update_reservations_verified_at
   EXECUTE FUNCTION update_verified_at();
 
 -- Updated View with Full Hierarchy
-CREATE OR REPLACE VIEW public.reservations_with_full_details AS
+CREATE OR REPLACE VIEW public.reservations_details AS
 SELECT 
   r.id,
   r.beds24_booking_id,

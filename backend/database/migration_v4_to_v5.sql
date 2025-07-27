@@ -227,7 +227,7 @@ WHERE room_id IS NOT NULL;
 */
 
 -- Step 10: Create/Update Views
-CREATE OR REPLACE VIEW public.reservations_with_full_details AS
+CREATE OR REPLACE VIEW public.reservations_details AS
 SELECT 
   r.id,
   r.beds24_booking_id,

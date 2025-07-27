@@ -149,6 +149,11 @@ export const adminAPI = {
       params: { withUnits: withUnits.toString() } 
     }),
   
+  getRoomTypesByProperty: (propertyId, withUnits = false) => 
+    api.get(`/admin/properties/${propertyId}/room-types`, { 
+      params: { withUnits: withUnits.toString() } 
+    }),
+  
   createRoomType: (propertyId, roomTypeData) => 
     api.post(`/admin/properties/${propertyId}/room-types`, roomTypeData),
   
