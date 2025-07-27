@@ -1694,6 +1694,159 @@ class DatabaseService {
       throw error;
     }
   }
+
+  // Get complete guest dashboard data by check-in token
+  async getGuestDashboardData(checkinToken) {
+    try {
+      // First, get the reservation using the reservations_details view for comprehensive data
+      const { data, error } = await supabaseAdmin
+        .from('reservations_details')
+        .select('*')
+        .eq('check_in_token', checkinToken)
+        .single();
+
+      if (error) {
+        console.error('Error fetching guest dashboard data:', error);
+        return null;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      // Structure the data for the frontend
+      const dashboardData = {
+        reservation: {
+          id: data.id,
+          beds24_booking_id: data.beds24_booking_id,
+          booking_name: data.booking_name,
+          booking_email: data.booking_email,
+          booking_phone: data.booking_phone,
+          check_in_date: data.check_in_date,
+          check_out_date: data.check_out_date,
+          num_guests: data.num_guests,
+          num_adults: data.num_adults,
+          num_children: data.num_children,
+          total_amount: data.total_amount,
+          currency: data.currency,
+          status: data.status,
+          special_requests: data.special_requests,
+          
+          // Guest information
+          guest_firstname: data.guest_firstname,
+          guest_lastname: data.guest_lastname,
+          guest_contact: data.guest_contact,
+          guest_mail: data.guest_mail,
+          guest_address: data.guest_address,
+          estimated_checkin_time: data.estimated_checkin_time,
+          travel_purpose: data.travel_purpose,
+          emergency_contact_name: data.emergency_contact_name,
+          emergency_contact_phone: data.emergency_contact_phone,
+          passport_url: data.passport_url,
+          agreement_accepted: data.agreement_accepted,
+          checkin_submitted_at: data.checkin_submitted_at,
+          admin_verified: data.admin_verified,
+          verified_at: data.verified_at,
+          
+          // Computed fields for backward compatibility
+          guest_name: data.booking_name,
+          guest_email: data.booking_email,
+          guest_phone: data.booking_phone
+        },
+        
+        property: {
+          id: data.property_id,
+          name: data.property_name,
+          address: data.property_address,
+          description: data.description,
+          property_type: data.property_type,
+          wifi_name: data.property_wifi_name || data.wifi_name,
+          wifi_password: data.property_wifi_password || data.wifi_password,
+          house_rules: data.house_rules,
+          check_in_instructions: data.check_in_instructions,
+          emergency_contact: data.property_emergency_contact,
+          property_amenities: data.property_amenities,
+          location_info: data.location_info,
+          access_time: data.access_time // Important for time-based room access
+        },
+        
+        room: {
+          // Room Type information
+          room_type_id: data.room_type_id,
+          room_type_name: data.room_type_name || 'Standard Room',
+          room_type_description: data.room_type_description,
+          max_guests: data.room_type_max_guests || data.max_guests,
+          base_price: data.base_price,
+          room_amenities: data.room_type_amenities,
+          bed_configuration: data.bed_configuration,
+          room_size_sqm: data.room_size_sqm,
+          has_balcony: data.room_type_has_balcony,
+          has_kitchen: data.room_type_has_kitchen,
+          is_accessible: data.room_type_is_accessible,
+          
+          // Room Unit information
+          room_unit_id: data.room_unit_id,
+          unit_number: data.unit_number,
+          floor_number: data.floor_number,
+          access_code: data.access_code,
+          access_instructions: data.access_instructions,
+          wifi_name: data.unit_wifi_name,
+          wifi_password: data.unit_wifi_password,
+          unit_amenities: data.unit_amenities,
+          maintenance_notes: data.maintenance_notes,
+          
+          // Backward compatibility fields
+          room_number: data.unit_number || data.room_number || 'TBD',
+          room_name: data.room_type_name || 'Standard Room',
+          amenities: data.room_type_amenities || data.unit_amenities || {}
+        },
+        
+        // Additional computed fields
+        checkin_status: data.checkin_submitted_at ? 'completed' : 'pending',
+        can_access_room: this.canAccessRoom(data),
+        
+        // Meta information
+        last_updated: new Date().toISOString()
+      };
+
+      return dashboardData;
+    } catch (error) {
+      console.error('Database error fetching guest dashboard data:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to determine if guest can access room details
+  canAccessRoom(reservationData) {
+    try {
+      // Check if check-in is completed
+      if (!reservationData.checkin_submitted_at) {
+        return false;
+      }
+
+      // Check if today is the check-in date
+      const today = new Date().toDateString();
+      const checkinDate = new Date(reservationData.check_in_date).toDateString();
+      
+      if (today !== checkinDate) {
+        return false;
+      }
+
+      // Check if current time is past the access time
+      if (reservationData.access_time) {
+        const currentTime = new Date().toTimeString().slice(0, 8); // "HH:MM:SS"
+        const accessTime = reservationData.access_time; // "14:00:00"
+        
+        return currentTime >= accessTime;
+      }
+
+      // If no access time is set, allow access after check-in completion
+      return true;
+    } catch (error) {
+      console.error('Error determining room access:', error);
+      return false;
+    }
+  }
 }
 
 module.exports = new DatabaseService();

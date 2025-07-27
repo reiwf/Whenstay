@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS public.properties (
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
+  access_time time without time zone null,
   constraint properties_pkey primary key (id),
   constraint properties_owner_id_fkey foreign KEY (owner_id) references user_profiles (id) on delete CASCADE
 );

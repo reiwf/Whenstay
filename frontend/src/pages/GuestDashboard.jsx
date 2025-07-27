@@ -16,7 +16,13 @@ import {
   MessageCircle,
   Bed,
   Star,
-  Building
+  Building,
+  Utensils,
+  Camera,
+  Car,
+  ShoppingBag,
+  Coffee,
+  Unlock
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -67,6 +73,73 @@ export default function GuestDashboard() {
       case 'local_info': return <MapPin className="w-5 h-5" />
       case 'emergency': return <AlertCircle className="w-5 h-5" />
       default: return <Info className="w-5 h-5" />
+    }
+  }
+
+  const getRecommendationIcon = (category) => {
+    switch (category.toLowerCase()) {
+      case 'dining':
+      case 'restaurants':
+      case 'food':
+        return <Utensils className="w-5 h-5" />
+      case 'attractions':
+      case 'sightseeing':
+      case 'entertainment':
+        return <Camera className="w-5 h-5" />
+      case 'transportation':
+      case 'transport':
+      case 'travel':
+        return <Car className="w-5 h-5" />
+      case 'shopping':
+      case 'stores':
+        return <ShoppingBag className="w-5 h-5" />
+      case 'cafes':
+      case 'coffee':
+        return <Coffee className="w-5 h-5" />
+      default:
+        return <MapPin className="w-5 h-5" />
+    }
+  }
+
+  // Check if guest can access room details based on time and check-in status
+  const canAccessRoomDetails = () => {
+  if (!dashboardData || !checkinStatus?.completed) {
+    return false
+  }
+
+  const { reservation, property } = dashboardData
+
+  const today = new Date().toDateString()
+  console.log('Today:', today)
+  const checkinDate = new Date(reservation.check_in_date).toDateString()
+  console.log('Check-in Date:', checkinDate)
+  
+
+  if (today !== checkinDate) {
+    return false
+  }
+
+  if (property.access_time) {
+      const currentTime = new Date().toTimeString().slice(0, 8) // "HH:MM:SS"
+      const accessTime = property.access_time // "14:00:00"
+      console.log('Access Time:', property.access_time)
+      
+      return currentTime >= accessTime
+    }
+
+  return true
+}
+
+
+  const formatAccessTime = (timeString) => {
+    if (!timeString) return ''
+    try {
+      const [hours, minutes] = timeString.split(':')
+      const time = new Date()
+      time.setHours(parseInt(hours), parseInt(minutes))
+      return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } catch (error) {
+      return timeString
     }
   }
 
@@ -211,13 +284,23 @@ export default function GuestDashboard() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-primary-800">Room Access Code</span>
-                  <Key className="w-4 h-4 text-primary-600" />
+              {canAccessRoomDetails() ? (
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-primary-800">Room Access Code</span>
+                    <Key className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-primary-900">{room.access_code}</p>
                 </div>
-                <p className="text-2xl font-mono font-bold text-primary-900">{room.access_code}</p>
-              </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-800">Room Access Code</span>
+                    <Key className="w-4 h-4 text-gray-600" />
+                  </div>
+                  <p className="text-gray-500 text-sm">Available on your check-in day after {formatAccessTime(property.access_time)}</p>
+                </div>
+              )}
               
               {room.bed_configuration && (
                 <div className="flex items-center">
@@ -264,6 +347,150 @@ export default function GuestDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Time-based Room Access Section */}
+        {canAccessRoomDetails() && (
+          <div className="card mb-8 border-green-200 bg-green-50">
+            <div className="flex items-center mb-4">
+              <Unlock className="w-6 h-6 text-green-600 mr-2" />
+              <h2 className="text-lg font-semibold text-green-900">Enter Room Details</h2>
+              <span className="ml-auto text-xs text-green-700 bg-green-200 px-2 py-1 rounded-full">
+                Available Now
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="bg-green-100 border border-green-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-green-800">Room Access Code</span>
+                    <Key className="w-4 h-4 text-green-600" />
+                  </div>
+                  <p className="text-3xl font-mono font-bold text-green-900">{room.access_code}</p>
+                </div>
+                
+                {room.unit_number && (
+                  <div className="flex items-center">
+                    <Home className="w-5 h-5 text-green-600 mr-3" />
+                    <div>
+                      <p className="text-sm text-green-700">Unit Number</p>
+                      <p className="font-medium text-green-900">{room.unit_number}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {room.floor_number && (
+                  <div className="flex items-center">
+                    <Building className="w-5 h-5 text-green-600 mr-3" />
+                    <div>
+                      <p className="text-sm text-green-700">Floor</p>
+                      <p className="font-medium text-green-900">Floor {room.floor_number}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {room.access_instructions && (
+                  <div>
+                    <h3 className="text-sm font-medium text-green-900 mb-2">Detailed Access Instructions</h3>
+                    <div className="bg-white border border-green-200 rounded-lg p-3">
+                      <p className="text-sm text-green-800 whitespace-pre-line">{room.access_instructions}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {property.emergency_contact && (
+                  <div>
+                    <h3 className="text-sm font-medium text-green-900 mb-2">Emergency Contact</h3>
+                    <div className="bg-white border border-green-200 rounded-lg p-3">
+                      <div className="flex items-center">
+                        <Phone className="w-4 h-4 text-green-600 mr-2" />
+                        <p className="text-sm font-medium text-green-800">{property.emergency_contact}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Access Time Information */}
+        {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
+          <div className="card mb-8 border-yellow-200 bg-yellow-50">
+            <div className="flex items-center mb-4">
+              <Clock className="w-6 h-6 text-yellow-600 mr-2" />
+              <h2 className="text-lg font-semibold text-yellow-900">Room Access Information</h2>
+            </div>
+            <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-4">
+              <p className="text-yellow-800">
+                <strong>Room access details will be available from {formatAccessTime(property.access_time)} on your check-in date.</strong>
+              </p>
+              <p className="text-sm text-yellow-700 mt-2">
+                Please return to this page after {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()} to view your room access code and detailed instructions.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Local Recommendations */}
+        {property.location_info && (
+          <div className="card mb-8">
+            <div className="flex items-center mb-4">
+              <MapPin className="w-6 h-6 text-blue-600 mr-2" />
+              <h2 className="text-lg font-semibold text-gray-900">Local Recommendations</h2>
+            </div>
+            
+            {typeof property.location_info === 'object' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Object.entries(property.location_info).map(([category, items]) => (
+                  <div key={category} className="space-y-3">
+                    <div className="flex items-center mb-3">
+                      {getRecommendationIcon(category)}
+                      <h3 className="text-md font-semibold text-gray-900 ml-2 capitalize">
+                        {category.replace('_', ' ')}
+                      </h3>
+                    </div>
+                    
+                    {Array.isArray(items) ? (
+                      <div className="space-y-2">
+                        {items.map((item, index) => (
+                          <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            {typeof item === 'object' ? (
+                              <div>
+                                <p className="font-medium text-gray-900">{item.name}</p>
+                                {item.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                                )}
+                                {item.address && (
+                                  <p className="text-xs text-gray-500 mt-1">{item.address}</p>
+                                )}
+                                {item.distance && (
+                                  <p className="text-xs text-blue-600 mt-1">{item.distance}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-700">{item}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-700">{items}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800">{property.location_info}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Property Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -355,7 +582,3 @@ export default function GuestDashboard() {
     </div>
   )
 }
-
-
-
-
