@@ -1,4 +1,4 @@
-import { useState, useEffect } from '../../../../$node_modules/@types/react/index.js'
+import { useState, useEffect } from 'react'
 import { 
   RefreshCw, 
   Download, 
@@ -15,9 +15,9 @@ import {
   Copy,
   ExternalLink,
   Check
-} from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+} from 'lucide-react'
 import { adminAPI } from '../../../services/api'
-import toast from '../../../../$node_modules/react-hot-toast/dist/index.js'
+import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 import ReservationModal from '../modals/ReservationModal'
 import useReservations from '../../../hooks/useReservations'
@@ -548,3 +548,7 @@ export default function ReservationsTab() {
     </div>
   )
 }
+
+
+
+

@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import toast from '../../../../$node_modules/react-hot-toast/dist/index.js'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 
 export default function RoomModal({ room, onSave, onClose }) {
@@ -218,3 +218,7 @@ export default function RoomModal({ room, onSave, onClose }) {
     </div>
   )
 }
+
+
+
+

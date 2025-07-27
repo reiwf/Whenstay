@@ -1,5 +1,5 @@
-import { defineConfig } from './$node_modules/vite/dist/node/index.js'
-import react from './$node_modules/@vitejs/plugin-react/dist/index.js'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -19,3 +19,6 @@ export default defineConfig({
     sourcemap: true,
   },
 })
+
+
+

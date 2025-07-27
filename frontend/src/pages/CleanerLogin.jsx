@@ -1,7 +1,7 @@
-import { useState } from '../../$node_modules/@types/react/index.js'
-import { useNavigate } from '../../$node_modules/react-router-dom/dist/index.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
-import { Eye, EyeOff, Home, LogIn, Sparkles } from '../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { Eye, EyeOff, Home, LogIn, Sparkles } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function CleanerLogin() {
@@ -191,3 +191,7 @@ export default function CleanerLogin() {
     </div>
   )
 }
+
+
+
+

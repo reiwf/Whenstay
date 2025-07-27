@@ -1,6 +1,6 @@
-import { useState, useEffect } from '../../$node_modules/@types/react/index.js'
-import { useParams, useNavigate } from '../../$node_modules/react-router-dom/dist/index.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { 
   Calendar, 
   MapPin, 
@@ -17,7 +17,7 @@ import {
   Bed,
   Star,
   Building
-} from '../../$node_modules/lucide-react/dist/lucide-react.js'
+} from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function GuestDashboard() {
@@ -355,3 +355,7 @@ export default function GuestDashboard() {
     </div>
   )
 }
+
+
+
+

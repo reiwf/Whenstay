@@ -9,3 +9,7 @@ export default function LoadingSpinner({ size = 'medium', className = '' }) {
     <div className={`loading-spinner ${sizeClasses[size]} ${className}`}></div>
   )
 }
+
+
+
+

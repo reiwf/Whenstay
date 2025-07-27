@@ -60,3 +60,7 @@ By checking the agreement box and completing your check-in, you acknowledge that
 `
 
 export default GUEST_AGREEMENT_TEMPLATE
+
+
+
+

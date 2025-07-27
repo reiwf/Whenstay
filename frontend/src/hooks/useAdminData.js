@@ -1,4 +1,4 @@
-import { useState, useCallback } from '../../$node_modules/@types/react/index.js'
+import { useState, useCallback } from 'react'
 import { adminAPI } from '../services/api'
 
 export function useAdminData() {
@@ -74,3 +74,7 @@ export function useAdminData() {
     syncBeds24
   }
 }
+
+
+
+

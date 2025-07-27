@@ -1,6 +1,6 @@
-import { useState, useCallback } from '../../$node_modules/@types/react/index.js'
+import { useState, useCallback } from 'react'
 import { adminAPI } from '../services/api'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import toast from 'react-hot-toast'
 
 export function useUsers() {
   const [users, setUsers] = useState([])
@@ -99,3 +99,7 @@ export function useUsers() {
     updateUserStatus
   }
 }
+
+
+
+

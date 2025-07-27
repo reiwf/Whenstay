@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import LoadingSpinner from '../../LoadingSpinner'
 
 export default function StepNavigation({ 
@@ -53,3 +53,7 @@ export default function StepNavigation({
     </div>
   )
 }
+
+
+
+

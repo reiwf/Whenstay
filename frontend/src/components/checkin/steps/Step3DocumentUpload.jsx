@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { Upload, FileText, CheckCircle, AlertCircle } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 import FileUpload from '../../FileUpload'
 import StepNavigation from '../shared/StepNavigation'
 
@@ -176,3 +176,7 @@ export default function Step3DocumentUpload({
     </div>
   )
 }
+
+
+
+

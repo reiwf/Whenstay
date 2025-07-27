@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { Plus, Users, RefreshCw, Edit, Trash2 } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { Plus, Users, RefreshCw, Edit, Trash2 } from 'lucide-react'
 import UserModal from '../modals/UserModal'
 
 export default function UsersTab({ 
@@ -229,3 +229,7 @@ export default function UsersTab({
     </div>
   )
 }
+
+
+
+

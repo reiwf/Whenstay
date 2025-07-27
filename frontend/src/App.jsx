@@ -1,4 +1,4 @@
-import { Routes, Route } from '../$node_modules/react-router-dom/dist/index.js'
+import { Routes, Route } from 'react-router-dom'
 import CheckinPage from './pages/CheckinPage'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
@@ -39,3 +39,6 @@ function App() {
 }
 
 export default App
+
+
+

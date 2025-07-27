@@ -1,4 +1,4 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
+import { useState } from 'react'
 import { 
   User, 
   Mail, 
@@ -8,7 +8,7 @@ import {
   Briefcase, 
   UserCheck,
   AlertCircle 
-} from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+} from 'lucide-react'
 import StepNavigation from '../shared/StepNavigation'
 
 export default function Step2GuestInformation({ 
@@ -340,3 +340,7 @@ export default function Step2GuestInformation({
     </div>
   )
 }
+
+
+
+

@@ -1,4 +1,4 @@
-import { CheckCircle, Clock, Users, Building, Home, Shield, RefreshCw } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { CheckCircle, Clock, Users, Building, Home, Shield, RefreshCw } from 'lucide-react'
 
 export default function DashboardTab({ stats, checkins, onRefresh }) {
   return (
@@ -155,3 +155,7 @@ export default function DashboardTab({ stats, checkins, onRefresh }) {
     </>
   )
 }
+
+
+
+

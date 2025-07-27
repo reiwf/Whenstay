@@ -1,4 +1,4 @@
-import { useState, useEffect } from '../../../../$node_modules/@types/react/index.js'
+import { useState, useEffect } from 'react'
 import { 
   Calendar, 
   Users, 
@@ -21,8 +21,8 @@ import {
   CreditCard,
   BookImage,
   UserPlus
-} from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
-import toast from '../../../../$node_modules/react-hot-toast/dist/index.js'
+} from 'lucide-react'
+import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
@@ -1083,3 +1083,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     </div>
   )
 }
+
+
+
+

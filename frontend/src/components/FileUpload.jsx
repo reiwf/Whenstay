@@ -1,6 +1,6 @@
-import { useState, useRef } from '../../$node_modules/@types/react/index.js'
-import { Upload, X, FileImage, Loader2 } from '../../$node_modules/lucide-react/dist/lucide-react.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import { useState, useRef } from 'react'
+import { Upload, X, FileImage, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { uploadFile } from '../services/fileUpload'
 
 export default function FileUpload({ 
@@ -218,3 +218,7 @@ export default function FileUpload({
     </div>
   )
 }
+
+
+
+

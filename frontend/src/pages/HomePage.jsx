@@ -1,5 +1,5 @@
-import { Link } from '../../$node_modules/react-router-dom/dist/index.js'
-import { CheckCircle, Clock, Shield, Smartphone } from '../../$node_modules/lucide-react/dist/lucide-react.js'
+import { Link } from 'react-router-dom'
+import { CheckCircle, Clock, Shield, Smartphone } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -216,3 +216,7 @@ export default function HomePage() {
     </div>
   )
 }
+
+
+
+

@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { FileText, CheckCircle, AlertCircle } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { FileText, CheckCircle, AlertCircle } from 'lucide-react'
 import StepNavigation from '../shared/StepNavigation'
 import { GUEST_AGREEMENT_TEMPLATE } from '../templates/GuestAgreementTemplate'
 
@@ -189,3 +189,7 @@ export default function Step4Agreement({
     </div>
   )
 }
+
+
+
+

@@ -1,4 +1,4 @@
-import { CheckCircle } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { CheckCircle } from 'lucide-react'
 
 export default function StepProgress({ currentStep, totalSteps = 4 }) {
   const steps = [
@@ -68,3 +68,7 @@ export default function StepProgress({ currentStep, totalSteps = 4 }) {
     </div>
   )
 }
+
+
+
+

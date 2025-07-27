@@ -1,8 +1,8 @@
-import { useState, useEffect } from '../../$node_modules/@types/react/index.js'
-import { useNavigate } from '../../$node_modules/react-router-dom/dist/index.js'
-import { useForm } from '../../$node_modules/react-hook-form/dist/index.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
-import { Lock, User, ArrowLeft } from '../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import toast from 'react-hot-toast'
+import { Lock, User, ArrowLeft } from 'lucide-react'
 import { adminAPI, setAuthToken, isAuthenticated } from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -145,3 +145,5 @@ export default function AdminLogin() {
     </div>
   )
 }
+
+

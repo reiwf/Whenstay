@@ -1,5 +1,5 @@
-import axios from '../../$node_modules/axios/index.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import axios from 'axios'
+import toast from 'react-hot-toast'
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -143,7 +143,33 @@ export const adminAPI = {
   
   deleteProperty: (id) => api.delete(`/admin/properties/${id}`),
   
-  // Room Management
+  // Room Type Management
+  getRoomTypes: (propertyId, withUnits = false) => 
+    api.get(`/admin/properties/${propertyId}/room-types`, { 
+      params: { withUnits: withUnits.toString() } 
+    }),
+  
+  createRoomType: (propertyId, roomTypeData) => 
+    api.post(`/admin/properties/${propertyId}/room-types`, roomTypeData),
+  
+  updateRoomType: (roomTypeId, roomTypeData) => 
+    api.put(`/admin/room-types/${roomTypeId}`, roomTypeData),
+  
+  deleteRoomType: (roomTypeId) => api.delete(`/admin/room-types/${roomTypeId}`),
+  
+  // Room Unit Management
+  getRoomUnits: (roomTypeId) => 
+    api.get(`/admin/room-types/${roomTypeId}/room-units`),
+  
+  createRoomUnit: (roomTypeId, roomUnitData) => 
+    api.post(`/admin/room-types/${roomTypeId}/room-units`, roomUnitData),
+  
+  updateRoomUnit: (roomUnitId, roomUnitData) => 
+    api.put(`/admin/room-units/${roomUnitId}`, roomUnitData),
+  
+  deleteRoomUnit: (roomUnitId) => api.delete(`/admin/room-units/${roomUnitId}`),
+  
+  // Legacy Room Management (for backward compatibility)
   createRoom: (propertyId, roomData) => 
     api.post(`/admin/properties/${propertyId}/rooms`, roomData),
   
