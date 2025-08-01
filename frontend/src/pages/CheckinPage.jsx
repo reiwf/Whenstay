@@ -36,9 +36,13 @@ export default function CheckinPage() {
   const handleSubmit = async () => {
     const result = await submitCheckin()
     if (result.success) {
-      // Navigate to success page or show success state
-      navigate(`/checkin/${token}/success`, { 
-        state: { checkinId: result.checkinId } 
+      // Navigate to guest dashboard after successful check-in
+      navigate(`/guest/${token}`, { 
+        state: { 
+          checkinId: result.checkinId,
+          message: result.message,
+          justCompleted: true
+        } 
       })
     }
   }
@@ -212,7 +216,3 @@ export function CheckinSuccessPage() {
     </div>
   )
 }
-
-
-
-

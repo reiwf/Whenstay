@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { 
   Calendar, 
@@ -29,6 +29,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 export default function GuestDashboard() {
   const { token } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
   const [checkinStatus, setCheckinStatus] = useState(null)
@@ -38,6 +39,20 @@ export default function GuestDashboard() {
       loadGuestData()
     }
   }, [token])
+
+  // Handle success message from check-in completion
+  useEffect(() => {
+    if (location.state?.justCompleted) {
+      const message = location.state.message || 'Check-in completed successfully!'
+      toast.success(message, {
+        duration: 5000,
+        icon: '🎉'
+      })
+      
+      // Clear the state to prevent showing the message again on refresh
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, navigate, location.pathname])
 
   const loadGuestData = async () => {
     try {
@@ -243,7 +258,7 @@ export default function GuestDashboard() {
                 <Home className="w-5 h-5 text-gray-400 mr-3" />
                 <div>
                   <p className="text-sm text-gray-600">Room</p>
-                  <p className="font-medium">{room.room_number} - {room.room_name}</p>
+                  <p className="font-medium">{room.room_name}</p>
                 </div>
               </div>
               
@@ -273,79 +288,6 @@ export default function GuestDashboard() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Room Details */}
-        <div className="card mb-8">
-          <div className="flex items-center mb-4">
-            <Key className="w-6 h-6 text-primary-600 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Your Room Details</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              {canAccessRoomDetails() ? (
-                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-primary-800">Room Access Code</span>
-                    <Key className="w-4 h-4 text-primary-600" />
-                  </div>
-                  <p className="text-2xl font-mono font-bold text-primary-900">{room.access_code}</p>
-                </div>
-              ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-800">Room Access Code</span>
-                    <Key className="w-4 h-4 text-gray-600" />
-                  </div>
-                  <p className="text-gray-500 text-sm">Available on your check-in day after {formatAccessTime(property.access_time)}</p>
-                </div>
-              )}
-              
-              {room.bed_configuration && (
-                <div className="flex items-center">
-                  <Bed className="w-5 h-5 text-gray-400 mr-3" />
-                  <div>
-                    <p className="text-sm text-gray-600">Bed Configuration</p>
-                    <p className="font-medium">{room.bed_configuration}</p>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex items-center">
-                <Users className="w-5 h-5 text-gray-400 mr-3" />
-                <div>
-                  <p className="text-sm text-gray-600">Room Capacity</p>
-                  <p className="font-medium">Up to {room.max_guests} guests</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {room.access_instructions && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Access Instructions</h3>
-                  <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">{room.access_instructions}</p>
-                </div>
-              )}
-              
-              {room.amenities && Object.keys(room.amenities).length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Room Amenities</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(room.amenities).map(([amenity, available]) => (
-                      available && (
-                        <div key={amenity} className="flex items-center text-sm">
-                          <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
-                          <span className="capitalize">{amenity.replace('_', ' ')}</span>
-                        </div>
-                      )
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Time-based Room Access Section */}
@@ -491,6 +433,16 @@ export default function GuestDashboard() {
             )}
           </div>
         )}
+        
+        {/* Check-in Instructions */}
+        {property.check_in_instructions && (
+          <div className="card mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800">{property.check_in_instructions}</p>
+            </div>
+          </div>
+        )}
 
         {/* Property Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -524,15 +476,6 @@ export default function GuestDashboard() {
           )}
         </div>
 
-        {/* Check-in Instructions */}
-        {property.check_in_instructions && (
-          <div className="card mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800">{property.check_in_instructions}</p>
-            </div>
-          </div>
-        )}
 
         {/* House Rules */}
         {property.house_rules && (

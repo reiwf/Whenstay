@@ -24,6 +24,16 @@ export default function Step3DocumentUpload({
     setUploadError(error)
   }
 
+  const handleDeleteExisting = async () => {
+    // Clear the existing passport URL from form data
+    onUpdateFormData({ 
+      passportFile: null,
+      passportUrl: null,
+      passportFilePath: null
+    })
+    setUploadError('')
+  }
+
   const handleNext = () => {
     if (!formData.passportFile && !formData.passportUrl) {
       setUploadError('Please upload a photo of your passport or ID document')
@@ -73,44 +83,17 @@ export default function Step3DocumentUpload({
       </div>
 
       {/* File Upload Section */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-6">
-        {isDocumentUploaded ? (
-          <div className="text-center">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Document Uploaded Successfully
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Your {formData.passportFile?.name || 'document'} has been uploaded
-            </p>
-            <button
-              onClick={() => onUpdateFormData({ passportFile: null, passportUrl: null })}
-              className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-            >
-              Upload a different document
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div className="text-center mb-6">
-              <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Upload Your Document
-              </h3>
-              <p className="text-gray-600">
-                Drag and drop your file here, or click to browse
-              </p>
-            </div>
-            
-            <FileUpload
-              onFileUpload={handleFileUpload}
-              onError={handleUploadError}
-              accept="image/*"
-              maxSize={10 * 1024 * 1024} // 10MB
-              className="w-full"
-            />
-          </div>
-        )}
+      <div className="mb-6">
+        <FileUpload
+          onFileUpload={handleFileUpload}
+          onError={handleUploadError}
+          onDeleteExisting={handleDeleteExisting}
+          initialImageUrl={formData.passportUrl}
+          accept="image/*"
+          maxSize={10 * 1024 * 1024} // 10MB
+          className="w-full"
+          showFileName={true}
+        />
       </div>
 
       {/* Upload Error */}
@@ -176,7 +159,3 @@ export default function Step3DocumentUpload({
     </div>
   )
 }
-
-
-
-
