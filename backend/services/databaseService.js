@@ -5,24 +5,39 @@ class DatabaseService {
   // Create a new reservation record
   async createReservation(reservationData) {
     try {
-      const checkinToken = uuidv4();
+            
+      const insertData = {
+        beds24_booking_id: reservationData.beds24BookingId || `MANUAL-${Date.now()}`,
+        booking_name: reservationData.bookingName || reservationData.guestName,
+        booking_email: reservationData.bookingEmail || reservationData.guestEmail,
+        booking_phone: reservationData.bookingPhone || reservationData.guestPhone || null,
+        check_in_date: reservationData.checkInDate,
+        check_out_date: reservationData.checkOutDate,
+        num_guests: reservationData.numGuests || 1,
+        num_adults: reservationData.numAdults || 1,
+        num_children: reservationData.numChildren || 0,
+        total_amount: reservationData.totalAmount || null,
+        currency: reservationData.currency || 'USD',
+        status: reservationData.status || 'pending',
+        booking_source: reservationData.bookingSource || null,
+        special_requests: reservationData.specialRequests || null,
+        
+        // V5 Room assignment
+        property_id: reservationData.propertyId || null,
+        room_type_id: reservationData.roomTypeId || null,
+        room_unit_id: reservationData.roomUnitId || null
+      };
+
+      // Remove undefined values
+      Object.keys(insertData).forEach(key => {
+        if (insertData[key] === undefined) {
+          delete insertData[key];
+        }
+      });
       
       const { data, error } = await supabaseAdmin
         .from('reservations')
-        .insert({
-          beds24_booking_id: reservationData.beds24BookingId,
-          booking_name: reservationData.bookingName || reservationData.guestName,
-          booking_email: reservationData.bookingEmail || reservationData.guestEmail,
-          booking_phone: reservationData.bookingPhone || reservationData.guestPhone,
-          check_in_date: reservationData.checkInDate,
-          check_out_date: reservationData.checkOutDate,
-          room_number: reservationData.roomNumber,
-          num_guests: reservationData.numGuests || 1,
-          total_amount: reservationData.totalAmount,
-          currency: reservationData.currency || 'USD',
-          status: 'pending',
-          check_in_token: checkinToken
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -1083,20 +1098,6 @@ class DatabaseService {
                 total_amount
               )
             )
-          ),
-          rooms (
-            id,
-            room_number,
-            room_name,
-            max_guests,
-            is_active,
-            reservations (
-              id,
-              status,
-              check_in_date,
-              check_out_date,
-              total_amount
-            )
           )
         `)
         .eq('is_active', true)
@@ -1109,7 +1110,7 @@ class DatabaseService {
 
       // Calculate statistics for each property
       const propertiesWithStats = data.map(property => {
-        // Handle both new V5 structure (room_types/room_units) and legacy (rooms)
+        // Handle V5 structure (room_types/room_units)
         let totalRoomUnits = 0;
         let allReservations = [];
 
@@ -1121,15 +1122,6 @@ class DatabaseService {
           );
           totalRoomUnits = activeRoomUnits.length;
           allReservations = activeRoomUnits.flatMap(ru => ru.reservations || []);
-        }
-
-        // Legacy structure: direct rooms
-        if (property.rooms && property.rooms.length > 0) {
-          const activeRooms = property.rooms.filter(room => room.is_active);
-          totalRoomUnits += activeRooms.length;
-          allReservations = allReservations.concat(
-            activeRooms.flatMap(room => room.reservations || [])
-          );
         }
 
         const completedReservations = allReservations.filter(res => res.status === 'completed');

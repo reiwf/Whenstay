@@ -286,13 +286,20 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     // Prepare update data with proper field mapping
     const reservationUpdateData = {};
     
-    // Map frontend field names to database field names
-    if (updateData.guestName !== undefined) reservationUpdateData.guest_name = updateData.guestName;
-    if (updateData.guestEmail !== undefined) reservationUpdateData.guest_email = updateData.guestEmail;
+    // Map frontend field names to V5 database field names
+    // Booking contact information (booking_* fields)
+    if (updateData.bookingName !== undefined) reservationUpdateData.booking_name = updateData.bookingName;
+    if (updateData.bookingEmail !== undefined) reservationUpdateData.booking_email = updateData.bookingEmail;
+    if (updateData.bookingPhone !== undefined) reservationUpdateData.booking_phone = updateData.bookingPhone;
+    
+    // Legacy field mappings for backward compatibility
+    if (updateData.guestName !== undefined) reservationUpdateData.booking_name = updateData.guestName;
+    if (updateData.guestEmail !== undefined) reservationUpdateData.booking_email = updateData.guestEmail;
+    if (updateData.phoneNumber !== undefined) reservationUpdateData.booking_phone = updateData.phoneNumber;
+    
+    // Booking details
     if (updateData.checkInDate !== undefined) reservationUpdateData.check_in_date = updateData.checkInDate;
     if (updateData.checkOutDate !== undefined) reservationUpdateData.check_out_date = updateData.checkOutDate;
-    if (updateData.roomNumber !== undefined) reservationUpdateData.room_number = updateData.roomNumber;
-    if (updateData.roomId !== undefined) reservationUpdateData.room_id = updateData.roomId;
     if (updateData.numGuests !== undefined) reservationUpdateData.num_guests = updateData.numGuests;
     if (updateData.numAdults !== undefined) reservationUpdateData.num_adults = updateData.numAdults;
     if (updateData.numChildren !== undefined) reservationUpdateData.num_children = updateData.numChildren;
@@ -300,14 +307,20 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
     if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
     if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24_booking_id = updateData.beds24BookingId;
-    if (updateData.phoneNumber !== undefined) reservationUpdateData.guest_contact = updateData.phoneNumber;
     if (updateData.specialRequests !== undefined) reservationUpdateData.special_requests = updateData.specialRequests;
     if (updateData.bookingSource !== undefined) reservationUpdateData.booking_source = updateData.bookingSource;
     
-    // Guest information fields
+    // V5 Room assignment
+    if (updateData.propertyId !== undefined) reservationUpdateData.property_id = updateData.propertyId;
+    if (updateData.roomTypeId !== undefined) reservationUpdateData.room_type_id = updateData.roomTypeId;
+    if (updateData.roomUnitId !== undefined) reservationUpdateData.room_unit_id = updateData.roomUnitId;
+    // Note: room_id and room_number fields have been removed in V5 schema
+    
+    // Guest personal information fields (guest_* fields)
     if (updateData.guestFirstname !== undefined) reservationUpdateData.guest_firstname = updateData.guestFirstname;
     if (updateData.guestLastname !== undefined) reservationUpdateData.guest_lastname = updateData.guestLastname;
-    if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_personal_email = updateData.guestPersonalEmail;
+    if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_mail = updateData.guestPersonalEmail;
+    if (updateData.guestContact !== undefined) reservationUpdateData.guest_contact = updateData.guestContact;
     if (updateData.guestAddress !== undefined) reservationUpdateData.guest_address = updateData.guestAddress;
     if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimated_checkin_time = updateData.estimatedCheckinTime;
     if (updateData.travelPurpose !== undefined) reservationUpdateData.travel_purpose = updateData.travelPurpose;

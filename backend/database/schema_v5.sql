@@ -70,14 +70,13 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 );
 
 -- Properties Table (modified - renamed total_rooms to rooms)
-CREATE TABLE IF NOT EXISTS public.properties (
+create table public.properties (
   id uuid not null default extensions.uuid_generate_v4 (),
   name character varying(255) not null,
   address text not null,
   owner_id uuid null,
   description text null,
   property_type character varying(100) null default 'apartment'::character varying,
-  rooms integer null default 1, -- Renamed from total_rooms
   wifi_name character varying(255) null,
   wifi_password character varying(255) null,
   house_rules text null,
@@ -89,9 +88,21 @@ CREATE TABLE IF NOT EXISTS public.properties (
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
   access_time time without time zone null,
+  default_cleaner_id uuid null,
   constraint properties_pkey primary key (id),
+  constraint properties_default_cleaner_id_fkey foreign KEY (default_cleaner_id) references user_profiles (id) on delete set null,
   constraint properties_owner_id_fkey foreign KEY (owner_id) references user_profiles (id) on delete CASCADE
-);
+) TABLESPACE pg_default;
+
+create index IF not exists idx_properties_default_cleaner_id on public.properties using btree (default_cleaner_id) TABLESPACE pg_default;
+
+create index IF not exists idx_properties_owner_id on public.properties using btree (owner_id) TABLESPACE pg_default;
+
+create index IF not exists idx_properties_active on public.properties using btree (is_active) TABLESPACE pg_default;
+
+create trigger update_properties_updated_at BEFORE
+update on properties for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- Room Types Table (NEW)
 CREATE TABLE IF NOT EXISTS public.room_types (
