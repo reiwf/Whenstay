@@ -7,7 +7,8 @@ import {
   Building,
   LogOut,
   RefreshCw,
-  Plus
+  Plus,
+  Sparkles
 } from 'lucide-react'
 import { setAuthToken, isAuthenticated } from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -22,6 +23,7 @@ import DashboardTab from '../components/admin/tabs/DashboardTab'
 import PropertiesTab from '../components/admin/tabs/PropertiesTab'
 import ReservationsTab from '../components/admin/tabs/ReservationsTab'
 import UsersTab from '../components/admin/tabs/UsersTab'
+import CleaningTab from '../components/admin/tabs/CleaningTab'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -206,6 +208,17 @@ export default function AdminDashboard() {
               Reservations
             </button>
             <button
+              onClick={() => setActiveTab('cleaning')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'cleaning'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 inline mr-2" />
+              Cleaning
+            </button>
+            <button
               onClick={() => setActiveTab('users')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'users'
@@ -244,6 +257,10 @@ export default function AdminDashboard() {
           <ReservationsTab />
         )}
 
+        {activeTab === 'cleaning' && (
+          <CleaningTab />
+        )}
+
         {activeTab === 'users' && (
           <UsersTab
             users={users}
@@ -260,7 +277,3 @@ export default function AdminDashboard() {
     </div>
   )
 }
-
-
-
-

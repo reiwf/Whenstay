@@ -199,6 +199,41 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   constraint reservations_verified_by_fkey foreign KEY (verified_by) references user_profiles (id) on delete set null
 );
 
+create table public.cleaning_tasks (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  property_id uuid not null,
+  room_unit_id uuid not null,
+  reservation_id uuid not null,
+  cleaner_id uuid null,
+  task_date date not null,
+  task_type text not null default 'checkout'::text,
+  status text not null default 'pending'::text,
+  priority text not null default 'normal'::text,
+  estimated_duration integer null,
+  special_notes text null,
+  assigned_at timestamp with time zone null,
+  started_at timestamp with time zone null,
+  completed_at timestamp with time zone null,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint cleaning_tasks_pkey primary key (id),
+  constraint cleaning_tasks_reservation_id_key unique (reservation_id),
+  constraint fk_cleaning_task_property foreign KEY (property_id) references properties (id) on delete CASCADE,
+  constraint fk_cleaning_task_reservation foreign KEY (reservation_id) references reservations (id) on delete CASCADE,
+  constraint fk_cleaning_task_room_unit foreign KEY (room_unit_id) references room_units (id) on delete CASCADE,
+  constraint fk_cleaning_task_cleaner foreign KEY (cleaner_id) references user_profiles (id) on delete set null
+) TABLESPACE pg_default;
+
+create index IF not exists idx_cleaning_tasks_room_unit_date on public.cleaning_tasks using btree (room_unit_id, task_date) TABLESPACE pg_default;
+
+create index IF not exists idx_cleaning_tasks_status on public.cleaning_tasks using btree (status) TABLESPACE pg_default;
+
+create index IF not exists idx_cleaning_tasks_priority on public.cleaning_tasks using btree (priority) TABLESPACE pg_default;
+
+create trigger update_cleaning_task_updated_at BEFORE
+update on cleaning_tasks for EACH row
+execute FUNCTION update_cleaning_task_updated_at ();
+
 -- Property Images Table (updated to reference room_units instead of rooms)
 CREATE TABLE IF NOT EXISTS public.property_images (
   id uuid not null default extensions.uuid_generate_v4 (),

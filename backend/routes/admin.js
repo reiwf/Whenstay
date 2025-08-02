@@ -1163,4 +1163,223 @@ router.patch('/users/:id/status', adminAuth, async (req, res) => {
   }
 });
 
+// Cleaning Task Management Routes
+
+// Get all cleaning tasks with filtering
+router.get('/cleaning-tasks', adminAuth, async (req, res) => {
+  try {
+    const {
+      status,
+      cleanerId,
+      propertyId,
+      roomUnitId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo,
+      taskType,
+      priority,
+      page = 1,
+      limit = 20,
+      sortBy = 'task_date',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const filters = {
+      status,
+      cleanerId,
+      propertyId,
+      roomUnitId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo,
+      taskType,
+      priority,
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
+      sortBy,
+      sortOrder
+    };
+
+    const tasks = await databaseService.getCleaningTasks(filters);
+    
+    res.status(200).json({
+      message: 'Cleaning tasks retrieved successfully',
+      tasks,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        hasMore: tasks.length === parseInt(limit)
+      },
+      filters: {
+        status,
+        cleanerId,
+        propertyId,
+        roomUnitId,
+        taskDate,
+        taskDateFrom,
+        taskDateTo,
+        taskType,
+        priority,
+        sortBy,
+        sortOrder
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching cleaning tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch cleaning tasks' });
+  }
+});
+
+// Get cleaning task statistics
+router.get('/cleaning-tasks/stats', adminAuth, async (req, res) => {
+  try {
+    const {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    } = req.query;
+
+    const filters = {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    };
+
+    const stats = await databaseService.getCleaningTaskStats(filters);
+    
+    res.status(200).json({
+      message: 'Cleaning task statistics retrieved successfully',
+      stats,
+      filters
+    });
+  } catch (error) {
+    console.error('Error fetching cleaning task stats:', error);
+    res.status(500).json({ error: 'Failed to fetch cleaning task statistics' });
+  }
+});
+
+// Create new cleaning task
+router.post('/cleaning-tasks', adminAuth, async (req, res) => {
+  try {
+    const {
+      propertyId,
+      roomUnitId,
+      reservationId,
+      cleanerId,
+      taskDate,
+      taskType,
+      status,
+      priority,
+      estimatedDuration,
+      specialNotes
+    } = req.body;
+    
+    // Validate required fields
+    if (!propertyId || !roomUnitId || !reservationId || !taskDate) {
+      return res.status(400).json({ 
+        error: 'Property ID, room unit ID, reservation ID, and task date are required' 
+      });
+    }
+    
+    const taskData = {
+      propertyId,
+      roomUnitId,
+      reservationId,
+      cleanerId,
+      taskDate,
+      taskType: taskType || 'checkout',
+      status: status || 'pending',
+      priority: priority || 'normal',
+      estimatedDuration,
+      specialNotes
+    };
+    
+    const task = await databaseService.createCleaningTask(taskData);
+    
+    res.status(201).json({
+      message: 'Cleaning task created successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error creating cleaning task:', error);
+    res.status(500).json({ error: 'Failed to create cleaning task' });
+  }
+});
+
+// Update cleaning task
+router.put('/cleaning-tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const task = await databaseService.updateCleaningTask(id, updateData);
+    
+    res.status(200).json({
+      message: 'Cleaning task updated successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error updating cleaning task:', error);
+    res.status(500).json({ error: 'Failed to update cleaning task' });
+  }
+});
+
+// Delete cleaning task
+router.delete('/cleaning-tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const task = await databaseService.deleteCleaningTask(id);
+    
+    res.status(200).json({
+      message: 'Cleaning task deleted successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error deleting cleaning task:', error);
+    res.status(500).json({ error: 'Failed to delete cleaning task' });
+  }
+});
+
+// Assign cleaner to task
+router.patch('/cleaning-tasks/:id/assign', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cleanerId } = req.body;
+    
+    if (!cleanerId) {
+      return res.status(400).json({ error: 'Cleaner ID is required' });
+    }
+    
+    const task = await databaseService.assignCleanerToTask(id, cleanerId);
+    
+    res.status(200).json({
+      message: 'Cleaner assigned to task successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error assigning cleaner to task:', error);
+    res.status(500).json({ error: 'Failed to assign cleaner to task' });
+  }
+});
+
+// Get available cleaners
+router.get('/cleaners', adminAuth, async (req, res) => {
+  try {
+    const cleaners = await databaseService.getAvailableCleaners();
+    
+    res.status(200).json({
+      message: 'Available cleaners retrieved successfully',
+      cleaners
+    });
+  } catch (error) {
+    console.error('Error fetching available cleaners:', error);
+    res.status(500).json({ error: 'Failed to fetch available cleaners' });
+  }
+});
+
 module.exports = router;

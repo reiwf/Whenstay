@@ -1831,6 +1831,567 @@ class DatabaseService {
       return false;
     }
   }
+
+  // Cleaning Task Management Methods
+
+  // Get cleaning tasks with comprehensive filtering
+  async getCleaningTasks(filters = {}) {
+    try {
+      const {
+        status,
+        cleanerId,
+        propertyId,
+        roomUnitId,
+        taskDate,
+        taskDateFrom,
+        taskDateTo,
+        taskType,
+        priority,
+        limit = 50,
+        offset = 0,
+        sortBy = 'task_date',
+        sortOrder = 'desc'
+      } = filters;
+
+      // Build query with comprehensive joins
+      let query = supabaseAdmin
+        .from('cleaning_tasks')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            address,
+            wifi_name,
+            wifi_password,
+            emergency_contact
+          ),
+          room_units (
+            id,
+            unit_number,
+            floor_number,
+            access_code,
+            access_instructions,
+            room_types (
+              id,
+              name,
+              description,
+              max_guests,
+              bed_configuration
+            )
+          ),
+          reservations (
+            id,
+            beds24_booking_id,
+            booking_name,
+            booking_email,
+            booking_phone,
+            check_in_date,
+            check_out_date,
+            num_guests,
+            special_requests,
+            guest_firstname,
+            guest_lastname,
+            guest_contact
+          ),
+          user_profiles (
+            id,
+            first_name,
+            last_name,
+            phone
+          )
+        `);
+
+      // Apply filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (cleanerId) {
+        query = query.eq('cleaner_id', cleanerId);
+      }
+
+      if (propertyId) {
+        query = query.eq('property_id', propertyId);
+      }
+
+      if (roomUnitId) {
+        query = query.eq('room_unit_id', roomUnitId);
+      }
+
+      if (taskType) {
+        query = query.eq('task_type', taskType);
+      }
+
+      if (priority) {
+        query = query.eq('priority', priority);
+      }
+
+      if (taskDate) {
+        query = query.eq('task_date', taskDate);
+      } else {
+        if (taskDateFrom) {
+          query = query.gte('task_date', taskDateFrom);
+        }
+        if (taskDateTo) {
+          query = query.lte('task_date', taskDateTo);
+        }
+      }
+
+      // Apply sorting
+      const ascending = sortOrder === 'asc';
+      query = query.order(sortBy, { ascending });
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching cleaning tasks:', error);
+        throw new Error('Failed to fetch cleaning tasks');
+      }
+
+      // Transform data for frontend consumption
+      const transformedTasks = data.map(task => ({
+        ...task,
+        // Property information
+        property_name: task.properties?.name || 'Unknown Property',
+        property_address: task.properties?.address || null,
+        property_wifi_name: task.properties?.wifi_name || null,
+        property_emergency_contact: task.properties?.emergency_contact || null,
+        
+        // Room information
+        room_unit_number: task.room_units?.unit_number || 'Unknown',
+        room_floor_number: task.room_units?.floor_number || null,
+        room_access_code: task.room_units?.access_code || null,
+        room_access_instructions: task.room_units?.access_instructions || null,
+        room_type_name: task.room_units?.room_types?.name || 'Standard Room',
+        room_type_description: task.room_units?.room_types?.description || null,
+        room_max_guests: task.room_units?.room_types?.max_guests || null,
+        room_bed_configuration: task.room_units?.room_types?.bed_configuration || null,
+        
+        // Reservation information
+        reservation_booking_id: task.reservations?.beds24_booking_id || null,
+        guest_name: task.reservations?.booking_name || 
+                   `${task.reservations?.guest_firstname || ''} ${task.reservations?.guest_lastname || ''}`.trim() || 
+                   'Unknown Guest',
+        guest_email: task.reservations?.booking_email || task.reservations?.guest_mail || null,
+        guest_phone: task.reservations?.booking_phone || task.reservations?.guest_contact || null,
+        guest_checkin_date: task.reservations?.check_in_date || null,
+        guest_checkout_date: task.reservations?.check_out_date || null,
+        guest_count: task.reservations?.num_guests || null,
+        guest_special_requests: task.reservations?.special_requests || null,
+        
+        // Cleaner information
+        cleaner_name: task.user_profiles ? 
+                     `${task.user_profiles.first_name} ${task.user_profiles.last_name}`.trim() : 
+                     null,
+        cleaner_phone: task.user_profiles?.phone || null,
+        
+        // Computed fields
+        is_overdue: task.status === 'pending' && new Date(task.task_date) < new Date(),
+        duration_minutes: task.estimated_duration || 0,
+        
+        // Clean up nested objects for simpler frontend handling
+        property: task.properties,
+        room_unit: task.room_units,
+        reservation: task.reservations,
+        cleaner: task.user_profiles
+      }));
+
+      return transformedTasks;
+    } catch (error) {
+      console.error('Database error fetching cleaning tasks:', error);
+      throw error;
+    }
+  }
+
+  // Get cleaning task statistics
+  async getCleaningTaskStats(filters = {}) {
+    try {
+      const {
+        propertyId,
+        cleanerId,
+        taskDate,
+        taskDateFrom,
+        taskDateTo
+      } = filters;
+
+      // Create base query builder function
+      const createBaseQuery = () => {
+        let query = supabaseAdmin.from('cleaning_tasks');
+        
+        if (propertyId) {
+          query = query.eq('property_id', propertyId);
+        }
+
+        if (cleanerId) {
+          query = query.eq('cleaner_id', cleanerId);
+        }
+
+        if (taskDate) {
+          query = query.eq('task_date', taskDate);
+        } else {
+          if (taskDateFrom) {
+            query = query.gte('task_date', taskDateFrom);
+          }
+          if (taskDateTo) {
+            query = query.lte('task_date', taskDateTo);
+          }
+        }
+        
+        return query;
+      };
+
+      // Get counts by status
+      const [totalResult, pendingResult, inProgressResult, completedResult] = await Promise.all([
+        createBaseQuery().select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'pending').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'in_progress').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('status', 'completed').select('*', { count: 'exact', head: true })
+      ]);
+
+      // Get overdue tasks (pending tasks past their date)
+      const today = new Date().toISOString().split('T')[0];
+      const { count: overdueCount } = await createBaseQuery()
+        .eq('status', 'pending')
+        .lt('task_date', today)
+        .select('*', { count: 'exact', head: true });
+
+      // Get tasks by type
+      const [checkoutResult, checkinResult, maintenanceResult] = await Promise.all([
+        createBaseQuery().eq('task_type', 'checkout').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('task_type', 'checkin_preparation').select('*', { count: 'exact', head: true }),
+        createBaseQuery().eq('task_type', 'maintenance').select('*', { count: 'exact', head: true })
+      ]);
+
+      // Get average completion time for completed tasks
+      const { data: completedTasks } = await createBaseQuery()
+        .eq('status', 'completed')
+        .not('started_at', 'is', null)
+        .not('completed_at', 'is', null)
+        .select('started_at, completed_at, estimated_duration');
+
+      let averageCompletionTime = 0;
+      if (completedTasks && completedTasks.length > 0) {
+        const totalTime = completedTasks.reduce((sum, task) => {
+          const start = new Date(task.started_at);
+          const end = new Date(task.completed_at);
+          const duration = (end - start) / (1000 * 60); // Convert to minutes
+          return sum + duration;
+        }, 0);
+        averageCompletionTime = Math.round(totalTime / completedTasks.length);
+      }
+
+      return {
+        totalTasks: totalResult.count || 0,
+        pendingTasks: pendingResult.count || 0,
+        inProgressTasks: inProgressResult.count || 0,
+        completedTasks: completedResult.count || 0,
+        overdueTasks: overdueCount || 0,
+        
+        // Tasks by type
+        checkoutTasks: checkoutResult.count || 0,
+        checkinTasks: checkinResult.count || 0,
+        maintenanceTasks: maintenanceResult.count || 0,
+        
+        // Performance metrics
+        averageCompletionTime: averageCompletionTime,
+        completionRate: totalResult.count > 0 ? 
+          Math.round((completedResult.count / totalResult.count) * 100) : 0
+      };
+    } catch (error) {
+      console.error('Database error fetching cleaning task stats:', error);
+      return {
+        totalTasks: 0,
+        pendingTasks: 0,
+        inProgressTasks: 0,
+        completedTasks: 0,
+        overdueTasks: 0,
+        checkoutTasks: 0,
+        checkinTasks: 0,
+        maintenanceTasks: 0,
+        averageCompletionTime: 0,
+        completionRate: 0
+      };
+    }
+  }
+
+  // Create a new cleaning task
+  async createCleaningTask(taskData) {
+    try {
+      const insertData = {
+        property_id: taskData.propertyId,
+        room_unit_id: taskData.roomUnitId,
+        reservation_id: taskData.reservationId,
+        cleaner_id: taskData.cleanerId || null,
+        task_date: taskData.taskDate,
+        task_type: taskData.taskType || 'checkout',
+        status: taskData.status || 'pending',
+        priority: taskData.priority || 'normal',
+        estimated_duration: taskData.estimatedDuration || null,
+        special_notes: taskData.specialNotes || null,
+        assigned_at: taskData.cleanerId ? new Date().toISOString() : null
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from('cleaning_tasks')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating cleaning task:', error);
+        throw new Error('Failed to create cleaning task');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error creating cleaning task:', error);
+      throw error;
+    }
+  }
+
+  // Update a cleaning task
+  async updateCleaningTask(taskId, updateData) {
+    try {
+      const updateFields = {};
+      
+      if (updateData.cleanerId !== undefined) {
+        updateFields.cleaner_id = updateData.cleanerId;
+        if (updateData.cleanerId && !updateData.assigned_at) {
+          updateFields.assigned_at = new Date().toISOString();
+        }
+      }
+      
+      if (updateData.status !== undefined) {
+        updateFields.status = updateData.status;
+        
+        // Auto-set timestamps based on status changes
+        if (updateData.status === 'in_progress' && !updateData.started_at) {
+          updateFields.started_at = new Date().toISOString();
+        } else if (updateData.status === 'completed' && !updateData.completed_at) {
+          updateFields.completed_at = new Date().toISOString();
+        }
+      }
+      
+      if (updateData.taskDate !== undefined) updateFields.task_date = updateData.taskDate;
+      if (updateData.taskType !== undefined) updateFields.task_type = updateData.taskType;
+      if (updateData.priority !== undefined) updateFields.priority = updateData.priority;
+      if (updateData.estimatedDuration !== undefined) updateFields.estimated_duration = updateData.estimatedDuration;
+      if (updateData.specialNotes !== undefined) updateFields.special_notes = updateData.specialNotes;
+      if (updateData.startedAt !== undefined) updateFields.started_at = updateData.startedAt;
+      if (updateData.completedAt !== undefined) updateFields.completed_at = updateData.completedAt;
+
+      const { data, error } = await supabaseAdmin
+        .from('cleaning_tasks')
+        .update(updateFields)
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating cleaning task:', error);
+        throw new Error('Failed to update cleaning task');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error updating cleaning task:', error);
+      throw error;
+    }
+  }
+
+  // Delete a cleaning task
+  async deleteCleaningTask(taskId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('cleaning_tasks')
+        .delete()
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error deleting cleaning task:', error);
+        throw new Error('Failed to delete cleaning task');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error deleting cleaning task:', error);
+      throw error;
+    }
+  }
+
+  // Assign cleaner to task
+  async assignCleanerToTask(taskId, cleanerId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('cleaning_tasks')
+        .update({
+          cleaner_id: cleanerId,
+          assigned_at: new Date().toISOString()
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error assigning cleaner to task:', error);
+        throw new Error('Failed to assign cleaner to task');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error assigning cleaner to task:', error);
+      throw error;
+    }
+  }
+
+  // Get cleaning tasks for a specific cleaner (for CleanerDashboard)
+  async getCleanerTasks(cleanerId, filters = {}) {
+    try {
+      const {
+        status,
+        taskDate,
+        taskDateFrom,
+        taskDateTo,
+        limit = 50,
+        offset = 0
+      } = filters;
+
+      let query = supabaseAdmin
+        .from('cleaning_tasks')
+        .select(`
+          *,
+          properties (
+            name,
+            address,
+            wifi_name,
+            wifi_password,
+            emergency_contact
+          ),
+          room_units (
+            unit_number,
+            floor_number,
+            access_code,
+            access_instructions,
+            room_types (
+              name,
+              description,
+              bed_configuration
+            )
+          ),
+          reservations (
+            booking_name,
+            booking_email,
+            check_in_date,
+            check_out_date,
+            num_guests,
+            special_requests,
+            guest_firstname,
+            guest_lastname
+          )
+        `)
+        .eq('cleaner_id', cleanerId);
+
+      // Apply filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (taskDate) {
+        query = query.eq('task_date', taskDate);
+      } else {
+        if (taskDateFrom) {
+          query = query.gte('task_date', taskDateFrom);
+        }
+        if (taskDateTo) {
+          query = query.lte('task_date', taskDateTo);
+        }
+      }
+
+      // Sort by task date and priority
+      query = query.order('task_date', { ascending: true })
+                   .order('priority', { ascending: false });
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching cleaner tasks:', error);
+        throw new Error('Failed to fetch cleaner tasks');
+      }
+
+      // Transform data for CleanerDashboard compatibility
+      const transformedTasks = data.map(task => ({
+        id: task.id,
+        apartmentName: task.properties?.name || 'Unknown Property',
+        apartmentAddress: task.properties?.address || 'Unknown Address',
+        roomNumber: task.room_units?.unit_number || 'Unknown',
+        taskDate: task.task_date,
+        taskType: task.task_type,
+        status: task.status,
+        estimatedDuration: task.estimated_duration || 120,
+        specialNotes: task.special_notes || null,
+        guestName: task.reservations?.booking_name || 
+                  `${task.reservations?.guest_firstname || ''} ${task.reservations?.guest_lastname || ''}`.trim() ||
+                  null,
+        checkOutDate: task.reservations?.check_out_date || null,
+        completionPhotoUrl: null, // TODO: Implement photo storage
+        startedAt: task.started_at,
+        completedAt: task.completed_at,
+        
+        // Additional fields for enhanced functionality
+        propertyWifiName: task.properties?.wifi_name,
+        propertyWifiPassword: task.properties?.wifi_password,
+        roomAccessCode: task.room_units?.access_code,
+        roomAccessInstructions: task.room_units?.access_instructions,
+        roomTypeName: task.room_units?.room_types?.name,
+        bedConfiguration: task.room_units?.room_types?.bed_configuration,
+        guestCount: task.reservations?.num_guests,
+        guestSpecialRequests: task.reservations?.special_requests
+      }));
+
+      return transformedTasks;
+    } catch (error) {
+      console.error('Database error fetching cleaner tasks:', error);
+      throw error;
+    }
+  }
+
+  // Get available cleaners for task assignment
+  async getAvailableCleaners() {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id, first_name, last_name, phone')
+        .eq('role', 'cleaner')
+        .eq('is_active', true)
+        .order('first_name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching available cleaners:', error);
+        throw new Error('Failed to fetch available cleaners');
+      }
+
+      return data.map(cleaner => ({
+        ...cleaner,
+        full_name: `${cleaner.first_name} ${cleaner.last_name}`.trim()
+      }));
+    } catch (error) {
+      console.error('Database error fetching available cleaners:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new DatabaseService();

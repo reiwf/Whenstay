@@ -17,6 +17,7 @@ import {
   Pause
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
+import api from '../services/api'
 
 export default function CleanerDashboard() {
   const navigate = useNavigate()
@@ -41,77 +42,18 @@ export default function CleanerDashboard() {
     try {
       setLoading(true)
       
-      // Mock cleaning tasks data - in real implementation, this would be an API call
-      const mockTasks = [
-        {
-          id: 1,
-          apartmentName: 'Downtown Loft',
-          apartmentAddress: '123 Main St, Downtown',
-          roomNumber: '101',
-          taskDate: '2024-01-26',
-          taskType: 'checkout_cleaning',
-          status: 'pending',
-          estimatedDuration: 120,
-          specialNotes: 'Guest mentioned spilled wine on carpet in living room',
-          guestName: 'John Smith',
-          checkOutDate: '2024-01-26',
-          completionPhotoUrl: null
-        },
-        {
-          id: 2,
-          apartmentName: 'Seaside Studio',
-          apartmentAddress: '456 Ocean Ave, Beachfront',
-          roomNumber: '102',
-          taskDate: '2024-01-26',
-          taskType: 'maintenance_cleaning',
-          status: 'in_progress',
-          estimatedDuration: 90,
-          specialNotes: 'Deep clean bathroom - previous guest reported shower drain issue',
-          guestName: null,
-          checkOutDate: null,
-          completionPhotoUrl: null,
-          startedAt: '2024-01-26T10:30:00Z'
-        },
-        {
-          id: 3,
-          apartmentName: 'Garden Apartment',
-          apartmentAddress: '789 Park Rd, Garden District',
-          roomNumber: '103',
-          taskDate: '2024-01-25',
-          taskType: 'checkout_cleaning',
-          status: 'completed',
-          estimatedDuration: 150,
-          specialNotes: 'Standard checkout cleaning',
-          guestName: 'Sarah Johnson',
-          checkOutDate: '2024-01-25',
-          completionPhotoUrl: '/mock-photo-url.jpg',
-          completedAt: '2024-01-25T14:30:00Z'
-        },
-        {
-          id: 4,
-          apartmentName: 'Downtown Loft',
-          apartmentAddress: '123 Main St, Downtown',
-          roomNumber: '101',
-          taskDate: '2024-01-27',
-          taskType: 'checkin_preparation',
-          status: 'pending',
-          estimatedDuration: 60,
-          specialNotes: 'Prepare for early check-in at 2 PM',
-          guestName: 'Mike Wilson',
-          checkOutDate: null,
-          completionPhotoUrl: null
-        }
-      ]
+      // Build query parameters
+      const params = new URLSearchParams()
+      if (selectedDate) {
+        params.append('date', selectedDate)
+      }
+      if (statusFilter && statusFilter !== 'all') {
+        params.append('status', statusFilter)
+      }
       
-      // Filter tasks based on selected date and status
-      let filteredTasks = mockTasks.filter(task => {
-        const taskDate = task.taskDate
-        const dateMatch = !selectedDate || taskDate === selectedDate
-        const statusMatch = statusFilter === 'all' || task.status === statusFilter
-        return dateMatch && statusMatch
-      })
-      
-      setTasks(filteredTasks)
+      // Fetch cleaning tasks from API
+      const response = await api.get(`/admin/cleaning-tasks?${params.toString()}`)
+      setTasks(response.data || [])
       
     } catch (error) {
       console.error('Error loading cleaning tasks:', error)
@@ -130,7 +72,9 @@ export default function CleanerDashboard() {
 
   const handleStartTask = async (taskId) => {
     try {
-      // Update task status to in_progress
+      await api.put(`/admin/cleaning-tasks/${taskId}/start`)
+      
+      // Update local state
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === taskId 
@@ -147,7 +91,9 @@ export default function CleanerDashboard() {
 
   const handlePauseTask = async (taskId) => {
     try {
-      // Update task status back to pending
+      await api.put(`/admin/cleaning-tasks/${taskId}/pause`)
+      
+      // Update local state
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === taskId 
@@ -164,7 +110,9 @@ export default function CleanerDashboard() {
 
   const handleCompleteTask = async (taskId) => {
     try {
-      // Update task status to completed
+      await api.put(`/admin/cleaning-tasks/${taskId}/complete`)
+      
+      // Update local state
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === taskId 
@@ -502,7 +450,3 @@ export default function CleanerDashboard() {
     </div>
   )
 }
-
-
-
-
