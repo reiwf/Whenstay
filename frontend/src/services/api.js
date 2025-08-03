@@ -14,7 +14,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // Add auth token if available
-    const token = localStorage.getItem('adminToken')
+    const token = localStorage.getItem('authToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -34,9 +34,9 @@ api.interceptors.response.use(
     // Handle common errors
     if (error.response?.status === 401) {
       // Unauthorized - clear token and redirect to login
-      localStorage.removeItem('adminToken')
-      if (window.location.pathname === '/dashboard' || (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin')) {
-        window.location.href = '/admin'
+      localStorage.removeItem('authToken')
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+        window.location.href = '/login'
       }
     }
     
@@ -235,14 +235,18 @@ export const webhookAPI = {
 // Utility functions
 export const setAuthToken = (token) => {
   if (token) {
-    localStorage.setItem('adminToken', token)
+    localStorage.setItem('authToken', token)
   } else {
-    localStorage.removeItem('adminToken')
+    localStorage.removeItem('authToken')
   }
 }
 
+export const clearAuthToken = () => {
+  localStorage.removeItem('authToken')
+}
+
 export const getAuthToken = () => {
-  return localStorage.getItem('adminToken')
+  return localStorage.getItem('authToken')
 }
 
 export const isAuthenticated = () => {

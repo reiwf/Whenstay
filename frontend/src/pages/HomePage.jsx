@@ -16,7 +16,7 @@ export default function HomePage() {
                 to="/admin"
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
-                Admin
+                Login
               </Link>
             </div>
           </div>

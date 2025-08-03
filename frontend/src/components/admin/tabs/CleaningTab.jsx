@@ -18,8 +18,11 @@ import {
   Zap
 } from 'lucide-react';
 import LoadingSpinner from '../../LoadingSpinner';
+import { adminAPI } from '../../../services/api';
+import { useAuth } from '../../../contexts/AuthContext';
 
 export default function CleaningTab() {
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [cleaners, setCleaners] = useState([]);
@@ -64,28 +67,21 @@ export default function CleaningTab() {
 
   const loadCleaningTasks = async () => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const queryParams = new URLSearchParams();
-      
+      // Prepare filter parameters
+      const params = {};
       Object.entries(filters).forEach(([key, value]) => {
         if (value && value !== 'all') {
-          queryParams.append(key, value);
+          params[key] = value;
         }
       });
 
-      const response = await fetch(`/api/admin/cleaning-tasks?${queryParams}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch cleaning tasks');
+      // If user is a cleaner, filter tasks assigned to them
+      if (profile?.role === 'cleaner') {
+        params.cleanerId = profile.id;
       }
 
-      const data = await response.json();
-      setTasks(data.tasks || []);
+      const response = await adminAPI.getCleaningTasks(params);
+      setTasks(response.data.tasks || []);
     } catch (error) {
       console.error('Error loading cleaning tasks:', error);
     }
@@ -94,20 +90,8 @@ export default function CleaningTab() {
 
   const loadCleaners = async () => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const response = await fetch('/api/admin/cleaners', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch cleaners');
-      }
-
-      const data = await response.json();
-      setCleaners(data.cleaners || []);
+      const response = await adminAPI.getAvailableCleaners();
+      setCleaners(response.data.cleaners || []);
     } catch (error) {
       console.error('Error loading cleaners:', error);
     }
@@ -115,20 +99,8 @@ export default function CleaningTab() {
 
   const loadProperties = async () => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const response = await fetch('/api/admin/properties', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch properties');
-      }
-
-      const data = await response.json();
-      setProperties(data.properties || []);
+      const response = await adminAPI.getProperties();
+      setProperties(response.data.properties || []);
     } catch (error) {
       console.error('Error loading properties:', error);
     }
@@ -156,20 +128,7 @@ export default function CleaningTab() {
 
   const handleUpdateTaskStatus = async (taskId, status) => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const response = await fetch(`/api/admin/cleaning-tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update task status');
-      }
-
+      await adminAPI.updateCleaningTask(taskId, { status });
       await loadCleaningTasks();
     } catch (error) {
       console.error('Error updating task status:', error);
@@ -179,20 +138,7 @@ export default function CleaningTab() {
 
   const handleAssignCleaner = async (taskId, cleanerId) => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const response = await fetch(`/api/admin/cleaning-tasks/${taskId}/assign`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ cleanerId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to assign cleaner');
-      }
-
+      await adminAPI.assignCleanerToTask(taskId, cleanerId);
       await loadCleaningTasks();
     } catch (error) {
       console.error('Error assigning cleaner:', error);
@@ -202,18 +148,9 @@ export default function CleaningTab() {
 
   const handleBulkAssign = async (cleanerId) => {
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      
       await Promise.all(
         selectedTasks.map(taskId =>
-          fetch(`/api/admin/cleaning-tasks/${taskId}/assign`, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ cleanerId })
-          })
+          adminAPI.assignCleanerToTask(taskId, cleanerId)
         )
       );
 
@@ -232,19 +169,7 @@ export default function CleaningTab() {
     }
 
     try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const response = await fetch(`/api/admin/cleaning-tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete task');
-      }
-
+      await adminAPI.deleteCleaningTask(taskId);
       await loadCleaningTasks();
     } catch (error) {
       console.error('Error deleting task:', error);
@@ -287,50 +212,60 @@ export default function CleaningTab() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Cleaning Management</h2>
-          <p className="text-gray-600">Manage cleaning tasks and assignments</p>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {profile?.role === 'cleaner' ? 'My Cleaning Tasks' : 'Cleaning Management'}
+          </h2>
+          <p className="text-gray-600">
+            {profile?.role === 'cleaner' 
+              ? 'View and manage your assigned cleaning tasks' 
+              : 'Manage cleaning tasks and assignments'
+            }
+          </p>
         </div>
-        <div className="flex gap-3">
-          {bulkAssignMode && selectedTasks.length > 0 && (
-            <div className="flex items-center gap-2">
-              <select
-                onChange={(e) => e.target.value && handleBulkAssign(e.target.value)}
-                className="input-field"
-                defaultValue=""
-              >
-                <option value="">Assign to cleaner...</option>
-                {cleaners.map(cleaner => (
-                  <option key={cleaner.id} value={cleaner.id}>
-                    {cleaner.full_name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => {
-                  setBulkAssignMode(false);
-                  setSelectedTasks([]);
-                }}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-          <button
-            onClick={() => setBulkAssignMode(!bulkAssignMode)}
-            className={`btn-secondary ${bulkAssignMode ? 'bg-blue-100 text-blue-700' : ''}`}
-          >
-            <UserCheck className="w-4 h-4 mr-2" />
-            Bulk Assign
-          </button>
-          <button
-            onClick={() => setShowTaskModal(true)}
-            className="btn-primary"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Task
-          </button>
-        </div>
+        {/* Hide admin controls for cleaners */}
+        {profile?.role !== 'cleaner' && (
+          <div className="flex gap-3">
+            {bulkAssignMode && selectedTasks.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select
+                  onChange={(e) => e.target.value && handleBulkAssign(e.target.value)}
+                  className="input-field"
+                  defaultValue=""
+                >
+                  <option value="">Assign to cleaner...</option>
+                  {cleaners.map(cleaner => (
+                    <option key={cleaner.id} value={cleaner.id}>
+                      {cleaner.full_name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    setBulkAssignMode(false);
+                    setSelectedTasks([]);
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => setBulkAssignMode(!bulkAssignMode)}
+              className={`btn-secondary ${bulkAssignMode ? 'bg-blue-100 text-blue-700' : ''}`}
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              Bulk Assign
+            </button>
+            <button
+              onClick={() => setShowTaskModal(true)}
+              className="btn-primary"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Task
+            </button>
+          </div>
+        )}
       </div>
 
 
@@ -464,7 +399,7 @@ export default function CleaningTab() {
             <div key={task.id} className="card">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-start gap-3">
-                  {bulkAssignMode && (
+                  {bulkAssignMode && profile?.role !== 'cleaner' && (
                     <input
                       type="checkbox"
                       checked={selectedTasks.includes(task.id)}
@@ -609,38 +544,43 @@ export default function CleaningTab() {
                   </>
                 )}
 
-                {!task.cleaner_id && (
-                  <select
-                    onChange={(e) => e.target.value && handleAssignCleaner(task.id, e.target.value)}
-                    className="text-sm border border-gray-300 rounded px-2 py-1"
-                    defaultValue=""
-                  >
-                    <option value="">Assign cleaner...</option>
-                    {cleaners.map(cleaner => (
-                      <option key={cleaner.id} value={cleaner.id}>
-                        {cleaner.full_name}
-                      </option>
-                    ))}
-                  </select>
+                {/* Hide admin-only actions for cleaners */}
+                {profile?.role !== 'cleaner' && (
+                  <>
+                    {!task.cleaner_id && (
+                      <select
+                        onChange={(e) => e.target.value && handleAssignCleaner(task.id, e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-2 py-1"
+                        defaultValue=""
+                      >
+                        <option value="">Assign cleaner...</option>
+                        {cleaners.map(cleaner => (
+                          <option key={cleaner.id} value={cleaner.id}>
+                            {cleaner.full_name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setSelectedTask(task);
+                        setShowTaskModal(true);
+                      }}
+                      className="btn-secondary text-sm"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteTask(task.id)}
+                      className="text-red-600 hover:text-red-800 text-sm px-2 py-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
-
-                <button
-                  onClick={() => {
-                    setSelectedTask(task);
-                    setShowTaskModal(true);
-                  }}
-                  className="btn-secondary text-sm"
-                >
-                  <Edit className="w-4 h-4 mr-1" />
-                  Edit
-                </button>
-
-                <button
-                  onClick={() => handleDeleteTask(task.id)}
-                  className="text-red-600 hover:text-red-800 text-sm px-2 py-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             </div>
           ))

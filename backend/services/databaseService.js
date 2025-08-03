@@ -2387,6 +2387,251 @@ class DatabaseService {
       throw error;
     }
   }
+
+  // Authentication Methods
+
+  // Authenticate user with email and password
+  async authenticateUser(email, password) {
+    try {
+      // For development/demo purposes, we'll use a simplified authentication
+      // In production, this should use proper Supabase client-side authentication
+      
+      // First, get the user by email from auth
+      const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (listError) {
+        console.error('Error listing users:', listError);
+        throw new Error('Authentication failed');
+      }
+
+      const authUser = authUsers.users.find(user => user.email === email);
+      
+      if (!authUser) {
+        throw new Error('Invalid email or password');
+      }
+
+      // Get user profile
+      const profile = await this.getUserProfileByAuthId(authUser.id);
+      
+      if (!profile) {
+        throw new Error('User profile not found');
+      }
+
+      if (!profile.is_active) {
+        throw new Error('User account is deactivated');
+      }
+
+      // For demo purposes, we'll create a simple JWT-like token
+      // In production, use proper Supabase authentication
+      const mockSession = {
+        access_token: `mock_token_${authUser.id}_${Date.now()}`,
+        refresh_token: `mock_refresh_${authUser.id}_${Date.now()}`,
+        expires_in: 3600,
+        token_type: 'bearer',
+        user: authUser
+      };
+
+      return {
+        user: authUser,
+        profile: profile,
+        session: mockSession
+      };
+    } catch (error) {
+      console.error('Database error authenticating user:', error);
+      throw error;
+    }
+  }
+
+  // Get user profile by auth ID
+  async getUserProfileByAuthId(authId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('id', authId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user profile by auth ID:', error);
+        throw new Error('Failed to fetch user profile');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error fetching user profile by auth ID:', error);
+      throw error;
+    }
+  }
+
+  // Get user profile with auth info by email
+  async getUserByEmail(email) {
+    try {
+      // First get the auth user
+      const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
+        throw new Error('Failed to fetch user');
+      }
+
+      const authUser = authUsers.users.find(user => user.email === email);
+      
+      if (!authUser) {
+        return null;
+      }
+
+      // Then get the profile
+      const profile = await this.getUserProfileByAuthId(authUser.id);
+      
+      return {
+        auth: authUser,
+        profile: profile
+      };
+    } catch (error) {
+      console.error('Database error fetching user by email:', error);
+      throw error;
+    }
+  }
+
+  // Verify JWT token and get user profile
+  async verifyTokenAndGetProfile(token) {
+    try {
+      // Check if this is our mock token format
+      if (token.startsWith('mock_token_')) {
+        // Extract user ID from mock token
+        const parts = token.split('_');
+        if (parts.length >= 3) {
+          const userId = parts[2];
+          
+          // Get user from auth users list
+          const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          
+          if (listError) {
+            console.error('Error listing users for token verification:', listError);
+            throw new Error('Token verification failed');
+          }
+
+          const authUser = authUsers.users.find(user => user.id === userId);
+          
+          if (!authUser) {
+            throw new Error('User not found');
+          }
+
+          // Get user profile
+          const profile = await this.getUserProfileByAuthId(authUser.id);
+          
+          if (!profile) {
+            throw new Error('User profile not found');
+          }
+
+          if (!profile.is_active) {
+            throw new Error('User account is deactivated');
+          }
+
+          return {
+            user: authUser,
+            profile: profile
+          };
+        }
+      }
+
+      // For real JWT tokens, use Supabase verification
+      const { data, error } = await supabaseAdmin.auth.getUser(token);
+
+      if (error) {
+        console.error('Token verification error:', error);
+        throw new Error('Invalid token');
+      }
+
+      if (!data.user) {
+        throw new Error('User not found');
+      }
+
+      // Get user profile
+      const profile = await this.getUserProfileByAuthId(data.user.id);
+      
+      if (!profile) {
+        throw new Error('User profile not found');
+      }
+
+      if (!profile.is_active) {
+        throw new Error('User account is deactivated');
+      }
+
+      return {
+        user: data.user,
+        profile: profile
+      };
+    } catch (error) {
+      console.error('Database error verifying token:', error);
+      throw error;
+    }
+  }
+
+  // Create a test admin user (for development)
+  async createTestAdminUser() {
+    try {
+      // Check if admin user already exists
+      const existingUser = await this.getUserByEmail('admin@whenstay.com');
+      
+      if (existingUser && existingUser.profile) {
+        console.log('Test admin user already exists');
+        return existingUser.profile;
+      }
+
+      // Create auth user
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: 'admin@whenstay.com',
+        password: 'admin123',
+        email_confirm: true,
+        user_metadata: {
+          first_name: 'Admin',
+          last_name: 'User',
+          role: 'admin'
+        }
+      });
+
+      if (authError) {
+        console.error('Error creating test admin auth user:', authError);
+        throw new Error(`Failed to create test admin auth user: ${authError.message}`);
+      }
+
+      // Create user profile
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .insert({
+          id: authUser.user.id,
+          role: 'admin',
+          first_name: 'Admin',
+          last_name: 'User',
+          phone: null,
+          company_name: 'Whenstay',
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Error creating test admin profile:', profileError);
+        
+        // Clean up auth user if profile creation fails
+        try {
+          await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        } catch (cleanupError) {
+          console.error('Error cleaning up auth user:', cleanupError);
+        }
+        
+        throw new Error(`Failed to create test admin profile: ${profileError.message}`);
+      }
+
+      console.log('Test admin user created successfully');
+      return profile;
+    } catch (error) {
+      console.error('Database error creating test admin user:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new DatabaseService();

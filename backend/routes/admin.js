@@ -3,26 +3,68 @@ const router = express.Router();
 const databaseService = require('../services/databaseService');
 const beds24Service = require('../services/beds24Service');
 
-// Simple admin authentication middleware (you can enhance this with proper JWT)
-const adminAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Admin authentication required' });
+// Real authentication middleware with JWT verification
+const adminAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token and get user profile
+    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    
+    // Check if user has admin access (admin, owner, or cleaner roles)
+    if (!['admin', 'owner', 'cleaner'].includes(profile.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Attach user info to request for use in routes
+    req.user = user;
+    req.userProfile = profile;
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  
-  // For now, we'll use a simple token check
-  // In production, implement proper JWT verification
-  const token = authHeader.substring(7);
-  if (token !== process.env.ADMIN_TOKEN && token !== 'admin-dev-token') {
-    return res.status(401).json({ error: 'Invalid admin token' });
+};
+
+// Middleware for admin-only routes (admin and owner only)
+const adminOnlyAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token and get user profile
+    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    
+    // Check if user has admin access (admin or owner roles only)
+    if (!['admin', 'owner'].includes(profile.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Attach user info to request for use in routes
+    req.user = user;
+    req.userProfile = profile;
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  
-  next();
 };
 
 // Get dashboard statistics
-router.get('/dashboard/stats', adminAuth, async (req, res) => {
+router.get('/dashboard/stats', adminOnlyAuth, async (req, res) => {
   try {
     const stats = await databaseService.getDashboardStats();
     res.status(200).json(stats);
@@ -442,27 +484,130 @@ router.get('/webhooks/events', adminAuth, async (req, res) => {
   }
 });
 
-// Admin login (simplified)
-router.post('/login', async (req, res) => {
+// Authentication Routes
+
+// User login with email and password
+router.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
     
-    // Simple hardcoded admin credentials (enhance this in production)
-    if (username === 'admin' && password === 'admin123') {
-      res.status(200).json({
-        message: 'Login successful',
-        token: 'admin-dev-token', // In production, generate proper JWT
-        user: {
-          username: 'admin',
-          role: 'admin'
-        }
-      });
-    } else {
-      res.status(401).json({ error: 'Invalid credentials' });
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
+    
+    // Authenticate user
+    const { user, profile, session } = await databaseService.authenticateUser(email, password);
+    
+    res.status(200).json({
+      message: 'Login successful',
+      token: session?.access_token || `mock_token_${user.id}_${Date.now()}`,
+      user: {
+        id: user.id,
+        email: user.email,
+        profile: {
+          id: profile.id,
+          role: profile.role,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          company_name: profile.company_name,
+          is_active: profile.is_active,
+          created_at: profile.created_at
+        }
+      }
+    });
   } catch (error) {
-    console.error('Error during admin login:', error);
+    console.error('Error during login:', error);
+    
+    // Handle specific authentication errors
+    if (error.message.includes('Invalid email or password')) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    if (error.message.includes('User profile not found')) {
+      return res.status(401).json({ error: 'User profile not found' });
+    }
+    
+    if (error.message.includes('User account is deactivated')) {
+      return res.status(401).json({ error: 'User account is deactivated' });
+    }
+    
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get current user profile
+router.get('/auth/profile', adminAuth, async (req, res) => {
+  try {
+    // User profile is already attached by adminAuth middleware
+    const profile = req.userProfile;
+    const user = req.user;
+    
+    res.status(200).json({
+      message: 'Profile retrieved successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        profile: {
+          id: profile.id,
+          role: profile.role,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          company_name: profile.company_name,
+          is_active: profile.is_active,
+          created_at: profile.created_at
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// Logout (client-side token removal, server-side session invalidation)
+router.post('/auth/logout', adminAuth, async (req, res) => {
+  try {
+    // Note: With Supabase, logout is typically handled client-side
+    // Server-side logout would require session management
+    res.status(200).json({
+      message: 'Logout successful'
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Create test admin user (development only)
+router.post('/auth/create-test-admin', async (req, res) => {
+  try {
+    // Only allow in development environment
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Not available in production' });
+    }
+    
+    const profile = await databaseService.createTestAdminUser();
+    
+    res.status(201).json({
+      message: 'Test admin user created successfully',
+      profile: {
+        id: profile.id,
+        role: profile.role,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: 'admin@whenstay.com',
+        is_active: profile.is_active
+      }
+    });
+  } catch (error) {
+    console.error('Error creating test admin user:', error);
+    res.status(500).json({ 
+      error: 'Failed to create test admin user',
+      details: error.message 
+    });
   }
 });
 
@@ -902,7 +1047,7 @@ router.delete('/rooms/:id', adminAuth, async (req, res) => {
 // User Management Routes
 
 // Get all users
-router.get('/users', adminAuth, async (req, res) => {
+router.get('/users', adminOnlyAuth, async (req, res) => {
   try {
     const { page = 1, limit = 20, role, withDetails } = req.query;
     const offset = (page - 1) * limit;

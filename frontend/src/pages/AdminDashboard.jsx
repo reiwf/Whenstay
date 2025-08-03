@@ -5,13 +5,13 @@ import {
   Users, 
   CheckCircle, 
   Building,
-  LogOut,
   RefreshCw,
   Plus,
   Sparkles
 } from 'lucide-react'
-import { setAuthToken, isAuthenticated } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import ProfileDropdown from '../components/ProfileDropdown'
 
 // Import custom hooks
 import { useAdminData } from '../hooks/useAdminData'
@@ -29,6 +29,14 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [syncing, setSyncing] = useState(false)
+  const { isLoggedIn, hasAdminAccess, hasRole, profile } = useAuth()
+  
+  // Set default tab based on user role
+  useEffect(() => {
+    if (profile?.role === 'cleaner') {
+      setActiveTab('cleaning')
+    }
+  }, [profile])
 
   // Use custom hooks
   const { stats, checkins, loading, loadDashboardData } = useAdminData()
@@ -60,14 +68,11 @@ export default function AdminDashboard() {
   } = useUsers()
 
   useEffect(() => {
-    // Check authentication
-    if (!isAuthenticated()) {
-      navigate('/admin')
-      return
+    // Load dashboard data when component mounts
+    if (isLoggedIn && hasAdminAccess()) {
+      loadDashboardData()
     }
-    
-    loadDashboardData()
-  }, [navigate, loadDashboardData])
+  }, [isLoggedIn, hasAdminAccess, loadDashboardData])
 
   useEffect(() => {
     if (activeTab === 'properties') {
@@ -76,12 +81,6 @@ export default function AdminDashboard() {
       loadUsers()
     }
   }, [activeTab, loadProperties, loadUsers])
-
-  const handleLogout = () => {
-    setAuthToken(null)
-    toast.success('Logged out successfully')
-    navigate('/admin')
-  }
 
   const handleSync = async () => {
     try {
@@ -165,12 +164,7 @@ export default function AdminDashboard() {
                 )}
                 Sync Beds24
               </button>
-              <button
-                onClick={handleLogout}
-                className="text-gray-600 hover:text-red-600 transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              <ProfileDropdown />
             </div>
           </div>
         </div>
@@ -180,39 +174,46 @@ export default function AdminDashboard() {
         {/* Navigation Tabs */}
         <div className="mb-8">
           <nav className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'dashboard'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Users className="w-4 h-4 inline mr-2" />
-              Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab('properties')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'properties'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Building className="w-4 h-4 inline mr-2" />
-              Properties
-            </button>
-            <button
-              onClick={() => setActiveTab('reservations')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'reservations'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <CheckCircle className="w-4 h-4 inline mr-2" />
-              Reservations
-            </button>
+            {/* Show all tabs for admin/owner, only cleaning tab for cleaner */}
+            {profile?.role !== 'cleaner' && (
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'dashboard'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Users className="w-4 h-4 inline mr-2" />
+                Dashboard
+              </button>
+            )}
+            {profile?.role !== 'cleaner' && (
+              <button
+                onClick={() => setActiveTab('properties')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'properties'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Building className="w-4 h-4 inline mr-2" />
+                Properties
+              </button>
+            )}
+            {profile?.role !== 'cleaner' && (
+              <button
+                onClick={() => setActiveTab('reservations')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'reservations'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <CheckCircle className="w-4 h-4 inline mr-2" />
+                Reservations
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('cleaning')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -222,19 +223,21 @@ export default function AdminDashboard() {
               }`}
             >
               <Sparkles className="w-4 h-4 inline mr-2" />
-              Cleaning
+              {profile?.role === 'cleaner' ? 'My Tasks' : 'Cleaning'}
             </button>
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'users'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Users className="w-4 h-4 inline mr-2" />
-              Users
-            </button>
+            {profile?.role !== 'cleaner' && (
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'users'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Users className="w-4 h-4 inline mr-2" />
+                Users
+              </button>
+            )}
           </nav>
         </div>
 
