@@ -755,20 +755,42 @@ class DatabaseService {
   // Property Management Methods
 
   // Get all properties with their rooms
-  async getAllProperties() {
+  async getAllProperties(userProfile = null) {
     try {
-      const { data, error } = await supabaseAdmin
+      console.log('getAllProperties called with userProfile:', userProfile ? {
+        id: userProfile.id,
+        role: userProfile.role,
+        name: `${userProfile.first_name} ${userProfile.last_name}`
+      } : 'null');
+
+      let query = supabaseAdmin
         .from('properties')
         .select(`
           *,
           room_types (*)
         `)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .eq('is_active', true);
+
+      // Filter by owner_id if user is an owner
+      if (userProfile?.role === 'owner') {
+        console.log(`Filtering properties by owner_id: ${userProfile.id}`);
+        query = query.eq('owner_id', userProfile.id);
+      } else {
+        console.log('No owner filtering applied - user is not an owner or userProfile is null');
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching properties:', error);
         throw new Error('Failed to fetch properties');
+      }
+
+      console.log(`Found ${data.length} properties for user`);
+      if (userProfile?.role === 'owner') {
+        data.forEach(property => {
+          console.log(`  - ${property.name} (owner_id: ${property.owner_id})`);
+        });
       }
 
       return data;
@@ -857,6 +879,9 @@ class DatabaseService {
       if (propertyData.locationInfo !== undefined) updateData.location_info = propertyData.locationInfo;
       if (propertyData.accessTime !== undefined) updateData.access_time = propertyData.accessTime;
       if (propertyData.defaultCleanerId !== undefined) updateData.default_cleaner_id = propertyData.defaultCleanerId;
+      
+      // Fix the field mapping for owner_id
+      if (propertyData.ownerId !== undefined) updateData.owner_id = propertyData.ownerId;
 
       const { data, error } = await supabaseAdmin
         .from('properties')
@@ -1069,9 +1094,15 @@ class DatabaseService {
   }
 
   // Get properties with statistics (updated for V5 schema)
-  async getPropertiesWithStats() {
+  async getPropertiesWithStats(userProfile = null) {
     try {
-      const { data, error } = await supabaseAdmin
+      console.log('getPropertiesWithStats called with userProfile:', userProfile ? {
+        id: userProfile.id,
+        role: userProfile.role,
+        name: `${userProfile.first_name} ${userProfile.last_name}`
+      } : 'null');
+
+      let query = supabaseAdmin
         .from('properties')
         .select(`
           *,
@@ -1095,12 +1126,28 @@ class DatabaseService {
             )
           )
         `)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .eq('is_active', true);
+
+      // Filter by owner_id if user is an owner
+      if (userProfile?.role === 'owner') {
+        console.log(`Filtering properties with stats by owner_id: ${userProfile.id}`);
+        query = query.eq('owner_id', userProfile.id);
+      } else {
+        console.log('No owner filtering applied for stats - user is not an owner or userProfile is null');
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching properties with stats:', error);
         throw new Error('Failed to fetch properties with stats');
+      }
+
+      console.log(`Found ${data.length} properties with stats for user`);
+      if (userProfile?.role === 'owner') {
+        data.forEach(property => {
+          console.log(`  - ${property.name} (owner_id: ${property.owner_id})`);
+        });
       }
 
       // Calculate statistics for each property
@@ -1830,7 +1877,7 @@ class DatabaseService {
   // Cleaning Task Management Methods
 
   // Get cleaning tasks with comprehensive filtering
-  async getCleaningTasks(filters = {}) {
+  async getCleaningTasks(filters = {}, userProfile = null) {
     try {
       const {
         status,
@@ -1847,6 +1894,12 @@ class DatabaseService {
         sortBy = 'task_date',
         sortOrder = 'desc'
       } = filters;
+
+      console.log('getCleaningTasks called with userProfile:', userProfile ? {
+        id: userProfile.id,
+        role: userProfile.role,
+        name: `${userProfile.first_name} ${userProfile.last_name}`
+      } : 'null');
 
       // Build query with comprehensive joins
       let query = supabaseAdmin
@@ -1912,6 +1965,16 @@ class DatabaseService {
 
       if (roomUnitId) {
         query = query.eq('room_unit_id', roomUnitId);
+      }
+
+      // Filter by owner_id if user is an owner - join with properties table
+      if (userProfile?.role === 'owner') {
+        console.log(`Filtering cleaning tasks by owner_id: ${userProfile.id}`);
+        // We need to filter by properties that belong to this owner
+        // Since we're already joining with properties, we can filter on the properties.owner_id
+        query = query.eq('properties.owner_id', userProfile.id);
+      } else {
+        console.log('No owner filtering applied for cleaning tasks - user is not an owner or userProfile is null');
       }
 
       if (taskType) {

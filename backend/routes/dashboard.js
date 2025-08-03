@@ -617,12 +617,13 @@ router.post('/auth/create-test-admin', async (req, res) => {
 router.get('/properties', adminAuth, async (req, res) => {
   try {
     const { withStats } = req.query;
+    const userProfile = req.userProfile; // Available from adminAuth middleware
     
     let properties;
     if (withStats === 'true') {
-      properties = await databaseService.getPropertiesWithStats();
+      properties = await databaseService.getPropertiesWithStats(userProfile);
     } else {
-      properties = await databaseService.getAllProperties();
+      properties = await databaseService.getAllProperties(userProfile);
     }
     
     res.status(200).json({
@@ -1318,7 +1319,8 @@ router.get('/cleaning-tasks', adminAuth, async (req, res) => {
       sortOrder
     };
 
-    const tasks = await databaseService.getCleaningTasks(filters);
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const tasks = await databaseService.getCleaningTasks(filters, userProfile);
     
     res.status(200).json({
       message: 'Cleaning tasks retrieved successfully',

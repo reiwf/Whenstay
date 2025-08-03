@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Building, MapPin, Wifi, Edit, Trash2, Home, Bed, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Building, MapPin, Wifi, Edit, Trash2, Home, Bed, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import PropertyModal from '../modals/PropertyModal'
 import RoomModal from '../modals/RoomModal'
 import RoomTypeModal from '../modals/RoomTypeModal'
@@ -18,7 +18,9 @@ export default function PropertiesTab({
   onDeleteRoomType,
   onCreateRoomUnit,
   onUpdateRoomUnit,
-  onDeleteRoomUnit
+  onDeleteRoomUnit,
+  onRefresh,
+  userRole
 }) {
   const [showPropertyModal, setShowPropertyModal] = useState(false)
   const [showRoomModal, setShowRoomModal] = useState(false)
@@ -93,21 +95,28 @@ export default function PropertiesTab({
     setExpandedRoomTypes(newExpanded)
   }
 
+  // Check if user has admin permissions (not owner role)
+  const isReadOnly = userRole === 'owner'
+
   return (
     <div className="space-y-6">
       {/* Properties Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-gray-900">Property Management</h2>
-        <button
-          onClick={() => {
-            setEditingProperty(null)
-            setShowPropertyModal(true)
-          }}
-          className="btn-primary"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Property
-        </button>
+        <h2 className="text-lg font-semibold text-gray-900">
+          {isReadOnly ? 'My Properties' : 'Property Management'}
+        </h2>
+        {!isReadOnly && (
+          <button
+            onClick={() => {
+              setEditingProperty(null)
+              setShowPropertyModal(true)
+            }}
+            className="btn-primary"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Property
+          </button>
+        )}
       </div>
 
       {/* Properties List */}
@@ -123,23 +132,25 @@ export default function PropertiesTab({
                     {property.address}
                   </p>
                 </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => {
-                      setEditingProperty(property)
-                      setShowPropertyModal(true)
-                    }}
-                    className="text-gray-400 hover:text-primary-600"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDeleteProperty(property.id)}
-                    className="text-gray-400 hover:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isReadOnly && (
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        setEditingProperty(property)
+                        setShowPropertyModal(true)
+                      }}
+                      className="text-gray-400 hover:text-primary-600"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDeleteProperty(property.id)}
+                      className="text-gray-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Property Stats */}
@@ -180,17 +191,19 @@ export default function PropertiesTab({
                     <h4 className="text-sm font-medium text-gray-900">
                       Room Types ({property.room_types.length})
                     </h4>
-                    <button
-                      onClick={() => {
-                        setSelectedPropertyId(property.id)
-                        setEditingRoomType(null)
-                        setShowRoomTypeModal(true)
-                      }}
-                      className="text-primary-600 hover:text-primary-700 text-sm"
-                    >
-                      <Plus className="w-3 h-3 inline mr-1" />
-                      Add Room Type
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => {
+                          setSelectedPropertyId(property.id)
+                          setEditingRoomType(null)
+                          setShowRoomTypeModal(true)
+                        }}
+                        className="text-primary-600 hover:text-primary-700 text-sm"
+                      >
+                        <Plus className="w-3 h-3 inline mr-1" />
+                        Add Room Type
+                      </button>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -216,33 +229,35 @@ export default function PropertiesTab({
                               </span>
                             </div>
                           </div>
-                          <div className="flex space-x-1">
-                            <button
-                              onClick={() => {
-                                setSelectedRoomTypeId(roomType.id)
-                                setEditingRoomUnit(null)
-                                setShowRoomUnitModal(true)
-                              }}
-                              className="text-primary-600 hover:text-primary-700 text-xs px-2 py-1 rounded"
-                            >
-                              Add Unit
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingRoomType(roomType)
-                                setShowRoomTypeModal(true)
-                              }}
-                              className="text-gray-400 hover:text-primary-600"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => onDeleteRoomType(roomType.id)}
-                              className="text-gray-400 hover:text-red-600"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+                          {!isReadOnly && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => {
+                                  setSelectedRoomTypeId(roomType.id)
+                                  setEditingRoomUnit(null)
+                                  setShowRoomUnitModal(true)
+                                }}
+                                className="text-primary-600 hover:text-primary-700 text-xs px-2 py-1 rounded"
+                              >
+                                Add Unit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingRoomType(roomType)
+                                  setShowRoomTypeModal(true)
+                                }}
+                                className="text-gray-400 hover:text-primary-600"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => onDeleteRoomType(roomType.id)}
+                                className="text-gray-400 hover:text-red-600"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         
                         {expandedRoomTypes.has(roomType.id) && roomType.room_units && (
@@ -258,23 +273,25 @@ export default function PropertiesTab({
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex space-x-1">
-                                  <button
-                                    onClick={() => {
-                                      setEditingRoomUnit(unit)
-                                      setShowRoomUnitModal(true)
-                                    }}
-                                    className="text-gray-400 hover:text-primary-600"
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => onDeleteRoomUnit(unit.id)}
-                                    className="text-gray-400 hover:text-red-600"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div className="flex space-x-1">
+                                    <button
+                                      onClick={() => {
+                                        setEditingRoomUnit(unit)
+                                        setShowRoomUnitModal(true)
+                                      }}
+                                      className="text-gray-400 hover:text-primary-600"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => onDeleteRoomUnit(unit.id)}
+                                      className="text-gray-400 hover:text-red-600"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -292,30 +309,32 @@ export default function PropertiesTab({
                     <h4 className="text-sm font-medium text-gray-900">
                       Rooms ({property.rooms?.length || 0})
                     </h4>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedPropertyId(property.id)
-                          setEditingRoomType(null)
-                          setShowRoomTypeModal(true)
-                        }}
-                        className="text-primary-600 hover:text-primary-700 text-sm"
-                      >
-                        <Plus className="w-3 h-3 inline mr-1" />
-                        Add Room Type
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedPropertyId(property.id)
-                          setEditingRoom(null)
-                          setShowRoomModal(true)
-                        }}
-                        className="text-gray-600 hover:text-gray-700 text-sm"
-                      >
-                        <Plus className="w-3 h-3 inline mr-1" />
-                        Add Legacy Room
-                      </button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedPropertyId(property.id)
+                            setEditingRoomType(null)
+                            setShowRoomTypeModal(true)
+                          }}
+                          className="text-primary-600 hover:text-primary-700 text-sm"
+                        >
+                          <Plus className="w-3 h-3 inline mr-1" />
+                          Add Room Type
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedPropertyId(property.id)
+                            setEditingRoom(null)
+                            setShowRoomModal(true)
+                          }}
+                          className="text-gray-600 hover:text-gray-700 text-sm"
+                        >
+                          <Plus className="w-3 h-3 inline mr-1" />
+                          Add Legacy Room
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   {property.rooms && property.rooms.length > 0 ? (
@@ -328,23 +347,25 @@ export default function PropertiesTab({
                               <span className="text-sm text-gray-600 ml-2">- {room.room_name}</span>
                             )}
                           </div>
-                          <div className="flex space-x-1">
-                            <button
-                              onClick={() => {
-                                setEditingRoom(room)
-                                setShowRoomModal(true)
-                              }}
-                              className="text-gray-400 hover:text-primary-600"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => onDeleteRoom(room.id)}
-                              className="text-gray-400 hover:text-red-600"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+                          {!isReadOnly && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => {
+                                  setEditingRoom(room)
+                                  setShowRoomModal(true)
+                                }}
+                                className="text-gray-400 hover:text-primary-600"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => onDeleteRoom(room.id)}
+                                className="text-gray-400 hover:text-red-600"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                       {property.rooms.length > 3 && (
