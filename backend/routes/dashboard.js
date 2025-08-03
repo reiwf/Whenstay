@@ -1367,17 +1367,17 @@ router.post('/cleaning-tasks', adminAuth, async (req, res) => {
       specialNotes
     } = req.body;
     
-    // Validate required fields
-    if (!propertyId || !roomUnitId || !reservationId || !taskDate) {
+    // Validate required fields (reservationId is now nullable)
+    if (!propertyId || !roomUnitId || !taskDate) {
       return res.status(400).json({ 
-        error: 'Property ID, room unit ID, reservation ID, and task date are required' 
+        error: 'Property ID, room unit ID, and task date are required' 
       });
     }
     
     const taskData = {
       propertyId,
       roomUnitId,
-      reservationId,
+      reservationId: reservationId || null, // Make reservation ID nullable
       cleanerId,
       taskDate,
       taskType: taskType || 'checkout',

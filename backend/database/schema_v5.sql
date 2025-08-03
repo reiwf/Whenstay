@@ -269,7 +269,7 @@ create table public.cleaning_tasks (
   id uuid not null default extensions.uuid_generate_v4 (),
   property_id uuid not null,
   room_unit_id uuid not null,
-  reservation_id uuid not null,
+  reservation_id uuid null,
   cleaner_id uuid null,
   task_date date not null,
   task_type text not null default 'checkout'::text,

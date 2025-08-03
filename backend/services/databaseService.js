@@ -757,11 +757,11 @@ class DatabaseService {
   // Get all properties with their rooms
   async getAllProperties(userProfile = null) {
     try {
-      console.log('getAllProperties called with userProfile:', userProfile ? {
-        id: userProfile.id,
-        role: userProfile.role,
-        name: `${userProfile.first_name} ${userProfile.last_name}`
-      } : 'null');
+      // console.log('getAllProperties called with userProfile:', userProfile ? {
+      //   id: userProfile.id,
+      //   role: userProfile.role,
+      //   name: `${userProfile.first_name} ${userProfile.last_name}`
+      // } : 'null');
 
       let query = supabaseAdmin
         .from('properties')
@@ -773,10 +773,8 @@ class DatabaseService {
 
       // Filter by owner_id if user is an owner
       if (userProfile?.role === 'owner') {
-        console.log(`Filtering properties by owner_id: ${userProfile.id}`);
         query = query.eq('owner_id', userProfile.id);
       } else {
-        console.log('No owner filtering applied - user is not an owner or userProfile is null');
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -786,7 +784,6 @@ class DatabaseService {
         throw new Error('Failed to fetch properties');
       }
 
-      console.log(`Found ${data.length} properties for user`);
       if (userProfile?.role === 'owner') {
         data.forEach(property => {
           console.log(`  - ${property.name} (owner_id: ${property.owner_id})`);
@@ -1096,11 +1093,11 @@ class DatabaseService {
   // Get properties with statistics (updated for V5 schema)
   async getPropertiesWithStats(userProfile = null) {
     try {
-      console.log('getPropertiesWithStats called with userProfile:', userProfile ? {
-        id: userProfile.id,
-        role: userProfile.role,
-        name: `${userProfile.first_name} ${userProfile.last_name}`
-      } : 'null');
+      // console.log('getPropertiesWithStats called with userProfile:', userProfile ? {
+      //   id: userProfile.id,
+      //   role: userProfile.role,
+      //   name: `${userProfile.first_name} ${userProfile.last_name}`
+      // } : 'null');
 
       let query = supabaseAdmin
         .from('properties')
@@ -1130,10 +1127,8 @@ class DatabaseService {
 
       // Filter by owner_id if user is an owner
       if (userProfile?.role === 'owner') {
-        console.log(`Filtering properties with stats by owner_id: ${userProfile.id}`);
         query = query.eq('owner_id', userProfile.id);
       } else {
-        console.log('No owner filtering applied for stats - user is not an owner or userProfile is null');
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -1143,7 +1138,6 @@ class DatabaseService {
         throw new Error('Failed to fetch properties with stats');
       }
 
-      console.log(`Found ${data.length} properties with stats for user`);
       if (userProfile?.role === 'owner') {
         data.forEach(property => {
           console.log(`  - ${property.name} (owner_id: ${property.owner_id})`);
@@ -1895,11 +1889,11 @@ class DatabaseService {
         sortOrder = 'desc'
       } = filters;
 
-      console.log('getCleaningTasks called with userProfile:', userProfile ? {
-        id: userProfile.id,
-        role: userProfile.role,
-        name: `${userProfile.first_name} ${userProfile.last_name}`
-      } : 'null');
+      // console.log('getCleaningTasks called with userProfile:', userProfile ? {
+      //   id: userProfile.id,
+      //   role: userProfile.role,
+      //   name: `${userProfile.first_name} ${userProfile.last_name}`
+      // } : 'null');
 
       // Build query with comprehensive joins
       let query = supabaseAdmin
@@ -1974,7 +1968,7 @@ class DatabaseService {
         // Since we're already joining with properties, we can filter on the properties.owner_id
         query = query.eq('properties.owner_id', userProfile.id);
       } else {
-        console.log('No owner filtering applied for cleaning tasks - user is not an owner or userProfile is null');
+  
       }
 
       if (taskType) {
