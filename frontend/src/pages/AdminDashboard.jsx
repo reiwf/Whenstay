@@ -40,6 +40,12 @@ export default function AdminDashboard() {
     createRoom,
     updateRoom,
     deleteRoom,
+    createRoomType,
+    updateRoomType,
+    deleteRoomType,
+    createRoomUnit,
+    updateRoomUnit,
+    deleteRoomUnit,
     loadProperties
   } = useProperties()
   const { 
@@ -250,6 +256,12 @@ export default function AdminDashboard() {
             onCreateRoom={createRoom}
             onUpdateRoom={updateRoom}
             onDeleteRoom={deleteRoom}
+            onCreateRoomType={createRoomType}
+            onUpdateRoomType={updateRoomType}
+            onDeleteRoomType={deleteRoomType}
+            onCreateRoomUnit={createRoomUnit}
+            onUpdateRoomUnit={updateRoomUnit}
+            onDeleteRoomUnit={deleteRoomUnit}
           />
         )}
 

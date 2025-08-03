@@ -255,7 +255,7 @@ export default function ReservationsTab() {
           {roomInfo.unitNumber && (
             <div className="text-sm text-gray-600 flex items-center ml-5">
               <Key className="w-3 h-3 mr-1" />
-              Unit {roomInfo.unitNumber}
+              {roomInfo.unitNumber}
               {roomInfo.floorNumber && (
                 <span className="text-gray-500 ml-1">
                   (Floor {roomInfo.floorNumber})

@@ -3,13 +3,31 @@
 
 -- First, let's create the necessary types and functions if they don't exist
 DO $$ BEGIN
-    CREATE TYPE reservation_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled');
+    CREATE TYPE reservation_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled','completed','no_show');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('admin', 'owner', 'cleaner', 'guest');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE cleaning_status AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE cleaning_priority AS ENUM ('normal', 'high');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE cleaning_task_type AS ENUM ('checkout', 'eco','deep_clean');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
@@ -150,12 +168,7 @@ CREATE TABLE IF NOT EXISTS public.room_units (
 -- Reservations Table (updated with new foreign keys)
 CREATE TABLE IF NOT EXISTS public.reservations (
   id uuid not null default extensions.uuid_generate_v4 (),
-  --Booking Details
   beds24_booking_id character varying(255) not null,
-  property_id uuid null, -- NEW: Direct reference to property
-  room_type_id uuid null, -- NEW: Reference to room type
-  room_unit_id uuid null, -- NEW: Reference to specific room unit
-  room_id uuid null, -- DEPRECATED: Will be removed after migration
   booking_name character varying(255) not null,
   booking_email character varying(255) not null,
   booking_phone character varying(50) null,
@@ -165,12 +178,6 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   total_amount numeric(10, 2) null,
   currency character varying(3) null default 'USD'::character varying,
   status public.reservation_status null default 'pending'::reservation_status,
-  booking_source text null,
-  num_adults integer null,
-  num_children integer null,
-  special_requests text null,
-
-  --Check-in Details
   check_in_token character varying(8) null,
   guest_lastname character varying(255) null,
   guest_firstname character varying(255) null,
@@ -189,15 +196,74 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   verified_by uuid null,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
-  
+  booking_source text null,
+  num_adults integer null,
+  num_children integer null,
+  special_requests text null,
+  property_id uuid null,
+  room_type_id uuid null,
+  room_unit_id uuid null,
   constraint reservations_pkey primary key (id),
-  constraint reservations_beds24_booking_id_key unique (beds24_booking_id),
   constraint reservations_check_in_token_key unique (check_in_token),
+  constraint reservations_beds24_booking_id_key unique (beds24_booking_id),
+  constraint reservations_verified_by_fkey foreign KEY (verified_by) references user_profiles (id) on delete set null,
   constraint reservations_property_id_fkey foreign KEY (property_id) references properties (id) on delete set null,
   constraint reservations_room_type_id_fkey foreign KEY (room_type_id) references room_types (id) on delete set null,
-  constraint reservations_room_unit_id_fkey foreign KEY (room_unit_id) references room_units (id) on delete set null,
-  constraint reservations_verified_by_fkey foreign KEY (verified_by) references user_profiles (id) on delete set null
-);
+  constraint reservations_room_unit_id_fkey foreign KEY (room_unit_id) references room_units (id) on delete set null
+) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_property_id on public.reservations using btree (property_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_room_type_id on public.reservations using btree (room_type_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_room_unit_id on public.reservations using btree (room_unit_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_property_date on public.reservations using btree (property_id, check_in_date) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_beds24_booking_id on public.reservations using btree (beds24_booking_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_check_in_token on public.reservations using btree (check_in_token) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_status on public.reservations using btree (status) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_check_in_date on public.reservations using btree (check_in_date) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_admin_verified on public.reservations using btree (admin_verified) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_checkin_submitted on public.reservations using btree (checkin_submitted_at) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_status_date on public.reservations using btree (status, check_in_date) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_booking_email on public.reservations using btree (booking_email) TABLESPACE pg_default;
+
+create trigger auto_manage_cleaning_task
+after INSERT
+or
+update OF room_unit_id,
+check_out_date on reservations for EACH row
+execute FUNCTION manage_cleaning_task ();
+
+create trigger manage_cleaning_task_trigger
+after INSERT
+or
+update OF check_out_date,
+room_unit_id,
+property_id on reservations for EACH row
+execute FUNCTION manage_cleaning_task ();
+
+create trigger manage_cleaning_tasks_trigger
+after INSERT
+or
+update OF room_unit_id,
+check_out_date on reservations for EACH row
+execute FUNCTION manage_cleaning_task ();
+
+create trigger set_checkin_token BEFORE INSERT on reservations for EACH row when (new.check_in_token is null)
+execute FUNCTION generate_checkin_token ();
+
+create trigger update_reservations_verified_at BEFORE
+update on reservations for EACH row
+execute FUNCTION update_verified_at ();
 
 create table public.cleaning_tasks (
   id uuid not null default extensions.uuid_generate_v4 (),
@@ -377,6 +443,8 @@ SELECT
   p.emergency_contact as property_emergency_contact,
   p.property_amenities,
   p.location_info,
+  p.access_time,
+  p.default_cleaner_id,
   -- Room type details
   rt.name as room_type_name,
   rt.description as room_type_description,

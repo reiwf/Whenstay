@@ -578,7 +578,7 @@ export default function CleaningTab() {
                     </div>
                     <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 inline-block">
                       <p className="text-lg font-bold text-blue-900">
-                        UNIT {task.room_unit_number || 'Unknown'}
+                      {task.room_unit_number || 'Unknown'}
                       </p>
                       <p className="text-sm text-blue-700">
                         {task.room_type_name || 'Standard Room'}

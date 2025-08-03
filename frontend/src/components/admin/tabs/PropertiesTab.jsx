@@ -251,7 +251,7 @@ export default function PropertiesTab({
                               <div key={unit.id} className="flex justify-between items-center p-2 bg-white border border-gray-100 rounded">
                                 <div className="flex items-center">
                                   <Bed className="w-3 h-3 mr-2 text-gray-400" />
-                                  <span className="text-sm">Unit {unit.unit_number}</span>
+                                  <span className="text-sm">{unit.unit_number}</span>
                                   {unit.floor_number && (
                                     <span className="text-xs text-gray-500 ml-2">
                                       Floor {unit.floor_number}

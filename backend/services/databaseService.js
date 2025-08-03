@@ -1,5 +1,4 @@
 const { supabaseAdmin } = require('../config/supabase');
-const { v4: uuidv4 } = require('uuid');
 
 class DatabaseService {
   // Create a new reservation record
@@ -801,9 +800,9 @@ class DatabaseService {
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
 
-      // Get total rooms
+      // Get total room units (V5 schema)
       const { count: totalRooms } = await supabaseAdmin
-        .from('rooms')
+        .from('room_units')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
 
@@ -837,7 +836,7 @@ class DatabaseService {
         .from('properties')
         .select(`
           *,
-          rooms (*)
+          room_types (*)
         `)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
@@ -860,8 +859,7 @@ class DatabaseService {
       const { data, error } = await supabaseAdmin
         .from('properties')
         .select(`
-          *,
-          rooms (*)
+          *
         `)
         .eq('id', propertyId)
         .eq('is_active', true)
@@ -973,100 +971,169 @@ class DatabaseService {
     }
   }
 
-  // Create room
+  // Create room (deprecated - use createRoomType and createRoomUnit instead)
   async createRoom(propertyId, roomData) {
     try {
-      const { data, error } = await supabaseAdmin
-        .from('rooms')
-        .insert({
-          property_id: propertyId,
-          room_number: roomData.roomNumber,
-          room_name: roomData.roomName,
-          room_type: roomData.roomType,
-          max_guests: roomData.maxGuests || 2,
-          access_code: roomData.accessCode,
-          access_instructions: roomData.accessInstructions,
-          room_amenities: roomData.roomAmenities,
-          room_size_sqm: roomData.roomSizeSqm,
-          bed_configuration: roomData.bedConfiguration,
-          floor_number: roomData.floorNumber,
-          wifi_name: roomData.wifiName,
-          wifi_password: roomData.wifiPassword,
-          has_balcony: roomData.hasBalcony || false,
-          has_kitchen: roomData.hasKitchen || false,
-          is_accessible: roomData.isAccessible || false
-        })
-        .select()
-        .single();
+      // This method is deprecated in V5 schema
+      // For backward compatibility, we'll create a room type and unit
+      console.warn('createRoom is deprecated. Use createRoomType and createRoomUnit instead.');
+      
+      // First create a room type
+      const roomType = await this.createRoomType(propertyId, {
+        name: roomData.roomName || roomData.roomType || 'Standard Room',
+        description: `Room type for ${roomData.roomNumber}`,
+        maxGuests: roomData.maxGuests || 2,
+        roomAmenities: roomData.roomAmenities,
+        bedConfiguration: roomData.bedConfiguration,
+        roomSizeSqm: roomData.roomSizeSqm,
+        hasBalcony: roomData.hasBalcony || false,
+        hasKitchen: roomData.hasKitchen || false,
+        isAccessible: roomData.isAccessible || false
+      });
 
-      if (error) {
-        console.error('Error creating room:', error);
-        throw new Error('Failed to create room');
-      }
+      // Then create a room unit
+      const roomUnit = await this.createRoomUnit(roomType.id, {
+        unitNumber: roomData.roomNumber,
+        floorNumber: roomData.floorNumber,
+        accessCode: roomData.accessCode,
+        accessInstructions: roomData.accessInstructions,
+        wifiName: roomData.wifiName,
+        wifiPassword: roomData.wifiPassword
+      });
 
-      return data;
+      // Return combined data for backward compatibility
+      return {
+        id: roomUnit.id,
+        property_id: propertyId,
+        room_number: roomUnit.unit_number,
+        room_name: roomType.name,
+        room_type: roomType.name,
+        max_guests: roomType.max_guests,
+        access_code: roomUnit.access_code,
+        access_instructions: roomUnit.access_instructions,
+        room_amenities: roomType.room_amenities,
+        room_size_sqm: roomType.room_size_sqm,
+        bed_configuration: roomType.bed_configuration,
+        floor_number: roomUnit.floor_number,
+        wifi_name: roomUnit.wifi_name,
+        wifi_password: roomUnit.wifi_password,
+        has_balcony: roomType.has_balcony,
+        has_kitchen: roomType.has_kitchen,
+        is_accessible: roomType.is_accessible,
+        room_type_id: roomType.id,
+        room_unit_id: roomUnit.id
+      };
     } catch (error) {
       console.error('Database error creating room:', error);
       throw error;
     }
   }
 
-  // Update room
+  // Update room (deprecated - use updateRoomType and updateRoomUnit instead)
   async updateRoom(roomId, roomData) {
     try {
-      const updateData = {};
+      // This method is deprecated in V5 schema
+      console.warn('updateRoom is deprecated. Use updateRoomType and updateRoomUnit instead.');
       
-      if (roomData.roomNumber !== undefined) updateData.room_number = roomData.roomNumber;
-      if (roomData.roomName !== undefined) updateData.room_name = roomData.roomName;
-      if (roomData.roomType !== undefined) updateData.room_type = roomData.roomType;
-      if (roomData.maxGuests !== undefined) updateData.max_guests = roomData.maxGuests;
-      if (roomData.accessCode !== undefined) updateData.access_code = roomData.accessCode;
-      if (roomData.accessInstructions !== undefined) updateData.access_instructions = roomData.accessInstructions;
-      if (roomData.roomAmenities !== undefined) updateData.room_amenities = roomData.roomAmenities;
-      if (roomData.roomSizeSqm !== undefined) updateData.room_size_sqm = roomData.roomSizeSqm;
-      if (roomData.bedConfiguration !== undefined) updateData.bed_configuration = roomData.bedConfiguration;
-      if (roomData.floorNumber !== undefined) updateData.floor_number = roomData.floorNumber;
-      if (roomData.wifiName !== undefined) updateData.wifi_name = roomData.wifiName;
-      if (roomData.wifiPassword !== undefined) updateData.wifi_password = roomData.wifiPassword;
-      if (roomData.hasBalcony !== undefined) updateData.has_balcony = roomData.hasBalcony;
-      if (roomData.hasKitchen !== undefined) updateData.has_kitchen = roomData.hasKitchen;
-      if (roomData.isAccessible !== undefined) updateData.is_accessible = roomData.isAccessible;
-
-      const { data, error } = await supabaseAdmin
-        .from('rooms')
-        .update(updateData)
+      // For backward compatibility, we'll try to update both room type and unit
+      // This assumes roomId refers to a room_unit_id
+      
+      // First, get the room unit to find the room type
+      const { data: roomUnit, error: roomUnitError } = await supabaseAdmin
+        .from('room_units')
+        .select('*, room_types(*)')
         .eq('id', roomId)
-        .select()
         .single();
 
-      if (error) {
-        console.error('Error updating room:', error);
-        throw new Error('Failed to update room');
+      if (roomUnitError) {
+        console.error('Error fetching room unit for update:', roomUnitError);
+        throw new Error('Failed to find room unit for update');
       }
 
-      return data;
+      // Update room type if relevant fields are provided
+      if (roomData.roomName || roomData.roomType || roomData.maxGuests || 
+          roomData.roomAmenities || roomData.bedConfiguration || roomData.roomSizeSqm ||
+          roomData.hasBalcony !== undefined || roomData.hasKitchen !== undefined || 
+          roomData.isAccessible !== undefined) {
+        
+        await this.updateRoomType(roomUnit.room_type_id, {
+          name: roomData.roomName || roomData.roomType,
+          maxGuests: roomData.maxGuests,
+          roomAmenities: roomData.roomAmenities,
+          bedConfiguration: roomData.bedConfiguration,
+          roomSizeSqm: roomData.roomSizeSqm,
+          hasBalcony: roomData.hasBalcony,
+          hasKitchen: roomData.hasKitchen,
+          isAccessible: roomData.isAccessible
+        });
+      }
+
+      // Update room unit if relevant fields are provided
+      if (roomData.roomNumber || roomData.floorNumber !== undefined || 
+          roomData.accessCode !== undefined || roomData.accessInstructions !== undefined ||
+          roomData.wifiName !== undefined || roomData.wifiPassword !== undefined) {
+        
+        await this.updateRoomUnit(roomId, {
+          unitNumber: roomData.roomNumber,
+          floorNumber: roomData.floorNumber,
+          accessCode: roomData.accessCode,
+          accessInstructions: roomData.accessInstructions,
+          wifiName: roomData.wifiName,
+          wifiPassword: roomData.wifiPassword
+        });
+      }
+
+      // Return updated room unit with room type for backward compatibility
+      const { data: updatedRoomUnit, error: fetchError } = await supabaseAdmin
+        .from('room_units')
+        .select(`
+          *,
+          room_types (*)
+        `)
+        .eq('id', roomId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching updated room unit:', fetchError);
+        throw new Error('Failed to fetch updated room data');
+      }
+
+      // Transform to legacy format
+      return {
+        id: updatedRoomUnit.id,
+        room_number: updatedRoomUnit.unit_number,
+        room_name: updatedRoomUnit.room_types.name,
+        room_type: updatedRoomUnit.room_types.name,
+        max_guests: updatedRoomUnit.room_types.max_guests,
+        access_code: updatedRoomUnit.access_code,
+        access_instructions: updatedRoomUnit.access_instructions,
+        room_amenities: updatedRoomUnit.room_types.room_amenities,
+        room_size_sqm: updatedRoomUnit.room_types.room_size_sqm,
+        bed_configuration: updatedRoomUnit.room_types.bed_configuration,
+        floor_number: updatedRoomUnit.floor_number,
+        wifi_name: updatedRoomUnit.wifi_name,
+        wifi_password: updatedRoomUnit.wifi_password,
+        has_balcony: updatedRoomUnit.room_types.has_balcony,
+        has_kitchen: updatedRoomUnit.room_types.has_kitchen,
+        is_accessible: updatedRoomUnit.room_types.is_accessible,
+        room_type_id: updatedRoomUnit.room_types.id,
+        room_unit_id: updatedRoomUnit.id
+      };
     } catch (error) {
       console.error('Database error updating room:', error);
       throw error;
     }
   }
 
-  // Delete room (soft delete)
+  // Delete room (deprecated - use deleteRoomUnit instead)
   async deleteRoom(roomId) {
     try {
-      const { data, error } = await supabaseAdmin
-        .from('rooms')
-        .update({ is_active: false })
-        .eq('id', roomId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error deleting room:', error);
-        throw new Error('Failed to delete room');
-      }
-
-      return data;
+      // This method is deprecated in V5 schema
+      console.warn('deleteRoom is deprecated. Use deleteRoomUnit instead.');
+      
+      // For backward compatibility, we'll try to delete the room unit
+      // This assumes roomId refers to a room_unit_id
+      return await this.deleteRoomUnit(roomId);
     } catch (error) {
       console.error('Database error deleting room:', error);
       throw error;
