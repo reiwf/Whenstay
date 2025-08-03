@@ -5,10 +5,6 @@ import AdminDashboard from './pages/AdminDashboard'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestDashboard from './pages/GuestDashboard'
-import OwnerDashboard from './pages/OwnerDashboard'
-import OwnerLogin from './pages/OwnerLogin'
-import CleanerDashboard from './pages/CleanerDashboard'
-import CleanerLogin from './pages/CleanerLogin'
 
 function App() {
   return (
@@ -21,15 +17,7 @@ function App() {
         
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLogin />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        
-        {/* Owner Routes */}
-        <Route path="/owner/login" element={<OwnerLogin />} />
-        <Route path="/owner/dashboard" element={<OwnerDashboard />} />
-        
-        {/* Cleaner Routes */}
-        <Route path="/cleaner/login" element={<CleanerLogin />} />
-        <Route path="/cleaner/dashboard" element={<CleanerDashboard />} />
+        <Route path="/dashboard" element={<AdminDashboard />} />
         
         {/* 404 Route */}
         <Route path="*" element={<NotFoundPage />} />
@@ -39,6 +27,3 @@ function App() {
 }
 
 export default App
-
-
-

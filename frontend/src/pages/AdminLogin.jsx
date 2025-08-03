@@ -19,7 +19,7 @@ export default function AdminLogin() {
   useEffect(() => {
     // Redirect if already authenticated
     if (isAuthenticated()) {
-      navigate('/admin/dashboard')
+      navigate('/dashboard')
     }
   }, [navigate])
 
@@ -32,7 +32,7 @@ export default function AdminLogin() {
       
       setAuthToken(token)
       toast.success(`Welcome back, ${user.username}!`)
-      navigate('/admin/dashboard')
+      navigate('/dashboard')
     } catch (error) {
       console.error('Login error:', error)
       // Error toast is handled by the API interceptor
@@ -145,5 +145,3 @@ export default function AdminLogin() {
     </div>
   )
 }
-
-

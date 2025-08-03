@@ -18,18 +18,6 @@ export default function HomePage() {
               >
                 Admin
               </Link>
-              <Link
-                to="/owner/login"
-                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-              >
-                Owner
-              </Link>
-              <Link
-                to="/cleaner/login"
-                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-              >
-                Cleaner
-              </Link>
             </div>
           </div>
         </div>
@@ -216,7 +204,3 @@ export default function HomePage() {
     </div>
   )
 }
-
-
-
-

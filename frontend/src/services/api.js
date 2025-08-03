@@ -35,7 +35,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Unauthorized - clear token and redirect to login
       localStorage.removeItem('adminToken')
-      if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin') {
+      if (window.location.pathname === '/dashboard' || (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin')) {
         window.location.href = '/admin'
       }
     }
