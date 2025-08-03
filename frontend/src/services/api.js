@@ -101,8 +101,6 @@ export const adminAPI = {
   // Get all reservations with filtering
   getReservations: (params = {}) => api.get('/admin/reservations', { params }),
   
-  // Get reservation statistics
-  getReservationStats: (params = {}) => api.get('/admin/reservations/stats', { params }),
   
   // Send invitation manually
   sendInvitation: (reservationId) => 
@@ -198,6 +196,24 @@ export const adminAPI = {
   updateUserRole: (id, role) => api.patch(`/admin/users/${id}/role`, { role }),
   
   updateUserStatus: (id, isActive) => api.patch(`/admin/users/${id}/status`, { isActive }),
+  
+  // Cleaning Task Management
+  getCleaningTasks: (params = {}) => api.get('/admin/cleaning-tasks', { params }),
+  
+  createCleaningTask: (taskData) => api.post('/admin/cleaning-tasks', taskData),
+  
+  updateCleaningTask: (id, taskData) => api.put(`/admin/cleaning-tasks/${id}`, taskData),
+  
+  deleteCleaningTask: (id) => api.delete(`/admin/cleaning-tasks/${id}`),
+  
+  assignCleanerToTask: (id, cleanerId) => 
+    api.patch(`/admin/cleaning-tasks/${id}/assign`, { cleanerId }),
+  
+  // Get available cleaners
+  getAvailableCleaners: () => api.get('/admin/cleaners'),
+  
+  // Get cleaning task statistics
+  getCleaningTaskStats: (params = {}) => api.get('/admin/cleaning-tasks/stats', { params }),
 }
 
 export const reservationAPI = {

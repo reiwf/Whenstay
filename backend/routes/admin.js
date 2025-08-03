@@ -226,35 +226,6 @@ router.get('/reservations', adminAuth, async (req, res) => {
   }
 });
 
-// Get reservation statistics (with filters)
-router.get('/reservations/stats', adminAuth, async (req, res) => {
-  try {
-    const {
-      propertyId,
-      checkInDate,
-      checkInDateFrom,
-      checkInDateTo
-    } = req.query;
-
-    const filters = {
-      propertyId,
-      checkInDate,
-      checkInDateFrom,
-      checkInDateTo
-    };
-
-    const stats = await databaseService.getReservationStats(filters);
-    
-    res.status(200).json({
-      message: 'Reservation statistics retrieved successfully',
-      stats,
-      filters
-    });
-  } catch (error) {
-    console.error('Error fetching reservation stats:', error);
-    res.status(500).json({ error: 'Failed to fetch reservation statistics' });
-  }
-});
 
 // Update reservation
 router.put('/reservations/:id', adminAuth, async (req, res) => {
@@ -548,14 +519,15 @@ router.post('/properties', adminAuth, async (req, res) => {
       ownerId,
       description,
       propertyType,
-      totalRooms,
       wifiName,
       wifiPassword,
       houseRules,
       checkInInstructions,
       emergencyContact,
       propertyAmenities,
-      locationInfo
+      locationInfo,
+      accessTime,
+      defaultCleanerId
     } = req.body;
     
     // Validate required fields
@@ -569,14 +541,15 @@ router.post('/properties', adminAuth, async (req, res) => {
       ownerId: ownerId || 'c339d395-9910-44cd-ae8a-362e153c35de', // Default admin user
       description,
       propertyType,
-      totalRooms,
       wifiName,
       wifiPassword,
       houseRules,
       checkInInstructions,
       emergencyContact,
       propertyAmenities,
-      locationInfo
+      locationInfo,
+      accessTime,
+      defaultCleanerId
     };
     
     const property = await databaseService.createProperty(propertyData);
@@ -1230,37 +1203,6 @@ router.get('/cleaning-tasks', adminAuth, async (req, res) => {
   }
 });
 
-// Get cleaning task statistics
-router.get('/cleaning-tasks/stats', adminAuth, async (req, res) => {
-  try {
-    const {
-      propertyId,
-      cleanerId,
-      taskDate,
-      taskDateFrom,
-      taskDateTo
-    } = req.query;
-
-    const filters = {
-      propertyId,
-      cleanerId,
-      taskDate,
-      taskDateFrom,
-      taskDateTo
-    };
-
-    const stats = await databaseService.getCleaningTaskStats(filters);
-    
-    res.status(200).json({
-      message: 'Cleaning task statistics retrieved successfully',
-      stats,
-      filters
-    });
-  } catch (error) {
-    console.error('Error fetching cleaning task stats:', error);
-    res.status(500).json({ error: 'Failed to fetch cleaning task statistics' });
-  }
-});
 
 // Create new cleaning task
 router.post('/cleaning-tasks', adminAuth, async (req, res) => {
@@ -1379,6 +1321,37 @@ router.get('/cleaners', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching available cleaners:', error);
     res.status(500).json({ error: 'Failed to fetch available cleaners' });
+  }
+});
+
+// Get cleaning task statistics
+router.get('/cleaning-tasks/stats', adminAuth, async (req, res) => {
+  try {
+    const {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    } = req.query;
+
+    const filters = {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    };
+
+    const stats = await databaseService.getCleaningTaskStats(filters);
+    
+    res.status(200).json({
+      message: 'Cleaning task statistics retrieved successfully',
+      stats
+    });
+  } catch (error) {
+    console.error('Error fetching cleaning task stats:', error);
+    res.status(500).json({ error: 'Failed to fetch cleaning task statistics' });
   }
 });
 

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Plus, Users, RefreshCw, Edit, Trash2 } from 'lucide-react'
 import UserModal from '../modals/UserModal'
+import LoadingSpinner from '../../LoadingSpinner'
 
 export default function UsersTab({ 
   users, 
   userStats, 
+  loading = false,
   onLoadUsers, 
   onCreateUser, 
   onUpdateUser, 
@@ -108,8 +110,12 @@ export default function UsersTab({
       </div>
 
       {/* Users Table */}
-      {filteredUsers.length > 0 ? (
-        <div className="card overflow-hidden">
+      <div className="card overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner size="large" />
+          </div>
+        ) : filteredUsers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -204,16 +210,16 @@ export default function UsersTab({
               </tbody>
             </table>
           </div>
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">No users found</p>
-          <p className="text-sm text-gray-400 mt-2">
-            {roleFilter ? `No users with role "${roleFilter}"` : 'Create your first user to get started'}
-          </p>
-        </div>
-      )}
+        ) : (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">No users found</p>
+            <p className="text-sm text-gray-400 mt-2">
+              {roleFilter ? `No users with role "${roleFilter}"` : 'Create your first user to get started'}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* User Modal */}
       {showUserModal && (
@@ -229,7 +235,3 @@ export default function UsersTab({
     </div>
   )
 }
-
-
-
-

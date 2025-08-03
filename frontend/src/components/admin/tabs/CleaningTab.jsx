@@ -22,7 +22,6 @@ import LoadingSpinner from '../../LoadingSpinner';
 export default function CleaningTab() {
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
-  const [stats, setStats] = useState({});
   const [cleaners, setCleaners] = useState([]);
   const [properties, setProperties] = useState([]);
   const [filters, setFilters] = useState({
@@ -53,7 +52,6 @@ export default function CleaningTab() {
       setLoading(true);
       await Promise.all([
         loadCleaningTasks(),
-        loadStats(),
         loadCleaners(),
         loadProperties()
       ]);
@@ -93,44 +91,6 @@ export default function CleaningTab() {
     }
   };
 
-  const loadStats = async () => {
-    try {
-      const token = localStorage.getItem('adminToken') || 'admin-dev-token';
-      const queryParams = new URLSearchParams();
-      
-      if (filters.propertyId && filters.propertyId !== 'all') {
-        queryParams.append('propertyId', filters.propertyId);
-      }
-      if (filters.cleanerId && filters.cleanerId !== 'all') {
-        queryParams.append('cleanerId', filters.cleanerId);
-      }
-      if (filters.taskDate) {
-        queryParams.append('taskDate', filters.taskDate);
-      }
-      if (filters.taskDateFrom) {
-        queryParams.append('taskDateFrom', filters.taskDateFrom);
-      }
-      if (filters.taskDateTo) {
-        queryParams.append('taskDateTo', filters.taskDateTo);
-      }
-
-      const response = await fetch(`/api/admin/cleaning-tasks/stats?${queryParams}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch cleaning task stats');
-      }
-
-      const data = await response.json();
-      setStats(data.stats || {});
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
-  };
 
   const loadCleaners = async () => {
     try {
@@ -211,7 +171,6 @@ export default function CleaningTab() {
       }
 
       await loadCleaningTasks();
-      await loadStats();
     } catch (error) {
       console.error('Error updating task status:', error);
       alert('Failed to update task status');
@@ -235,7 +194,6 @@ export default function CleaningTab() {
       }
 
       await loadCleaningTasks();
-      await loadStats();
     } catch (error) {
       console.error('Error assigning cleaner:', error);
       alert('Failed to assign cleaner');
@@ -262,7 +220,6 @@ export default function CleaningTab() {
       setSelectedTasks([]);
       setBulkAssignMode(false);
       await loadCleaningTasks();
-      await loadStats();
     } catch (error) {
       console.error('Error bulk assigning cleaner:', error);
       alert('Failed to bulk assign cleaner');
@@ -289,7 +246,6 @@ export default function CleaningTab() {
       }
 
       await loadCleaningTasks();
-      await loadStats();
     } catch (error) {
       console.error('Error deleting task:', error);
       alert('Failed to delete task');
@@ -377,48 +333,6 @@ export default function CleaningTab() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card">
-          <div className="flex items-center">
-            <CheckCircle className="w-8 h-8 text-green-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Completed</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.completedTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <Play className="w-8 h-8 text-blue-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">In Progress</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.inProgressTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <Clock className="w-8 h-8 text-yellow-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.pendingTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Overdue</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.overdueTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Filters */}
       <div className="card">

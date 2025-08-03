@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   RefreshCw, 
   Download, 
@@ -37,7 +37,6 @@ export default function ReservationsTab() {
   const {
     loading,
     reservations,
-    stats,
     currentPage,
     hasMore,
     loadReservations,
@@ -194,12 +193,6 @@ export default function ReservationsTab() {
     }
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount || 0)
-  }
 
   const renderPropertyHierarchy = (reservation) => {
     const hasV5Structure = reservation.room_type_name || reservation.unit_number
@@ -469,40 +462,6 @@ export default function ReservationsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Statistics Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-gray-900">{stats.totalReservations}</p>
-            <p className="text-sm text-gray-600">Total</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-yellow-600">{stats.pendingReservations}</p>
-            <p className="text-sm text-gray-600">Pending</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-blue-600">{stats.invitedReservations}</p>
-            <p className="text-sm text-gray-600">Invited</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-green-600">{stats.completedReservations}</p>
-            <p className="text-sm text-gray-600">Completed</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-red-600">{stats.cancelledReservations}</p>
-            <p className="text-sm text-gray-600">Cancelled</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-primary-600">{formatCurrency(stats.totalRevenue)}</p>
-            <p className="text-sm text-gray-600">Revenue</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-purple-600">{formatCurrency(stats.averageReservationValue)}</p>
-            <p className="text-sm text-gray-600">Avg Value</p>
-          </div>
-        </div>
-      )}
-
       {/* Header and Filters */}
       <div className="card">
         <div className="flex justify-between items-center mb-6">
@@ -672,9 +631,8 @@ export default function ReservationsTab() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {reservations.map((reservation) => (
-                  <>
+                  <React.Fragment key={reservation.id}>
                     <tr 
-                      key={reservation.id} 
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => toggleRowExpansion(reservation.id)}
                     >
@@ -706,7 +664,7 @@ export default function ReservationsTab() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {formatCurrency(reservation.total_amount)}
+                          ${reservation.total_amount || 0}
                         </div>
                         <div className="text-sm text-gray-500">
                           {reservation.currency || 'USD'}
@@ -785,7 +743,7 @@ export default function ReservationsTab() {
                       </td>
                     </tr>
                     {renderExpandedDetails(reservation)}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

@@ -103,8 +103,8 @@ export default function DashboardTab({ stats, checkins, onRefresh }) {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {checkins.map((checkin) => (
-                  <tr key={checkin.reservation_id}>
+                {checkins.map((checkin, index) => (
+                  <tr key={checkin.id || checkin.reservation_id || `checkin-${index}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
@@ -155,7 +155,3 @@ export default function DashboardTab({ stats, checkins, onRefresh }) {
     </>
   )
 }
-
-
-
-

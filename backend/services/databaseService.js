@@ -599,81 +599,6 @@ class DatabaseService {
     }
   }
 
-  // Get reservation statistics with filters
-  async getReservationStats(filters = {}) {
-    try {
-      const {
-        propertyId,
-        checkInDateFrom,
-        checkInDateTo,
-        checkInDate
-      } = filters;
-
-      // Create base query builder function to avoid the .eq issue
-      const createBaseQuery = () => {
-        let query = supabaseAdmin.from('reservations');
-        
-        // Apply same filters as main query
-        if (propertyId) {
-          query = query.eq('room_id', propertyId); // Keep using room_id for now
-        }
-
-        if (checkInDate) {
-          query = query.eq('check_in_date', checkInDate);
-        } else {
-          if (checkInDateFrom) {
-            query = query.gte('check_in_date', checkInDateFrom);
-          }
-          if (checkInDateTo) {
-            query = query.lte('check_in_date', checkInDateTo);
-          }
-        }
-        
-        return query;
-      };
-
-      // Get counts by status
-      const [totalResult, pendingResult, invitedResult, completedResult, cancelledResult] = await Promise.all([
-        createBaseQuery().select('*', { count: 'exact', head: true }),
-        createBaseQuery().eq('status', 'pending').select('*', { count: 'exact', head: true }),
-        createBaseQuery().eq('status', 'invited').select('*', { count: 'exact', head: true }),
-        createBaseQuery().eq('status', 'completed').select('*', { count: 'exact', head: true }),
-        createBaseQuery().eq('status', 'cancelled').select('*', { count: 'exact', head: true })
-      ]);
-
-      // Get revenue for completed reservations
-      let revenueQuery = createBaseQuery();
-      revenueQuery = revenueQuery.eq('status', 'completed');
-      const { data: revenueData, error: revenueError } = await revenueQuery.select('total_amount');
-
-      if (revenueError) {
-        console.error('Error fetching revenue data:', revenueError);
-      }
-
-      const totalRevenue = revenueData?.reduce((sum, res) => sum + (res.total_amount || 0), 0) || 0;
-
-      return {
-        totalReservations: totalResult.count || 0,
-        pendingReservations: pendingResult.count || 0,
-        invitedReservations: invitedResult.count || 0,
-        completedReservations: completedResult.count || 0,
-        cancelledReservations: cancelledResult.count || 0,
-        totalRevenue: totalRevenue,
-        averageReservationValue: completedResult.count > 0 ? totalRevenue / completedResult.count : 0
-      };
-    } catch (error) {
-      console.error('Database error fetching reservation stats:', error);
-      return {
-        totalReservations: 0,
-        pendingReservations: 0,
-        invitedReservations: 0,
-        completedReservations: 0,
-        cancelledReservations: 0,
-        totalRevenue: 0,
-        averageReservationValue: 0
-      };
-    }
-  }
 
   // Update admin verification status
   async updateAdminVerification(reservationId, verified) {
@@ -888,14 +813,15 @@ class DatabaseService {
           owner_id: propertyData.ownerId,
           description: propertyData.description,
           property_type: propertyData.propertyType || 'apartment',
-          total_rooms: propertyData.totalRooms || 1,
           wifi_name: propertyData.wifiName,
           wifi_password: propertyData.wifiPassword,
           house_rules: propertyData.houseRules,
           check_in_instructions: propertyData.checkInInstructions,
           emergency_contact: propertyData.emergencyContact,
           property_amenities: propertyData.propertyAmenities,
-          location_info: propertyData.locationInfo
+          location_info: propertyData.locationInfo,
+          access_time: propertyData.accessTime,
+          default_cleaner_id: propertyData.defaultCleanerId
         })
         .select()
         .single();
@@ -929,6 +855,8 @@ class DatabaseService {
       if (propertyData.emergencyContact !== undefined) updateData.emergency_contact = propertyData.emergencyContact;
       if (propertyData.propertyAmenities !== undefined) updateData.property_amenities = propertyData.propertyAmenities;
       if (propertyData.locationInfo !== undefined) updateData.location_info = propertyData.locationInfo;
+      if (propertyData.accessTime !== undefined) updateData.access_time = propertyData.accessTime;
+      if (propertyData.defaultCleanerId !== undefined) updateData.default_cleaner_id = propertyData.defaultCleanerId;
 
       const { data, error } = await supabaseAdmin
         .from('properties')
@@ -1341,12 +1269,12 @@ class DatabaseService {
     }
   }
 
-  // Delete room type (soft delete)
+  // Delete room type (hard delete)
   async deleteRoomType(roomTypeId) {
     try {
       const { data, error } = await supabaseAdmin
         .from('room_types')
-        .update({ is_active: false })
+        .delete()
         .eq('id', roomTypeId)
         .select()
         .single();
@@ -1451,12 +1379,12 @@ class DatabaseService {
     }
   }
 
-  // Delete room unit (soft delete)
+  // Delete room unit (hard delete)
   async deleteRoomUnit(roomUnitId) {
     try {
       const { data, error } = await supabaseAdmin
         .from('room_units')
-        .update({ is_active: false })
+        .delete()
         .eq('id', roomUnitId)
         .select()
         .single();

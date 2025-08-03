@@ -1,20 +1,43 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
+import { adminAPI } from '../../../services/api'
 
 export default function PropertyModal({ property, onSave, onClose }) {
   const [formData, setFormData] = useState({
     name: property?.name || '',
     address: property?.address || '',
     description: property?.description || '',
+    propertyType: property?.property_type || 'apartment',
     wifiName: property?.wifi_name || '',
     wifiPassword: property?.wifi_password || '',
     checkInInstructions: property?.check_in_instructions || '',
-    checkOutInstructions: property?.check_out_instructions || '',
+    houseRules: property?.house_rules || '',
     emergencyContact: property?.emergency_contact || '',
-    beds24PropertyId: property?.beds24_property_id || ''
+    accessTime: property?.access_time || '',
+    defaultCleanerId: property?.default_cleaner_id || ''
   })
   const [loading, setLoading] = useState(false)
+  const [cleaners, setCleaners] = useState([])
+  const [loadingCleaners, setLoadingCleaners] = useState(true)
+
+  // Load available cleaners when component mounts
+  useEffect(() => {
+    const loadCleaners = async () => {
+      try {
+        setLoadingCleaners(true)
+        const response = await adminAPI.getAvailableCleaners()
+        setCleaners(response.data.cleaners || [])
+      } catch (error) {
+        console.error('Error loading cleaners:', error)
+        toast.error('Failed to load cleaners')
+      } finally {
+        setLoadingCleaners(false)
+      }
+    }
+
+    loadCleaners()
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -25,12 +48,14 @@ export default function PropertyModal({ property, onSave, onClose }) {
         name: formData.name,
         address: formData.address,
         description: formData.description,
-        wifi_name: formData.wifiName,
-        wifi_password: formData.wifiPassword,
-        check_in_instructions: formData.checkInInstructions,
-        check_out_instructions: formData.checkOutInstructions,
-        emergency_contact: formData.emergencyContact,
-        beds24_property_id: formData.beds24PropertyId
+        propertyType: formData.propertyType,
+        wifiName: formData.wifiName,
+        wifiPassword: formData.wifiPassword,
+        checkInInstructions: formData.checkInInstructions,
+        houseRules: formData.houseRules,
+        emergencyContact: formData.emergencyContact,
+        accessTime: formData.accessTime,
+        defaultCleanerId: formData.defaultCleanerId || null
       })
     } catch (error) {
       console.error('Error saving property:', error)
@@ -93,6 +118,36 @@ export default function PropertyModal({ property, onSave, onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Property Type
+                </label>
+                <select
+                  value={formData.propertyType}
+                  onChange={(e) => setFormData({ ...formData, propertyType: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="apartment">Apartment</option>
+                  <option value="house">House</option>
+                  <option value="villa">Villa</option>
+                  <option value="studio">Studio</option>
+                  <option value="condo">Condo</option>
+                  <option value="hotel">Hotel</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Access Time *
+                </label>
+                <input
+                  type="time"
+                  value={formData.accessTime}
+                  onChange={(e) => setFormData({ ...formData, accessTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   WiFi Network Name
                 </label>
                 <input
@@ -132,15 +187,27 @@ export default function PropertyModal({ property, onSave, onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Beds24 Property ID
+                  Default Cleaner
                 </label>
-                <input
-                  type="text"
-                  value={formData.beds24PropertyId}
-                  onChange={(e) => setFormData({ ...formData, beds24PropertyId: e.target.value })}
-                  placeholder="Beds24 property identifier"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                {loadingCleaners ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 flex items-center">
+                    <LoadingSpinner size="small" className="mr-2" />
+                    <span className="text-sm text-gray-500">Loading cleaners...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.defaultCleanerId}
+                    onChange={(e) => setFormData({ ...formData, defaultCleanerId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">No default cleaner</option>
+                    {cleaners.map((cleaner) => (
+                      <option key={cleaner.id} value={cleaner.id}>
+                        {cleaner.full_name || `${cleaner.first_name} ${cleaner.last_name}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="md:col-span-2">
@@ -158,12 +225,12 @@ export default function PropertyModal({ property, onSave, onClose }) {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check-out Instructions
+                  House Rules
                 </label>
                 <textarea
-                  value={formData.checkOutInstructions}
-                  onChange={(e) => setFormData({ ...formData, checkOutInstructions: e.target.value })}
-                  placeholder="Instructions for guests during check-out..."
+                  value={formData.houseRules}
+                  onChange={(e) => setFormData({ ...formData, houseRules: e.target.value })}
+                  placeholder="Property rules and guidelines for guests..."
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
@@ -194,7 +261,3 @@ export default function PropertyModal({ property, onSave, onClose }) {
     </div>
   )
 }
-
-
-
-

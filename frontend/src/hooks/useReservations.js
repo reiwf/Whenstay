@@ -5,7 +5,6 @@ import toast from 'react-hot-toast'
 export function useReservations() {
   const [loading, setLoading] = useState(false)
   const [reservations, setReservations] = useState([])
-  const [stats, setStats] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
 
@@ -27,13 +26,9 @@ export function useReservations() {
         }
       })
 
-      const [reservationsResponse, statsResponse] = await Promise.all([
-        adminAPI.getReservations(params),
-        adminAPI.getReservationStats(filters)
-      ])
+      const reservationsResponse = await adminAPI.getReservations(params)
 
       setReservations(reservationsResponse.data.reservations)
-      setStats(statsResponse.data.stats)
       setHasMore(reservationsResponse.data.pagination.hasMore)
       setCurrentPage(page)
       
@@ -250,7 +245,6 @@ export function useReservations() {
     // State
     loading,
     reservations,
-    stats,
     currentPage,
     hasMore,
     

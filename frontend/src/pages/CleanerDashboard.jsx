@@ -45,7 +45,7 @@ export default function CleanerDashboard() {
       // Build query parameters
       const params = new URLSearchParams()
       if (selectedDate) {
-        params.append('date', selectedDate)
+        params.append('taskDate', selectedDate)
       }
       if (statusFilter && statusFilter !== 'all') {
         params.append('status', statusFilter)
@@ -53,7 +53,7 @@ export default function CleanerDashboard() {
       
       // Fetch cleaning tasks from API
       const response = await api.get(`/admin/cleaning-tasks?${params.toString()}`)
-      setTasks(response.data || [])
+      setTasks(response.data.tasks || [])
       
     } catch (error) {
       console.error('Error loading cleaning tasks:', error)
@@ -166,7 +166,7 @@ export default function CleanerDashboard() {
     }
   }
 
-  const todayTasks = tasks.filter(task => task.taskDate === new Date().toISOString().split('T')[0])
+  const todayTasks = tasks.filter(task => task.task_date === new Date().toISOString().split('T')[0])
   const completedToday = todayTasks.filter(task => task.status === 'completed').length
   const pendingToday = todayTasks.filter(task => task.status === 'pending').length
   const inProgressToday = todayTasks.filter(task => task.status === 'in_progress').length
@@ -285,8 +285,8 @@ export default function CleanerDashboard() {
               <div key={task.id} className="card">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{task.apartmentName}</h3>
-                    <p className="text-sm text-gray-600">Room {task.roomNumber}</p>
+                    <h3 className="text-lg font-semibold text-gray-900">{task.property_name || 'Unknown Property'}</h3>
+                    <p className="text-sm text-gray-600">Room {task.room_unit_number || 'Unknown'}</p>
                   </div>
                   <span className={`status-badge ${getStatusColor(task.status)}`}>
                     {task.status.replace('_', ' ')}
@@ -297,68 +297,68 @@ export default function CleanerDashboard() {
                   <div className="space-y-3">
                     <div className="flex items-center">
                       <MapPin className="w-4 h-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">{task.apartmentAddress}</span>
+                      <span className="text-sm text-gray-600">{task.property_address || 'Address not available'}</span>
                     </div>
                     
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">
-                        {new Date(task.taskDate).toLocaleDateString()}
+                        {new Date(task.task_date).toLocaleDateString()}
                       </span>
                     </div>
                     
                     <div className="flex items-center">
                       <Clock className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">
-                        {task.estimatedDuration} minutes
+                        {task.estimated_duration || 120} minutes
                       </span>
                     </div>
                     
                     <div className="flex items-center">
                       <Home className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">
-                        {getTaskTypeDisplay(task.taskType)}
+                        {getTaskTypeDisplay(task.task_type)}
                       </span>
                     </div>
                   </div>
 
                   <div className="space-y-3">
-                    {task.guestName && (
+                    {task.cleaner_name && (
                       <div className="flex items-center">
                         <Users className="w-4 h-4 text-gray-400 mr-2" />
                         <span className="text-sm text-gray-600">
-                          After: {task.guestName}
+                          Cleaner: {task.cleaner_name}
                         </span>
                       </div>
                     )}
                     
-                    {task.startedAt && (
+                    {task.started_at && (
                       <div className="flex items-center">
                         <Play className="w-4 h-4 text-gray-400 mr-2" />
                         <span className="text-sm text-gray-600">
-                          Started: {new Date(task.startedAt).toLocaleTimeString()}
+                          Started: {new Date(task.started_at).toLocaleTimeString()}
                         </span>
                       </div>
                     )}
                     
-                    {task.completedAt && (
+                    {task.completed_at && (
                       <div className="flex items-center">
                         <CheckCircle className="w-4 h-4 text-gray-400 mr-2" />
                         <span className="text-sm text-gray-600">
-                          Completed: {new Date(task.completedAt).toLocaleTimeString()}
+                          Completed: {new Date(task.completed_at).toLocaleTimeString()}
                         </span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {task.specialNotes && (
+                {task.special_notes && (
                   <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-start">
                       <AlertCircle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-yellow-800">Special Notes:</p>
-                        <p className="text-sm text-yellow-700">{task.specialNotes}</p>
+                        <p className="text-sm text-yellow-700">{task.special_notes}</p>
                       </div>
                     </div>
                   </div>
