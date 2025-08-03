@@ -21,7 +21,7 @@ function App() {
           
           {/* Protected Admin Routes - Allow admin, owner, and cleaner roles */}
           <Route 
-            path="/admin" 
+            path="/dashboard" 
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner', 'cleaner']}>
                 <AdminDashboard />
@@ -30,7 +30,7 @@ function App() {
           />
           
           {/* Legacy route redirects */}
-          <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+          <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
           <Route path="/admin-login" element={<Navigate to="/login" replace />} />
           
           <Route 

@@ -16,7 +16,7 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && isLoggedIn) {
-      const from = location.state?.from?.pathname || '/admin'
+      const from = location.state?.from?.pathname || '/dashboard'
       navigate(from, { replace: true })
     }
   }, [isLoggedIn, authLoading, navigate, location])
@@ -46,19 +46,19 @@ const Login = () => {
       if (result.success) {
         // Determine redirect based on user role
         const userRole = result.profile.role
-        let redirectPath = '/admin'
+        let redirectPath = '/dashboard'
         
         switch (userRole) {
           case 'admin':
           case 'owner':
           case 'cleaner':
-            redirectPath = '/admin'
+            redirectPath = '/dashboard'
             break
           case 'guest':
             redirectPath = '/guest-dashboard'
             break
           default:
-            redirectPath = '/admin'
+            redirectPath = '/dashboard'
         }
         
         // Get intended destination or use role-based default
@@ -80,7 +80,7 @@ const Login = () => {
       setIsLoading(true)
       setError('')
       
-      const response = await fetch('/api/admin/auth/create-test-admin', {
+      const response = await fetch('/api/dashboard/auth/create-test-admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

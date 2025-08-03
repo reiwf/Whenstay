@@ -13,7 +13,7 @@ export default function HomePage() {
             </div>
             <div className="flex space-x-6">
               <Link
-                to="/admin"
+                to="/dashboard"
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
                 Login
@@ -194,7 +194,7 @@ export default function HomePage() {
               Streamlining your hotel experience with smart online check-in solutions.
             </p>
             <div className="flex justify-center space-x-6">
-              <Link to="/admin" className="text-gray-400 hover:text-white transition-colors">
+              <Link to="/dashboard" className="text-gray-400 hover:text-white transition-colors">
                 Admin Portal
               </Link>
             </div>

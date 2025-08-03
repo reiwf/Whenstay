@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
 const webhookRoutes = require('./routes/webhooks');
 const reservationRoutes = require('./routes/reservations');
 const checkinRoutes = require('./routes/checkin');
-const adminRoutes = require('./routes/admin');
+const dashboardRoutes = require('./routes/dashboard');
 const guestRoutes = require('./routes/guest');
 const testRoutes = require('./routes/test');
 
@@ -47,7 +47,7 @@ const testRoutes = require('./routes/test');
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/checkin', checkinRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/guest', guestRoutes);
 app.use('/api/test', testRoutes);
 
