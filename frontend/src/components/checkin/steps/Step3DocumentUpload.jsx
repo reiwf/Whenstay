@@ -62,23 +62,11 @@ export default function Step3DocumentUpload({
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h4 className="font-medium text-blue-800 mb-2">Accepted Documents:</h4>
             <ul className="text-blue-700 space-y-1">
               <li>• Passport (preferred)</li>
               <li>• Driver's License</li>
-              <li>• National ID Card</li>
-              <li>• Government-issued Photo ID</li>
             </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-blue-800 mb-2">Photo Guidelines:</h4>
-            <ul className="text-blue-700 space-y-1">
-              <li>• Clear, well-lit photo</li>
-              <li>• All text must be readable</li>
-              <li>• No glare or shadows</li>
-              <li>• Document must be flat</li>
-            </ul>
-          </div>
+          </div>          
         </div>
       </div>
 
@@ -129,24 +117,6 @@ export default function Step3DocumentUpload({
         </div>
       </div>
 
-      {/* Tips for Good Photos */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-        <h4 className="text-sm font-semibold text-yellow-900 mb-2">
-          Tips for a Good Photo
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-yellow-800 text-sm">
-          <ul className="space-y-1">
-            <li>• Use good lighting (natural light works best)</li>
-            <li>• Place document on a flat, dark surface</li>
-            <li>• Hold camera directly above the document</li>
-          </ul>
-          <ul className="space-y-1">
-            <li>• Ensure all corners are visible</li>
-            <li>• Avoid shadows and reflections</li>
-            <li>• Make sure text is sharp and readable</li>
-          </ul>
-        </div>
-      </div>
 
       <StepNavigation
         currentStep={3}

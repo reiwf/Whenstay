@@ -11,6 +11,8 @@ export default function Step1ReservationOverview({
   onEnterModificationMode, 
   onExitModificationMode 
 }) {
+
+  console.log('Reservation data:', reservation)
   if (!reservation) {
     return (
       <div className="text-center py-8">
@@ -94,7 +96,7 @@ export default function Step1ReservationOverview({
                   className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   <Edit className="w-4 h-4 mr-2" />
-                  Modify Check-in
+                  Resubmit Check-in Info
                 </button>
               </div>
             </div>
@@ -140,7 +142,6 @@ export default function Step1ReservationOverview({
                 <p className="text-sm font-medium text-gray-900">Check-in Date</p>
                 <p className="text-lg text-primary-700">
                   {checkInDate.toLocaleDateString('en-US', {
-                    weekday: 'long',
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
@@ -155,7 +156,6 @@ export default function Step1ReservationOverview({
                 <p className="text-sm font-medium text-gray-900">Check-out Date</p>
                 <p className="text-lg text-primary-700">
                   {checkOutDate.toLocaleDateString('en-US', {
-                    weekday: 'long',
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
@@ -180,15 +180,25 @@ export default function Step1ReservationOverview({
             <div className="flex items-start">
               <Home className="w-5 h-5 text-primary-600 mr-3 mt-1" />
               <div>
-                <p className="text-sm font-medium text-gray-900">Room</p>
+                <p className="text-sm font-medium text-gray-900">Property</p>
                 <p className="text-lg text-primary-700">
-                  Room {reservation.roomNumber}
+                  {reservation.propertyName || 'Property Name'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-start">
               <MapPin className="w-5 h-5 text-primary-600 mr-3 mt-1" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Room</p>
+                <p className="text-lg text-primary-700">
+                  {reservation.roomTypeName || reservation.roomTypes}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start">
+              <Clock className="w-5 h-5 text-primary-600 mr-3 mt-1" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Duration</p>
                 <p className="text-lg text-primary-700">
@@ -198,40 +208,95 @@ export default function Step1ReservationOverview({
             </div>
           </div>
         </div>
+
+        {/* Additional Room Details - show if available */}
+        {(reservation.roomTypeDescription || reservation.bedConfiguration || reservation.roomSizeSqm || reservation.hasBalcony || reservation.hasKitchen) && (
+          <div className="mt-6 pt-6 border-t border-primary-200">
+            <h4 className="text-md font-semibold text-primary-900 mb-3">
+              Room Features
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {reservation.roomTypeDescription && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Description</p>
+                  <p className="text-sm text-gray-700">{reservation.roomTypeDescription}</p>
+                </div>
+              )}
+              
+              {reservation.bedConfiguration && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Bed Configuration</p>
+                  <p className="text-sm text-gray-700">{reservation.bedConfiguration}</p>
+                </div>
+              )}
+              
+              {reservation.roomSizeSqm && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Room Size</p>
+                  <p className="text-sm text-gray-700">{reservation.roomSizeSqm} sq m</p>
+                </div>
+              )}
+              
+              {reservation.maxGuests && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Maximum Guests</p>
+                  <p className="text-sm text-gray-700">{reservation.maxGuests} guests</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Room Amenities */}
+            {(reservation.hasBalcony || reservation.hasKitchen) && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-gray-900 mb-2">Amenities</p>
+                <div className="flex flex-wrap gap-2">
+                  {reservation.hasBalcony && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Balcony
+                    </span>
+                  )}
+                  {reservation.hasKitchen && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Kitchen
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* What's Next - only show for fresh check-ins or modification mode */}
-      {(!checkinCompleted || isModificationMode) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-          <h4 className="text-lg font-semibold text-blue-900 mb-2">
-            {isModificationMode ? "Modify Your Information" : "What's Next?"}
-          </h4>
-          <p className="text-blue-800 mb-4">
-            {isModificationMode 
-              ? "You can update any of your previously submitted information. All fields will be pre-filled with your current data."
-              : "To complete your check-in, we'll need to collect some information and documents. This process should take just a few minutes and will help ensure a smooth arrival."
-            }
-          </p>
-          <ul className="text-blue-700 space-y-1">
-            <li>• {isModificationMode ? "Update" : "Verify"} your personal information</li>
-            <li>• {isModificationMode ? "Replace" : "Upload"} a photo of your passport or ID</li>
-            <li>• Review and accept our guest agreement</li>
-          </ul>
-        </div>
-      )}
+{(!checkinCompleted || isModificationMode) && (
+  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
+    <h4 className="text-lg font-semibold text-yellow-900 mb-2">
+      {isModificationMode ? "Modify Your Information" : "What's Next?"}
+    </h4>
+    <p className="text-yellow-800 mb-4">
+      {isModificationMode 
+        ? "You can update any of your previously submitted information. All fields will be pre-filled with your current data."
+        : "To complete your check-in, we'll need to collect some information and documents. This process should take just a few minutes and will help ensure a smooth arrival."
+      }
+    </p>
+    <ul className="text-yellow-700 space-y-1">
+      <li>• {isModificationMode ? "Update" : "Verify"} your personal information</li>
+      <li>• {isModificationMode ? "Replace" : "Upload"} a photo of your passport or ID</li>
+      <li>• Review and accept our guest agreement</li>
+    </ul>
+  </div>
+)}
 
-      {/* Important Information - only show for fresh check-ins or modification mode */}
-      {(!checkinCompleted || isModificationMode) && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-          <h4 className="text-sm font-semibold text-yellow-900 mb-2">
-            Important Information
-          </h4>
-          <p className="text-yellow-800 text-sm">
-            Please ensure you have a valid government-issued photo ID (passport, driver's license, 
-            or national ID card) ready to upload during the check-in process.
-          </p>
-        </div>
-      )}
+{/* Important Information */}
+<div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+  <h4 className="text-m font-semibold text-red-900 mb-2">
+    Important Information
+  </h4>
+  <p className="text-red-800 text-m">
+    Guests must complete the online check-in in order to receive the access code to enter the apartment.
+  </p>
+</div>
+
 
       <StepNavigation
         currentStep={1}
@@ -250,7 +315,3 @@ export default function Step1ReservationOverview({
     </div>
   )
 }
-
-
-
-

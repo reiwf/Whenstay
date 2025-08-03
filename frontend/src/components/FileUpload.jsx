@@ -192,7 +192,7 @@ export default function FileUpload({
             <img 
               src={preview} 
               alt="Document preview" 
-              className="w-full h-48 sm:h-64 object-cover"
+              className="w-full h-90 sm:h-96 object-cover"
             />
             
             {/* Delete Button Overlay */}

@@ -144,6 +144,8 @@ export default function CheckinPage() {
           onSubmit={handleSubmit}
           onPrevious={previousStep}
           isSubmitting={submitting}
+          checkinCompleted={checkinCompleted}
+          isModificationMode={isModificationMode}
         />
       )}
     </CheckinLayout>
