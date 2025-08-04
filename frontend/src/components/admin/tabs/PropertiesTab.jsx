@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Plus, Building, MapPin, Wifi, Edit, Trash2, Home, Bed, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import PropertyModal from '../modals/PropertyModal'
-import RoomModal from '../modals/RoomModal'
 import RoomTypeModal from '../modals/RoomTypeModal'
 import RoomUnitModal from '../modals/RoomUnitModal'
 
@@ -10,9 +9,6 @@ export default function PropertiesTab({
   onCreateProperty, 
   onUpdateProperty, 
   onDeleteProperty,
-  onCreateRoom,
-  onUpdateRoom,
-  onDeleteRoom,
   onCreateRoomType,
   onUpdateRoomType,
   onDeleteRoomType,
@@ -23,11 +19,9 @@ export default function PropertiesTab({
   userRole
 }) {
   const [showPropertyModal, setShowPropertyModal] = useState(false)
-  const [showRoomModal, setShowRoomModal] = useState(false)
   const [showRoomTypeModal, setShowRoomTypeModal] = useState(false)
   const [showRoomUnitModal, setShowRoomUnitModal] = useState(false)
   const [editingProperty, setEditingProperty] = useState(null)
-  const [editingRoom, setEditingRoom] = useState(null)
   const [editingRoomType, setEditingRoomType] = useState(null)
   const [editingRoomUnit, setEditingRoomUnit] = useState(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState(null)
@@ -46,18 +40,6 @@ export default function PropertiesTab({
     setEditingProperty(null)
   }
 
-  const handleCreateRoom = async (roomData) => {
-    await onCreateRoom(selectedPropertyId, roomData)
-    setShowRoomModal(false)
-    setEditingRoom(null)
-    setSelectedPropertyId(null)
-  }
-
-  const handleUpdateRoom = async (roomData) => {
-    await onUpdateRoom(editingRoom.id, roomData)
-    setShowRoomModal(false)
-    setEditingRoom(null)
-  }
 
   const handleCreateRoomType = async (roomTypeData) => {
     await onCreateRoomType(selectedPropertyId, roomTypeData)
@@ -302,85 +284,26 @@ export default function PropertiesTab({
                 </div>
               )}
 
-              {/* Legacy Rooms (for backward compatibility) */}
+              {/* Guidance for properties without room types */}
               {(!property.room_types || property.room_types.length === 0) && (
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium text-gray-900">
-                      Rooms ({property.rooms?.length || 0})
-                    </h4>
-                    {!isReadOnly && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedPropertyId(property.id)
-                            setEditingRoomType(null)
-                            setShowRoomTypeModal(true)
-                          }}
-                          className="text-primary-600 hover:text-primary-700 text-sm"
-                        >
-                          <Plus className="w-3 h-3 inline mr-1" />
-                          Add Room Type
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedPropertyId(property.id)
-                            setEditingRoom(null)
-                            setShowRoomModal(true)
-                          }}
-                          className="text-gray-600 hover:text-gray-700 text-sm"
-                        >
-                          <Plus className="w-3 h-3 inline mr-1" />
-                          Add Legacy Room
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {property.rooms && property.rooms.length > 0 ? (
-                    <div className="space-y-2">
-                      {property.rooms.slice(0, 3).map((room) => (
-                        <div key={room.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                          <div>
-                            <span className="text-sm font-medium">{room.room_number}</span>
-                            {room.room_name && (
-                              <span className="text-sm text-gray-600 ml-2">- {room.room_name}</span>
-                            )}
-                          </div>
-                          {!isReadOnly && (
-                            <div className="flex space-x-1">
-                              <button
-                                onClick={() => {
-                                  setEditingRoom(room)
-                                  setShowRoomModal(true)
-                                }}
-                                className="text-gray-400 hover:text-primary-600"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => onDeleteRoom(room.id)}
-                                className="text-gray-400 hover:text-red-600"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {property.rooms.length > 3 && (
-                        <p className="text-xs text-gray-500 text-center">
-                          +{property.rooms.length - 3} more rooms
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-gray-500 italic mb-2">No rooms added yet</p>
-                      <p className="text-xs text-gray-400">
-                        Start by creating room types for better organization
-                      </p>
-                    </div>
+                <div className="text-center py-6 bg-blue-50 rounded-lg border border-blue-200">
+                  <Home className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-blue-900 mb-1">No room types configured</p>
+                  <p className="text-xs text-blue-700 mb-3">
+                    Create room types to organize your rooms efficiently
+                  </p>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => {
+                        setSelectedPropertyId(property.id)
+                        setEditingRoomType(null)
+                        setShowRoomTypeModal(true)
+                      }}
+                      className="btn-primary text-sm"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Create Room Type
+                    </button>
                   )}
                 </div>
               )}
@@ -409,18 +332,6 @@ export default function PropertiesTab({
         />
       )}
 
-      {/* Room Modal */}
-      {showRoomModal && (
-        <RoomModal
-          room={editingRoom}
-          onSave={editingRoom ? handleUpdateRoom : handleCreateRoom}
-          onClose={() => {
-            setShowRoomModal(false)
-            setEditingRoom(null)
-            setSelectedPropertyId(null)
-          }}
-        />
-      )}
 
       {/* Room Type Modal */}
       {showRoomTypeModal && (

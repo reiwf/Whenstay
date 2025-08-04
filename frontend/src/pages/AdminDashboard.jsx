@@ -6,7 +6,6 @@ import {
   CheckCircle, 
   Building,
   RefreshCw,
-  Plus,
   Sparkles
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -98,35 +97,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const createTestReservation = async () => {
-    try {
-      const testData = {
-        guestName: 'Test Guest',
-        guestEmail: 'test@example.com',
-        checkInDate: new Date().toISOString().split('T')[0],
-        checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        roomNumber: '101'
-      }
-      
-      const response = await fetch('/api/reservations/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testData)
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        toast.success('Test reservation created!')
-        console.log('Check-in URL:', result.reservation.checkinUrl)
-        await loadDashboardData()
-      }
-    } catch (error) {
-      console.error('Error creating test reservation:', error)
-      toast.error('Failed to create test reservation')
-    }
-  }
 
   if (loading) {
     return (
@@ -147,13 +117,6 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-600">Check-in Management Dashboard</p>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={createTestReservation}
-                className="btn-secondary text-sm"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Test Reservation
-              </button>
               <button
                 onClick={handleSync}
                 disabled={syncing}

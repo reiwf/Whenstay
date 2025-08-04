@@ -25,35 +25,6 @@ export function useAdminData() {
     }
   }, [])
 
-  const createTestReservation = useCallback(async () => {
-    try {
-      const testData = {
-        guestName: 'Test Guest',
-        guestEmail: 'test@example.com',
-        checkInDate: new Date().toISOString().split('T')[0],
-        checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        roomNumber: '101'
-      }
-      
-      const response = await fetch('/api/reservations/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testData)
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Check-in URL:', result.reservation.checkinUrl)
-        await loadDashboardData()
-        return result
-      }
-    } catch (error) {
-      console.error('Error creating test reservation:', error)
-      throw error
-    }
-  }, [loadDashboardData])
 
   const syncBeds24 = useCallback(async () => {
     try {
@@ -70,11 +41,6 @@ export function useAdminData() {
     stats,
     checkins,
     loadDashboardData,
-    createTestReservation,
     syncBeds24
   }
 }
-
-
-
-
