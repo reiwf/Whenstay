@@ -107,31 +107,32 @@ create table public.properties (
   updated_at timestamp with time zone null default now(),
   access_time time without time zone null,
   default_cleaner_id uuid null,
+  "beds24_propertyId" numeric null,
   constraint properties_pkey primary key (id),
   constraint properties_default_cleaner_id_fkey foreign KEY (default_cleaner_id) references user_profiles (id) on delete set null,
   constraint properties_owner_id_fkey foreign KEY (owner_id) references user_profiles (id) on delete CASCADE
 ) TABLESPACE pg_default;
 
+create index IF not exists idx_properties_active on public.properties using btree (is_active) TABLESPACE pg_default;
+
 create index IF not exists idx_properties_default_cleaner_id on public.properties using btree (default_cleaner_id) TABLESPACE pg_default;
 
 create index IF not exists idx_properties_owner_id on public.properties using btree (owner_id) TABLESPACE pg_default;
-
-create index IF not exists idx_properties_active on public.properties using btree (is_active) TABLESPACE pg_default;
 
 create trigger update_properties_updated_at BEFORE
 update on properties for EACH row
 execute FUNCTION update_updated_at_column ();
 
 -- Room Types Table (NEW)
-CREATE TABLE IF NOT EXISTS public.room_types (
+create table public.room_types (
   id uuid not null default extensions.uuid_generate_v4 (),
   property_id uuid not null,
-  name character varying(255) not null, -- "Double Room", "Twin Room", "Suite"
+  name character varying(255) not null,
   description text null,
   max_guests integer not null default 2,
-  base_price numeric(10,2) null, -- Base pricing at room type level
+  base_price numeric(10, 2) null,
   currency character varying(3) null default 'USD'::character varying,
-  room_amenities jsonb null, -- Amenities common to this room type
+  room_amenities jsonb null,
   bed_configuration character varying(255) null,
   room_size_sqm integer null,
   has_balcony boolean null default false,
@@ -140,33 +141,57 @@ CREATE TABLE IF NOT EXISTS public.room_types (
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
+  "beds24_roomId" numeric null,
   constraint room_types_pkey primary key (id),
-  constraint room_types_property_id_fkey foreign KEY (property_id) references properties (id) on delete CASCADE,
-  constraint room_types_property_name_unique unique (property_id, name)
-);
+  constraint room_types_property_name_unique unique (property_id, name),
+  constraint room_types_property_id_fkey foreign KEY (property_id) references properties (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_room_types_active on public.room_types using btree (is_active) TABLESPACE pg_default;
+
+create index IF not exists idx_room_types_name on public.room_types using btree (name) TABLESPACE pg_default;
+
+create index IF not exists idx_room_types_property_id on public.room_types using btree (property_id) TABLESPACE pg_default;
+
+create trigger update_room_types_updated_at BEFORE
+update on room_types for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- Room Units Table (replaces rooms table)
-CREATE TABLE IF NOT EXISTS public.room_units (
+create table public.room_units (
   id uuid not null default extensions.uuid_generate_v4 (),
   room_type_id uuid not null,
-  unit_number character varying(50) not null, -- "201", "A-1", "Suite 5"
+  unit_number character varying(50) not null,
   floor_number integer null,
   access_code character varying(50) null,
   access_instructions text null,
-  wifi_name character varying(255) null, -- Unit-specific WiFi if different
+  wifi_name character varying(255) null,
   wifi_password character varying(255) null,
-  unit_amenities jsonb null, -- Unit-specific amenities (in addition to room type)
+  unit_amenities jsonb null,
   maintenance_notes text null,
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
+  "beds24_unitId" numeric null,
   constraint room_units_pkey primary key (id),
-  constraint room_units_room_type_id_fkey foreign KEY (room_type_id) references room_types (id) on delete CASCADE,
-  constraint room_units_type_unit_unique unique (room_type_id, unit_number)
-);
+  constraint room_units_type_unit_unique unique (room_type_id, unit_number),
+  constraint room_units_room_type_id_fkey foreign KEY (room_type_id) references room_types (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_room_units_active on public.room_units using btree (is_active) TABLESPACE pg_default;
+
+create index IF not exists idx_room_units_floor on public.room_units using btree (floor_number) TABLESPACE pg_default;
+
+create index IF not exists idx_room_units_room_type_id on public.room_units using btree (room_type_id) TABLESPACE pg_default;
+
+create index IF not exists idx_room_units_unit_number on public.room_units using btree (unit_number) TABLESPACE pg_default;
+
+create trigger update_room_units_updated_at BEFORE
+update on room_units for EACH row
+execute FUNCTION update_updated_at_column ();
 
 -- Reservations Table (updated with new foreign keys)
-CREATE TABLE IF NOT EXISTS public.reservations (
+create table public.reservations (
   id uuid not null default extensions.uuid_generate_v4 (),
   beds24_booking_id character varying(255) not null,
   booking_name character varying(255) not null,
@@ -203,6 +228,16 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   property_id uuid null,
   room_type_id uuid null,
   room_unit_id uuid null,
+  "apiReference" text null,
+  booking_lastname text null,
+  "rateDescription" text null,
+  commission numeric null,
+  "apiMessage" text null,
+  "bookingTime" timestamp with time zone null,
+  comments text null,
+  price numeric null,
+  "timeStamp" timestamp with time zone null,
+  lang text null,
   constraint reservations_pkey primary key (id),
   constraint reservations_check_in_token_key unique (check_in_token),
   constraint reservations_beds24_booking_id_key unique (beds24_booking_id),
@@ -212,29 +247,29 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   constraint reservations_room_unit_id_fkey foreign KEY (room_unit_id) references room_units (id) on delete set null
 ) TABLESPACE pg_default;
 
+create index IF not exists idx_reservations_admin_verified on public.reservations using btree (admin_verified) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_beds24_booking_id on public.reservations using btree (beds24_booking_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_booking_email on public.reservations using btree (booking_email) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_check_in_date on public.reservations using btree (check_in_date) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_check_in_token on public.reservations using btree (check_in_token) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_checkin_submitted on public.reservations using btree (checkin_submitted_at) TABLESPACE pg_default;
+
+create index IF not exists idx_reservations_property_date on public.reservations using btree (property_id, check_in_date) TABLESPACE pg_default;
+
 create index IF not exists idx_reservations_property_id on public.reservations using btree (property_id) TABLESPACE pg_default;
 
 create index IF not exists idx_reservations_room_type_id on public.reservations using btree (room_type_id) TABLESPACE pg_default;
 
 create index IF not exists idx_reservations_room_unit_id on public.reservations using btree (room_unit_id) TABLESPACE pg_default;
 
-create index IF not exists idx_reservations_property_date on public.reservations using btree (property_id, check_in_date) TABLESPACE pg_default;
-
-create index IF not exists idx_reservations_beds24_booking_id on public.reservations using btree (beds24_booking_id) TABLESPACE pg_default;
-
-create index IF not exists idx_reservations_check_in_token on public.reservations using btree (check_in_token) TABLESPACE pg_default;
-
 create index IF not exists idx_reservations_status on public.reservations using btree (status) TABLESPACE pg_default;
 
-create index IF not exists idx_reservations_check_in_date on public.reservations using btree (check_in_date) TABLESPACE pg_default;
-
-create index IF not exists idx_reservations_admin_verified on public.reservations using btree (admin_verified) TABLESPACE pg_default;
-
-create index IF not exists idx_reservations_checkin_submitted on public.reservations using btree (checkin_submitted_at) TABLESPACE pg_default;
-
 create index IF not exists idx_reservations_status_date on public.reservations using btree (status, check_in_date) TABLESPACE pg_default;
-
-create index IF not exists idx_reservations_booking_email on public.reservations using btree (booking_email) TABLESPACE pg_default;
 
 create trigger auto_manage_cleaning_task
 after INSERT
@@ -264,6 +299,17 @@ execute FUNCTION generate_checkin_token ();
 create trigger update_reservations_verified_at BEFORE
 update on reservations for EACH row
 execute FUNCTION update_verified_at ();
+
+--webhook jsonb log
+create table public.reservation_webhook_logs (
+  id uuid not null default extensions.uuid_generate_v4 (),
+  beds24_booking_id text null,
+  payload jsonb null,
+  received_at timestamp with time zone null default now(),
+  processed boolean null default false,
+  constraint reservation_webhook_logs_pkey primary key (id)
+) TABLESPACE pg_default;
+
 
 create table public.cleaning_tasks (
   id uuid not null default extensions.uuid_generate_v4 (),
