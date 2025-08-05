@@ -116,6 +116,69 @@ class DatabaseService {
     }
   }
 
+  // Update reservation with new data (for booking modifications)
+  async updateReservation(reservationId, reservationData) {
+    try {
+      const updateData = {};
+      
+      // Core booking information
+      if (reservationData.bookingName !== undefined) updateData.booking_name = reservationData.bookingName;
+      if (reservationData.bookingEmail !== undefined) updateData.booking_email = reservationData.bookingEmail;
+      if (reservationData.bookingPhone !== undefined) updateData.booking_phone = reservationData.bookingPhone;
+      if (reservationData.checkInDate !== undefined) updateData.check_in_date = reservationData.checkInDate;
+      if (reservationData.checkOutDate !== undefined) updateData.check_out_date = reservationData.checkOutDate;
+      if (reservationData.numGuests !== undefined) updateData.num_guests = reservationData.numGuests;
+      if (reservationData.numAdults !== undefined) updateData.num_adults = reservationData.numAdults;
+      if (reservationData.numChildren !== undefined) updateData.num_children = reservationData.numChildren;
+      if (reservationData.totalAmount !== undefined) updateData.total_amount = reservationData.totalAmount;
+      if (reservationData.currency !== undefined) updateData.currency = reservationData.currency;
+      if (reservationData.status !== undefined) updateData.status = reservationData.status;
+      if (reservationData.bookingSource !== undefined) updateData.booking_source = reservationData.bookingSource;
+      if (reservationData.specialRequests !== undefined) updateData.special_requests = reservationData.specialRequests;
+      
+      // Property and room assignments
+      if (reservationData.propertyId !== undefined) updateData.property_id = reservationData.propertyId;
+      if (reservationData.roomTypeId !== undefined) updateData.room_type_id = reservationData.roomTypeId;
+      if (reservationData.roomUnitId !== undefined) updateData.room_unit_id = reservationData.roomUnitId;
+      
+      // Additional Beds24 specific fields
+      if (reservationData.apiReference !== undefined) updateData.apiReference = reservationData.apiReference;
+      if (reservationData.bookingLastname !== undefined) updateData.booking_lastname = reservationData.bookingLastname;
+      if (reservationData.rateDescription !== undefined) updateData.rateDescription = reservationData.rateDescription;
+      if (reservationData.commission !== undefined) updateData.commission = reservationData.commission;
+      if (reservationData.apiMessage !== undefined) updateData.apiMessage = reservationData.apiMessage;
+      if (reservationData.bookingTime !== undefined) updateData.bookingTime = reservationData.bookingTime;
+      if (reservationData.timeStamp !== undefined) updateData.timeStamp = reservationData.timeStamp;
+      if (reservationData.lang !== undefined) updateData.lang = reservationData.lang;
+      if (reservationData.comments !== undefined) updateData.comments = reservationData.comments;
+      if (reservationData.price !== undefined) updateData.price = reservationData.price;
+
+      // Remove undefined values
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .update(updateData)
+        .eq('id', reservationId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating reservation:', error);
+        throw new Error('Failed to update reservation');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error updating reservation:', error);
+      throw error;
+    }
+  }
+
   // Update reservation with guest information
   async updateReservationGuestInfo(reservationId, guestInfo) {
     try {
@@ -622,42 +685,42 @@ class DatabaseService {
     }
   }
 
-  // Log webhook events
-  async logWebhookEvent(eventType, beds24EventId, payload, processed = false) {
+  // Log reservation webhook events
+  async logReservationWebhook(beds24BookingId, payload, processed = false) {
     try {
       const { data, error } = await supabaseAdmin
-        .from('webhook_events')
+        .from('reservation_webhook_logs')
         .insert({
-          event_type: eventType,
-          beds24_event_id: beds24EventId,
-          payload: payload,
-          processed: processed
+          beds24_booking_id: beds24BookingId,
+          webhook_payload: payload,
+          processed: processed,
+          received_at: new Date().toISOString()
         })
         .select()
         .single();
 
       if (error) {
-        console.error('Error logging webhook event:', error);
+        console.error('Error logging reservation webhook:', error);
         // Don't throw error for logging failures
       }
 
       return data;
     } catch (error) {
-      console.error('Database error logging webhook event:', error);
+      console.error('Database error logging reservation webhook:', error);
       // Don't throw error for logging failures
     }
   }
 
   // Mark webhook event as processed
-  async markWebhookEventProcessed(eventId) {
+  async markWebhookEventProcessed(logId) {
     try {
       const { data, error } = await supabaseAdmin
-        .from('webhook_events')
+        .from('reservation_webhook_logs')
         .update({ 
           processed: true, 
           processed_at: new Date().toISOString() 
         })
-        .eq('id', eventId)
+        .eq('id', logId)
         .select()
         .single();
 
@@ -672,12 +735,14 @@ class DatabaseService {
   }
 
   // Check if webhook event already exists (prevent duplicates)
-  async webhookEventExists(beds24EventId) {
+  async webhookEventExists(beds24BookingId) {
     try {
       const { data, error } = await supabaseAdmin
-        .from('webhook_events')
+        .from('reservation_webhook_logs')
         .select('id')
-        .eq('beds24_event_id', beds24EventId)
+        .eq('beds24_booking_id', beds24BookingId)
+        .order('received_at', { ascending: false })
+        .limit(1)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -685,7 +750,14 @@ class DatabaseService {
         return false;
       }
 
-      return !!data;
+      // Consider duplicate if received within last 5 minutes
+      if (data) {
+        const lastReceived = new Date(data.received_at);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        return lastReceived > fiveMinutesAgo;
+      }
+
+      return false;
     } catch (error) {
       console.error('Database error checking webhook event existence:', error);
       return false;
@@ -821,6 +893,28 @@ class DatabaseService {
     }
   }
 
+  // Find property by Beds24 property ID
+  async findPropertyByBeds24Id(beds24PropertyId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('properties')
+        .select('*')
+        .eq('beds24_property_id', beds24PropertyId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error finding property by Beds24 ID:', error);
+        throw new Error('Failed to find property');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error finding property by Beds24 ID:', error);
+      throw error;
+    }
+  }
+
   // Create new property
   async createProperty(propertyData) {
     try {
@@ -840,7 +934,8 @@ class DatabaseService {
           property_amenities: propertyData.propertyAmenities,
           location_info: propertyData.locationInfo,
           access_time: propertyData.accessTime,
-          default_cleaner_id: propertyData.defaultCleanerId
+          default_cleaner_id: propertyData.defaultCleanerId,
+          beds24_property_id: propertyData.beds24PropertyId
         })
         .select()
         .single();
@@ -1240,6 +1335,28 @@ class DatabaseService {
     }
   }
 
+  // Find room type by Beds24 room type ID
+  async findRoomTypeByBeds24Id(beds24RoomTypeId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_types')
+        .select('*')
+        .eq('beds24_roomtype_id', beds24RoomTypeId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error finding room type by Beds24 ID:', error);
+        throw new Error('Failed to find room type');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error finding room type by Beds24 ID:', error);
+      throw error;
+    }
+  }
+
   // Create room type
   async createRoomType(propertyId, roomTypeData) {
     try {
@@ -1257,7 +1374,8 @@ class DatabaseService {
           room_size_sqm: roomTypeData.roomSizeSqm,
           has_balcony: roomTypeData.hasBalcony || false,
           has_kitchen: roomTypeData.hasKitchen || false,
-          is_accessible: roomTypeData.isAccessible || false
+          is_accessible: roomTypeData.isAccessible || false,
+          beds24_roomtype_id: roomTypeData.beds24RoomTypeId
         })
         .select()
         .single();
@@ -1356,6 +1474,51 @@ class DatabaseService {
     }
   }
 
+  // Find room unit by Beds24 unit ID
+  async findRoomUnitByBeds24Id(beds24UnitId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .select('*')
+        .eq('beds24_unit_id', beds24UnitId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error finding room unit by Beds24 ID:', error);
+        throw new Error('Failed to find room unit');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error finding room unit by Beds24 ID:', error);
+      throw error;
+    }
+  }
+
+  // Find room unit by room type ID and Beds24 unit ID (more specific lookup)
+  async findRoomUnitByRoomTypeAndBeds24Id(roomTypeId, beds24UnitId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('room_units')
+        .select('*')
+        .eq('room_type_id', roomTypeId)
+        .eq('beds24_unit_id', beds24UnitId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error finding room unit by room type and Beds24 ID:', error);
+        throw new Error('Failed to find room unit');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error finding room unit by room type and Beds24 ID:', error);
+      throw error;
+    }
+  }
+
   // Create room unit
   async createRoomUnit(roomTypeId, roomUnitData) {
     try {
@@ -1370,7 +1533,8 @@ class DatabaseService {
           wifi_name: roomUnitData.wifiName,
           wifi_password: roomUnitData.wifiPassword,
           unit_amenities: roomUnitData.unitAmenities,
-          maintenance_notes: roomUnitData.maintenanceNotes
+          maintenance_notes: roomUnitData.maintenanceNotes,
+          beds24_unit_id: roomUnitData.beds24UnitId
         })
         .select()
         .single();

@@ -107,7 +107,7 @@ create table public.properties (
   updated_at timestamp with time zone null default now(),
   access_time time without time zone null,
   default_cleaner_id uuid null,
-  "beds24_propertyId" numeric null,
+  beds24_property_id bigint null,
   constraint properties_pkey primary key (id),
   constraint properties_default_cleaner_id_fkey foreign KEY (default_cleaner_id) references user_profiles (id) on delete set null,
   constraint properties_owner_id_fkey foreign KEY (owner_id) references user_profiles (id) on delete CASCADE
@@ -141,7 +141,7 @@ create table public.room_types (
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
-  "beds24_roomId" numeric null,
+  beds24_roomtype_id bigint null,
   constraint room_types_pkey primary key (id),
   constraint room_types_property_name_unique unique (property_id, name),
   constraint room_types_property_id_fkey foreign KEY (property_id) references properties (id) on delete CASCADE
@@ -172,7 +172,7 @@ create table public.room_units (
   is_active boolean null default true,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
-  "beds24_unitId" numeric null,
+  beds24_unit_id bigint null,
   constraint room_units_pkey primary key (id),
   constraint room_units_type_unit_unique unique (room_type_id, unit_number),
   constraint room_units_room_type_id_fkey foreign KEY (room_type_id) references room_types (id) on delete CASCADE

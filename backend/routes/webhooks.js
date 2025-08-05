@@ -40,10 +40,9 @@ router.post('/beds24', captureRawBody, async (req, res) => {
       return res.status(200).json({ message: 'Event already processed' });
     }
 
-    // Log the webhook event
-    const loggedEvent = await databaseService.logWebhookEvent(
-      eventType,
-      eventId,
+    // Log the webhook event to reservation_webhook_logs table
+    const loggedEvent = await databaseService.logReservationWebhook(
+      webhookData.booking?.id || webhookData.beds24BookingId,
       webhookData,
       false
     );
@@ -100,10 +99,16 @@ async function processWebhookEvent(eventType, webhookData) {
 // Handle new booking webhook
 async function handleNewBooking(webhookData) {
   try {
-    // Process webhook data to extract booking information
-    const bookingInfo = beds24Service.processWebhookData(webhookData);
+    // Process webhook data to extract booking information with enhanced mapping
+    const bookingInfo = await beds24Service.processWebhookData(webhookData);
     
-    console.log('Processing new booking:', bookingInfo);
+    console.log('Processing new booking:', {
+      beds24BookingId: bookingInfo.beds24BookingId,
+      bookingName: bookingInfo.bookingName,
+      propertyId: bookingInfo.propertyId,
+      roomTypeId: bookingInfo.roomTypeId,
+      roomUnitId: bookingInfo.roomUnitId
+    });
     
     // Check if reservation already exists
     const existingReservation = await databaseService.getReservationByBeds24Id(
@@ -111,31 +116,33 @@ async function handleNewBooking(webhookData) {
     );
     
     if (existingReservation) {
-      console.log('Reservation already exists:', bookingInfo.beds24BookingId);
+      console.log('Reservation already exists, updating with new data:', bookingInfo.beds24BookingId);
+      
+      // Update existing reservation with new data (handles extensions, modifications, etc.)
+      const updatedReservation = await databaseService.updateReservation(
+        existingReservation.id, 
+        bookingInfo
+      );
+      
+      console.log(`Updated existing reservation: ${updatedReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
       return;
     }
 
     // Validate required fields
-    if (!bookingInfo.guestEmail || !bookingInfo.guestName) {
-      console.error('Missing required guest information:', bookingInfo);
-      throw new Error('Missing required guest information');
+    if (!bookingInfo.beds24BookingId) {
+      console.error('Missing booking ID:', bookingInfo);
+      throw new Error('Missing booking ID');
     }
 
-    // Create reservation in database
+    if (!bookingInfo.checkInDate || !bookingInfo.checkOutDate) {
+      console.error('Missing check-in or check-out dates:', bookingInfo);
+      throw new Error('Missing check-in or check-out dates');
+    }
+
+    // Create new reservation in database with complete field mapping
     const reservation = await databaseService.createReservation(bookingInfo);
     
-    // Update status to invited
-    await databaseService.updateReservationStatus(reservation.id, 'invited');
-    
-    // Send check-in invitation email
-    await emailService.sendCheckinInvitation(
-      bookingInfo.guestEmail,
-      bookingInfo.guestName,
-      reservation.check_in_token,
-      bookingInfo.checkInDate
-    );
-    
-    console.log(`Check-in invitation sent for reservation: ${reservation.id}`);
+    console.log(`Created new reservation: ${reservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
   } catch (error) {
     console.error('Error handling new booking:', error);
@@ -146,9 +153,15 @@ async function handleNewBooking(webhookData) {
 // Handle booking update webhook
 async function handleBookingUpdate(webhookData) {
   try {
-    const bookingInfo = beds24Service.processWebhookData(webhookData);
+    // Process webhook data with enhanced mapping
+    const bookingInfo = await beds24Service.processWebhookData(webhookData);
     
-    console.log('Processing booking update:', bookingInfo);
+    console.log('Processing booking update:', {
+      beds24BookingId: bookingInfo.beds24BookingId,
+      bookingName: bookingInfo.bookingName,
+      checkInDate: bookingInfo.checkInDate,
+      checkOutDate: bookingInfo.checkOutDate
+    });
     
     // Find existing reservation
     const existingReservation = await databaseService.getReservationByBeds24Id(
@@ -161,9 +174,13 @@ async function handleBookingUpdate(webhookData) {
       return;
     }
 
-    // Update reservation details if needed
-    // For now, we'll just log the update
-    console.log('Booking update processed for reservation:', existingReservation.id);
+    // Update reservation with new data
+    const updatedReservation = await databaseService.updateReservation(
+      existingReservation.id, 
+      bookingInfo
+    );
+    
+    console.log(`Updated reservation: ${updatedReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
   } catch (error) {
     console.error('Error handling booking update:', error);
@@ -174,9 +191,12 @@ async function handleBookingUpdate(webhookData) {
 // Handle booking cancellation webhook
 async function handleBookingCancellation(webhookData) {
   try {
-    const bookingInfo = beds24Service.processWebhookData(webhookData);
+    // Process webhook data to get booking ID
+    const bookingInfo = await beds24Service.processWebhookData(webhookData);
     
-    console.log('Processing booking cancellation:', bookingInfo);
+    console.log('Processing booking cancellation:', {
+      beds24BookingId: bookingInfo.beds24BookingId
+    });
     
     // Find existing reservation
     const existingReservation = await databaseService.getReservationByBeds24Id(
@@ -186,7 +206,9 @@ async function handleBookingCancellation(webhookData) {
     if (existingReservation) {
       // Update status to cancelled
       await databaseService.updateReservationStatus(existingReservation.id, 'cancelled');
-      console.log('Reservation cancelled:', existingReservation.id);
+      console.log(`Cancelled reservation: ${existingReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
+    } else {
+      console.log(`Reservation not found for cancellation: ${bookingInfo.beds24BookingId}`);
     }
     
   } catch (error) {
@@ -226,5 +248,3 @@ router.post('/test', async (req, res) => {
 });
 
 module.exports = router;
-
-
