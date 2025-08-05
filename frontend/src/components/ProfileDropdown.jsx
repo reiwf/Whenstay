@@ -157,12 +157,6 @@ const ProfileDropdown = () => {
                     {profile.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Member since:</span>
-                  <span className="text-gray-900">
-                    {new Date(profile.created_at).toLocaleDateString()}
-                  </span>
-                </div>
               </div>
             </div>
 

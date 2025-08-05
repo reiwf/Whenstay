@@ -1,0 +1,112 @@
+{
+  "timeStamp": "2025-08-04T15:17:08.997Z",
+  "booking": {
+    "id": 0,
+    "bookingGroup": {
+      "master": 0,
+      "ids": [
+        0
+      ]
+    },
+    "masterId": 0,
+    "propertyId": 285552,
+    "roomId": 595550,
+    "unitId": 0,
+    "roomQty": 0,
+    "offerId": 0,
+    "status": "string",
+    "subStatus": "string",
+    "arrival": "2025-08-04",
+    "departure": "2025-08-04",
+    "numAdult": 0,
+    "numChild": 0,
+    "country": "string",
+    "country2": "string",
+    "arrivalTime": "string",
+    "voucher": "string",
+    "comments": "string",
+    "notes": "string",
+    "message": "string",
+    "groupNote": "string",
+    "custom1": "string",
+    "custom2": "string",
+    "custom3": "string",
+    "custom4": "string",
+    "custom5": "string",
+    "custom6": "string",
+    "custom7": "string",
+    "custom8": "string",
+    "custom9": "string",
+    "custom10": "string",
+    "flagColor": "string",
+    "flagText": "string",
+    "statusCode": 0,
+    "lang": "string",
+    "referer": "string",
+    "refererEditable": "string",
+    "reference": "string",
+    "channel": "string",
+    "apiSourceId": 0,
+    "apiSource": "string",
+    "apiReference": "string",
+    "allowChannelUpdate": "string",
+    "allowAutoAction": "string",
+    "allowReview": "string",
+    "allowCancellation": {
+      "type": "string"
+    },
+    "invoiceeId": "string",
+    "bookingTime": "2025-08-04T15:17:08.997Z",
+    "modifiedTime": "2025-08-04T15:17:08.997Z",
+    "cancelTime": "string",
+    "price": 0,
+    "deposit": 0,
+    "tax": 0,
+    "commission": 0,
+    "rateDescription": "string",
+    "stripeToken": "string",
+    "apiMessage": "string"
+  },
+  "infoItems": [
+    {
+      "id": 0,
+      "bookingId": 0,
+      "createTime": "2025-08-04T15:17:08.997Z",
+      "code": "string",
+      "text": "string"
+    }
+  ],
+  "invoiceItems": [
+    {
+      "id": 0,
+      "type": "charge",
+      "bookingId": 0,
+      "invoiceeId": 1234567,
+      "description": "string",
+      "status": "string",
+      "qty": 0,
+      "amount": 0,
+      "vatRate": 99.9,
+      "createdBy": 0,
+      "lineTotal": 0,
+      "createTime": "2025-08-04T15:17:08.997Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": 0,
+      "bookingId": 0,
+      "read": true,
+      "message": "string",
+      "attachment": "string",
+      "attachmentName": "string",
+      "attachmentMimeType": "image/jpeg",
+      "source": "host",
+      "roomId": 0,
+      "propertyId": 0,
+      "time": "2025-08-04T15:17:08.997Z",
+      "authorOwnerId": 0
+    }
+  ],
+  "retries": 0
+}

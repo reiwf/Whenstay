@@ -2,9 +2,9 @@ const axios = require('axios');
 
 class Beds24Service {
   constructor() {
-    this.apiKey = process.env.BEDS24_API_KEY;
-    this.propKey = process.env.BEDS24_PROP_KEY;
-    this.baseURL = 'https://beds24.com/api/v2';
+    this.apiKey = process.env.BEDS24_REFRESH_TOKEN;
+    this.propKey = process.env.BEDS24_REFRESH_TOKEN;
+    this.baseURL = 'https://api.beds24.com/v2';
     
     if (!this.apiKey || !this.propKey) {
       throw new Error('Missing Beds24 API credentials');
