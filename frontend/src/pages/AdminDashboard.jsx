@@ -1,16 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { 
-  Users, 
-  CheckCircle, 
-  Building,
-  RefreshCw,
-  Sparkles
-} from 'lucide-react'
+import { RefreshCw, CheckCircle, Clock, PlaneLanding, PlaneTakeoff , Calendar, UserCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
-import ProfileDropdown from '../components/ProfileDropdown'
+import DashboardLayout from '../components/layout/DashboardLayout'
+import { PageHeader, StatsCard, DataTable, EmptyState } from '../components/ui'
 
 // Import custom hooks
 import { useAdminData } from '../hooks/useAdminData'
@@ -18,7 +13,6 @@ import { useProperties } from '../hooks/useProperties'
 import { useUsers } from '../hooks/useUsers'
 
 // Import tab components
-import DashboardTab from '../components/admin/tabs/DashboardTab'
 import PropertiesTab from '../components/admin/tabs/PropertiesTab'
 import ReservationsTab from '../components/admin/tabs/ReservationsTab'
 import UsersTab from '../components/admin/tabs/UsersTab'
@@ -26,21 +20,31 @@ import CleaningTab from '../components/admin/tabs/CleaningTab'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeSection, setActiveSection] = useState('dashboard')
   const [syncing, setSyncing] = useState(false)
   const { isLoggedIn, hasAdminAccess, hasRole, profile } = useAuth()
   
-  // Set default tab based on user role
+  // Set default section based on user role
   useEffect(() => {
     if (profile?.role === 'cleaner') {
-      setActiveTab('cleaning')
+      setActiveSection('cleaning')
     } else if (profile?.role === 'owner') {
-      setActiveTab('properties')
+      setActiveSection('properties')
     }
   }, [profile])
 
   // Use custom hooks
-  const { stats, checkins, loading, loadDashboardData } = useAdminData()
+  const { 
+    stats, 
+    checkins, 
+    todayStats, 
+    todayArrivals, 
+    todayDepartures, 
+    inHouseGuests, 
+    loading, 
+    loadDashboardData,
+    loadTodayDashboardData
+  } = useAdminData()
   const { 
     properties, 
     createProperty, 
@@ -72,16 +76,17 @@ export default function AdminDashboard() {
     // Load dashboard data when component mounts
     if (isLoggedIn && hasAdminAccess()) {
       loadDashboardData()
+      loadTodayDashboardData()
     }
-  }, [isLoggedIn, hasAdminAccess, loadDashboardData])
+  }, [isLoggedIn, hasAdminAccess, loadDashboardData, loadTodayDashboardData])
 
   useEffect(() => {
-    if (activeTab === 'properties') {
+    if (activeSection === 'properties') {
       loadProperties()
-    } else if (activeTab === 'users') {
+    } else if (activeSection === 'users') {
       loadUsers()
     }
-  }, [activeTab, loadProperties, loadUsers])
+  }, [activeSection, loadProperties, loadUsers])
 
   const handleSync = async () => {
     try {
@@ -98,126 +103,301 @@ export default function AdminDashboard() {
   }
 
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    )
-  }
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <LoadingSpinner size="large" />
+        </div>
+      )
+    }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-2xl font-bold text-primary-600">Whenstay Admin</h1>
-              <p className="text-sm text-gray-600">Check-in Management Dashboard</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="btn-secondary text-sm"
-              >
-                {syncing ? (
-                  <LoadingSpinner size="small" />
+    switch (activeSection) {
+      case 'dashboard':
+        // Define table columns for check-ins
+        const checkinColumns = [
+          {
+            key: 'guest_name',
+            title: 'Guest',
+            render: (value, row) => (
+              <div>
+                <div className="text-sm font-medium text-gray-900">{value}</div>
+                <div className="text-sm text-gray-500">{row.guest_email}</div>
+              </div>
+            )
+          },
+          {
+            key: 'room_number',
+            title: 'Room',
+            render: (value) => <span className="text-sm text-gray-900">{value}</span>
+          },
+          {
+            key: 'check_in_date',
+            title: 'Check-in Date',
+            render: (value) => (
+              <span className="text-sm text-gray-900">
+                {new Date(value).toLocaleDateString()}
+              </span>
+            )
+          },
+          {
+            key: 'status',
+            title: 'Status',
+            render: (value) => (
+              <span className={`status-badge ${
+                value === 'completed' ? 'status-completed' :
+                value === 'invited' ? 'status-pending' :
+                'status-cancelled'
+              }`}>
+                {value}
+              </span>
+            )
+          },
+          {
+            key: 'admin_verified',
+            title: 'Verified',
+            render: (value) => value ? (
+              <CheckCircle className="w-5 h-5 text-green-500" />
+            ) : (
+              <Clock className="w-5 h-5 text-yellow-500" />
+            )
+          }
+        ]
+
+        return (
+          <div className="space-y-8">
+            {/* Today's Statistics */}
+            {todayStats && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-xl font-semibold text-gray-900">Today's Overview</h2>
+                  <span className="text-sm text-gray-500">
+                    {new Date().toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <StatsCard
+                    title="Today's Arrivals"
+                    value={todayStats.todayArrivals || 0}
+                    icon={PlaneLanding}
+                    iconColor="text-green-600"
+                  />
+                  <StatsCard
+                    title="Today's Departures"
+                    value={todayStats.todayDepartures || 0}
+                    icon={PlaneTakeoff}
+                    iconColor="text-orange-600"
+                  />
+                  <StatsCard
+                    title="In-House Guests"
+                    value={todayStats.inHouseGuests || 0}
+                    icon={UserCheck}
+                    iconColor="text-blue-600"
+                  />
+                  <StatsCard
+                    title="Pending Check-ins"
+                    value={todayStats.pendingTodayCheckins || 0}
+                    icon={Clock}
+                    iconColor="text-yellow-600"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Today's Arrivals */}
+            {todayArrivals && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <PlaneLanding className="w-5 h-5 text-green-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Today's Arrivals</h2>
+                  <span className="text-sm text-gray-500">({todayArrivals.length} guests)</span>
+                </div>
+
+                {todayArrivals.length > 0 ? (
+                  <DataTable
+                    columns={[
+                      {
+                        key: 'guest_name',
+                        title: 'Guest',
+                        render: (value, row) => (
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{value}</div>
+                            <div className="text-sm text-gray-500">{row.guest_email}</div>
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'property_name',
+                        title: 'Property',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },
+                      {
+                        key: 'room_number',
+                        title: 'Room',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },
+                    ]}
+                    data={todayArrivals}
+                    emptyMessage="No arrivals today"
+                    emptyIcon={PlaneLanding}
+                  />
                 ) : (
-                  <RefreshCw className="w-4 h-4 mr-1" />
+                  <div className="card">
+                    <EmptyState
+                      icon={PlaneLanding}
+                      title="No arrivals today"
+                      description="No guests are scheduled to arrive today"
+                    />
+                  </div>
                 )}
-                Sync Beds24
-              </button>
-              <ProfileDropdown />
-            </div>
+              </div>
+            )}
+
+            {/* Today's Departures */}
+            {todayDepartures && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <PlaneTakeoff className="w-5 h-5 text-orange-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Today's Departures</h2>
+                  <span className="text-sm text-gray-500">({todayDepartures.length} guests)</span>
+                </div>
+
+                {todayDepartures.length > 0 ? (
+                  <DataTable
+                    columns={[
+                      {
+                        key: 'guest_name',
+                        title: 'Guest',
+                        render: (value, row) => (
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{value}</div>
+                            <div className="text-sm text-gray-500">{row.guest_email}</div>
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'property_name',
+                        title: 'Property',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },
+                      {
+                        key: 'room_number',
+                        title: 'Room',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },                                           
+                    ]}
+                    data={todayDepartures}
+                    emptyMessage="No departures today"
+                    emptyIcon={PlaneTakeoff}
+                  />
+                ) : (
+                  <div className="card">
+                    <EmptyState
+                      icon={PlaneTakeoff}
+                      title="No departures today"
+                      description="No guests are scheduled to depart today"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* In-House Guests */}
+            {inHouseGuests && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">In-House Guests</h2>
+                  <span className="text-sm text-gray-500">({inHouseGuests.length} guests)</span>
+                </div>
+
+                {inHouseGuests.length > 0 ? (
+                  <DataTable
+                    columns={[
+                      {
+                        key: 'guest_name',
+                        title: 'Guest',
+                        render: (value, row) => (
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{value}</div>
+                            <div className="text-sm text-gray-500">{row.guest_email}</div>
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'property_name',
+                        title: 'Property',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },
+                      {
+                        key: 'room_number',
+                        title: 'Room',
+                        render: (value) => <span className="text-sm text-gray-900">{value}</span>
+                      },
+                      {
+                        key: 'check_in_date',
+                        title: 'Checked In',
+                        render: (value) => (
+                          <span className="text-sm text-gray-900">
+                            {new Date(value).toLocaleDateString()}
+                          </span>
+                        )
+                      },
+                      {
+                        key: 'check_out_date',
+                        title: 'Check Out',
+                        render: (value) => (
+                          <span className="text-sm text-gray-900">
+                            {new Date(value).toLocaleDateString()}
+                          </span>
+                        )
+                      },
+                      {
+                        key: 'nights_staying',
+                        title: 'Nights',
+                        render: (value, row) => {
+                          const checkIn = new Date(row.check_in_date)
+                          const checkOut = new Date(row.check_out_date)
+                          const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+                          return <span className="text-sm text-gray-900">{nights}</span>
+                        }
+                      }
+                    ]}
+                    data={inHouseGuests}
+                    emptyMessage="No in-house guests"
+                    emptyIcon={UserCheck}
+                  />
+                ) : (
+                  <div className="card">
+                    <EmptyState
+                      icon={UserCheck}
+                      title="No in-house guests"
+                      description="No guests are currently staying at your properties"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation Tabs */}
-        <div className="mb-8">
-          <nav className="flex space-x-8">
-            {/* Show all tabs for admin, only properties tab for owner, only cleaning tab for cleaner */}
-            {profile?.role === 'admin' && (
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'dashboard'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Users className="w-4 h-4 inline mr-2" />
-                Dashboard
-              </button>
-            )}
-            {(profile?.role === 'admin' || profile?.role === 'owner') && (
-              <button
-                onClick={() => setActiveTab('properties')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'properties'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Building className="w-4 h-4 inline mr-2" />
-                {profile?.role === 'owner' ? 'My Properties' : 'Properties'}
-              </button>
-            )}
-            {profile?.role === 'admin' && (
-              <button
-                onClick={() => setActiveTab('reservations')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'reservations'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <CheckCircle className="w-4 h-4 inline mr-2" />
-                Reservations
-              </button>
-            )}
-            {(profile?.role === 'admin' || profile?.role === 'cleaner') && (
-              <button
-                onClick={() => setActiveTab('cleaning')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'cleaning'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Sparkles className="w-4 h-4 inline mr-2" />
-                {profile?.role === 'cleaner' ? 'My Tasks' : 'Cleaning'}
-              </button>
-            )}
-            {profile?.role === 'admin' && (
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'users'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Users className="w-4 h-4 inline mr-2" />
-                Users
-              </button>
-            )}
-          </nav>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'dashboard' && (
-          <DashboardTab 
-            stats={stats} 
-            checkins={checkins} 
-            onRefresh={loadDashboardData} 
-          />
-        )}
-
-        {activeTab === 'properties' && (
+        )
+      case 'properties':
+        // Hide properties tab from cleaners
+        if (profile?.role === 'cleaner') {
+          return (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Access denied</p>
+              <p className="text-sm text-gray-400 mt-2">This section is not available for your role</p>
+            </div>
+          )
+        }
+        return (
           <PropertiesTab
             properties={properties}
             onCreateProperty={createProperty}
@@ -234,17 +414,22 @@ export default function AdminDashboard() {
             onDeleteRoomUnit={deleteRoomUnit}
             userRole={profile?.role}
           />
-        )}
-
-        {activeTab === 'reservations' && (
-          <ReservationsTab />
-        )}
-
-        {activeTab === 'cleaning' && (
-          <CleaningTab />
-        )}
-
-        {activeTab === 'users' && (
+        )
+      case 'reservations':
+        return <ReservationsTab />
+      case 'cleaning':
+        // Hide cleaning tab from owners
+        if (profile?.role === 'owner') {
+          return (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Access denied</p>
+              <p className="text-sm text-gray-400 mt-2">This section is not available for your role</p>
+            </div>
+          )
+        }
+        return <CleaningTab />
+      case 'users':
+        return (
           <UsersTab
             users={users}
             userStats={userStats}
@@ -255,8 +440,60 @@ export default function AdminDashboard() {
             onUpdateUserRole={updateUserRole}
             onUpdateUserStatus={updateUserStatus}
           />
-        )}
+        )
+      default:
+        return (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Select a section from the sidebar</p>
+          </div>
+        )
+    }
+  }
+
+  return (
+    <DashboardLayout
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+    >
+      <div className="page-container">
+        <PageHeader
+          title={
+            activeSection === 'dashboard' ? 'Dashboard' :
+            activeSection === 'properties' ? (profile?.role === 'owner' ? 'My Properties' : 'Properties') :
+            activeSection === 'reservations' ? 'Reservations' :
+            activeSection === 'cleaning' ? (profile?.role === 'cleaner' ? 'My Tasks' : 'Cleaning') :
+            activeSection === 'users' ? 'Users' : ''
+          }
+          subtitle={
+            activeSection === 'dashboard' ? 'Check-in Management Overview' :
+            activeSection === 'properties' ? 'Manage properties, rooms, and units' :
+            activeSection === 'reservations' ? 'View and manage reservations' :
+            activeSection === 'cleaning' ? 'Cleaning tasks and schedules' :
+            activeSection === 'users' ? 'User management and permissions' : ''
+          }
+          action={
+            activeSection === 'dashboard' ? (
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="btn-secondary text-sm"
+              >
+                {syncing ? (
+                  <LoadingSpinner size="small" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Sync Beds24
+              </button>
+            ) : null
+          }
+        />
+
+        {/* Content */}
+        <div className="fade-in">
+          {renderContent()}
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

@@ -824,6 +824,341 @@ class DatabaseService {
     }
   }
 
+  // Get today's dashboard statistics
+  async getTodayDashboardStats(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Function to create properly filtered count queries
+      const getFilteredCount = async (dateField, dateValue, additionalFilters = {}) => {
+        let query = supabaseAdmin.from('reservations');
+        
+        if (userProfile?.role === 'owner') {
+          // For owners, join with properties and filter by owner_id
+          query = query.select('id, properties!inner(owner_id)', { count: 'exact', head: true })
+                       .eq('properties.owner_id', userProfile.id);
+        } else {
+          query = query.select('id', { count: 'exact', head: true });
+        }
+        
+        // Apply date filter
+        if (dateField === 'check_in_date') {
+          query = query.eq('check_in_date', dateValue);
+        } else if (dateField === 'check_out_date') {
+          query = query.eq('check_out_date', dateValue);
+        } else if (dateField === 'in_house') {
+          query = query.lte('check_in_date', dateValue).gt('check_out_date', dateValue);
+        }
+        
+        // Apply additional filters
+        Object.keys(additionalFilters).forEach(key => {
+          const value = additionalFilters[key];
+          if (value === null) {
+            query = query.is(key, null);
+          } else {
+            query = query.eq(key, value);
+          }
+        });
+        
+        const { count, error } = await query;
+        
+        if (error) {
+          console.error('Error getting filtered count:', error);
+          return 0;
+        }
+        
+        return count || 0;
+      };
+
+      // Get all counts with proper filtering
+      const [todayArrivals, todayDepartures, inHouseGuests, pendingTodayCheckins] = await Promise.all([
+        getFilteredCount('check_in_date', today),
+        getFilteredCount('check_out_date', today),
+        getFilteredCount('in_house', today),
+        getFilteredCount('check_in_date', today, { checkin_submitted_at: null })
+      ]);
+
+      return {
+        todayArrivals,
+        todayDepartures,
+        inHouseGuests,
+        pendingTodayCheckins
+      };
+    } catch (error) {
+      console.error('Database error fetching today dashboard stats:', error);
+      return {
+        todayArrivals: 0,
+        todayDepartures: 0,
+        inHouseGuests: 0,
+        pendingTodayCheckins: 0
+      };
+    }
+  }
+
+  // Get today's arrivals
+  async getTodayArrivals(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Try to use the detailed view first
+      let query = supabaseAdmin
+        .from('reservations_details')
+        .select('*')
+        .eq('check_in_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('property_owner_id', userProfile.id);
+      }
+
+      query = query.order('estimated_checkin_time', { ascending: true, nullsLast: true })
+                   .order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching today arrivals from detailed view:', error);
+        // Fallback to basic table
+        return this.getTodayArrivalsBasic(userProfile);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching today arrivals:', error);
+      return [];
+    }
+  }
+
+  // Fallback method for today's arrivals
+  async getTodayArrivalsBasic(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      let query = supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            owner_id
+          ),
+          room_units (
+            unit_number,
+            room_types (
+              name
+            )
+          )
+        `)
+        .eq('check_in_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('properties.owner_id', userProfile.id);
+      }
+
+      query = query.order('estimated_checkin_time', { ascending: true, nullsLast: true })
+                   .order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching today arrivals basic:', error);
+        return [];
+      }
+
+      // Transform data to match detailed view format
+      return (data || []).map(reservation => ({
+        ...reservation,
+        property_name: reservation.properties?.name || 'Unknown Property',
+        unit_number: reservation.room_units?.unit_number || 'TBD',
+        room_type_name: reservation.room_units?.room_types?.name || 'Standard Room',
+        guest_name: reservation.booking_name,
+        guest_email: reservation.booking_email,
+        room_number: reservation.room_units?.unit_number || 'TBD'
+      }));
+    } catch (error) {
+      console.error('Database error fetching today arrivals basic:', error);
+      return [];
+    }
+  }
+
+  // Get today's departures
+  async getTodayDepartures(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Try to use the detailed view first
+      let query = supabaseAdmin
+        .from('reservations_details')
+        .select('*')
+        .eq('check_out_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('property_owner_id', userProfile.id);
+      }
+
+      query = query.order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching today departures from detailed view:', error);
+        // Fallback to basic table
+        return this.getTodayDeparturesBasic(userProfile);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching today departures:', error);
+      return [];
+    }
+  }
+
+  // Fallback method for today's departures
+  async getTodayDeparturesBasic(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      let query = supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            owner_id
+          ),
+          room_units (
+            unit_number,
+            room_types (
+              name
+            )
+          )
+        `)
+        .eq('check_out_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('properties.owner_id', userProfile.id);
+      }
+
+      query = query.order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching today departures basic:', error);
+        return [];
+      }
+
+      // Transform data to match detailed view format
+      return (data || []).map(reservation => ({
+        ...reservation,
+        property_name: reservation.properties?.name || 'Unknown Property',
+        unit_number: reservation.room_units?.unit_number || 'TBD',
+        room_type_name: reservation.room_units?.room_types?.name || 'Standard Room',
+        guest_name: reservation.booking_name,
+        guest_email: reservation.booking_email,
+        room_number: reservation.room_units?.unit_number || 'TBD'
+      }));
+    } catch (error) {
+      console.error('Database error fetching today departures basic:', error);
+      return [];
+    }
+  }
+
+  // Get currently in-house guests
+  async getInHouseGuests(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Try to use the detailed view first
+      let query = supabaseAdmin
+        .from('reservations_details')
+        .select('*')
+        .lte('check_in_date', today)
+        .gt('check_out_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('property_owner_id', userProfile.id);
+      }
+
+      query = query.order('check_out_date', { ascending: true })
+                   .order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching in-house guests from detailed view:', error);
+        // Fallback to basic table
+        return this.getInHouseGuestsBasic(userProfile);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching in-house guests:', error);
+      return [];
+    }
+  }
+
+  // Fallback method for in-house guests
+  async getInHouseGuestsBasic(userProfile = null) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      let query = supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            owner_id
+          ),
+          room_units (
+            unit_number,
+            room_types (
+              name
+            )
+          )
+        `)
+        .lte('check_in_date', today)
+        .gt('check_out_date', today);
+
+      // Filter by owner if user is an owner
+      if (userProfile?.role === 'owner') {
+        query = query.eq('properties.owner_id', userProfile.id);
+      }
+
+      query = query.order('check_out_date', { ascending: true })
+                   .order('booking_name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching in-house guests basic:', error);
+        return [];
+      }
+
+      // Transform data to match detailed view format
+      return (data || []).map(reservation => ({
+        ...reservation,
+        property_name: reservation.properties?.name || 'Unknown Property',
+        unit_number: reservation.room_units?.unit_number || 'TBD',
+        room_type_name: reservation.room_units?.room_types?.name || 'Standard Room',
+        guest_name: reservation.booking_name,
+        guest_email: reservation.booking_email,
+        room_number: reservation.room_units?.unit_number || 'TBD'
+      }));
+    } catch (error) {
+      console.error('Database error fetching in-house guests basic:', error);
+      return [];
+    }
+  }
+
   // Property Management Methods
 
   // Get all properties with their rooms

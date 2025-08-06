@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Plus, Building, MapPin, Wifi, Edit, Trash2, Home, Bed, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { Plus, Building, MapPin, Wifi, Edit, Trash2, Home, Bed, ChevronDown, ChevronRight } from 'lucide-react'
+import { PageHeader, EmptyState } from '../../ui'
 import PropertyModal from '../modals/PropertyModal'
 import RoomTypeModal from '../modals/RoomTypeModal'
 import RoomUnitModal from '../modals/RoomUnitModal'
@@ -311,12 +312,26 @@ export default function PropertiesTab({
           ))}
         </div>
       ) : (
-        <div className="text-center py-12">
-          <Building className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">No properties found</p>
-          <p className="text-sm text-gray-400 mt-2">
-            Create your first property to get started
-          </p>
+        <div className="card">
+          <EmptyState
+            icon={Building}
+            title="No properties found"
+            description="Create your first property to get started"
+            action={
+              !isReadOnly ? (
+                <button
+                  onClick={() => {
+                    setEditingProperty(null)
+                    setShowPropertyModal(true)
+                  }}
+                  className="btn-primary"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Property
+                </button>
+              ) : null
+            }
+          />
         </div>
       )}
 

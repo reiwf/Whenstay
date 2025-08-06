@@ -88,6 +88,18 @@ export const adminAPI = {
   // Get dashboard stats
   getDashboardStats: () => api.get('/dashboard/dashboard/stats'),
   
+  // Get today's dashboard stats
+  getTodayStats: () => api.get('/dashboard/dashboard/today-stats'),
+  
+  // Get today's arrivals
+  getTodayArrivals: () => api.get('/dashboard/dashboard/today-arrivals'),
+  
+  // Get today's departures
+  getTodayDepartures: () => api.get('/dashboard/dashboard/today-departures'),
+  
+  // Get in-house guests
+  getInHouseGuests: () => api.get('/dashboard/dashboard/in-house-guests'),
+  
   // Get all check-ins
   getCheckins: (params = {}) => api.get('/dashboard/checkins', { params }),
   

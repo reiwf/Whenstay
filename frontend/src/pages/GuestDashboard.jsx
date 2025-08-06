@@ -22,9 +22,11 @@ import {
   Car,
   ShoppingBag,
   Coffee,
-  Unlock
+  Unlock,
+  FileText
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
+import DashboardLayout from '../components/layout/DashboardLayout'
 
 export default function GuestDashboard() {
   const { token } = useParams()
@@ -33,6 +35,7 @@ export default function GuestDashboard() {
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
   const [checkinStatus, setCheckinStatus] = useState(null)
+  const [activeSection, setActiveSection] = useState('overview')
 
   useEffect(() => {
     if (token) {
@@ -180,29 +183,10 @@ export default function GuestDashboard() {
 
   const { reservation, property, room } = dashboardData
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-primary-600">Welcome, {reservation.guest_name}!</h1>
-                <p className="text-sm text-gray-600">Your stay at {property.name}</p>
-              </div>
-              <div className="text-right">
-                <Building className="w-8 h-8 text-primary-600 mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Property</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  const renderOverviewSection = () => (
+    <div className="space-y-8">
         {/* Reservation Overview */}
-        <div className="card mb-8">
+        <div className="card">
           <div className="flex justify-between items-start mb-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Reservation</h2>
             {checkinStatus?.completed ? (
@@ -292,7 +276,7 @@ export default function GuestDashboard() {
 
         {/* Time-based Room Access Section */}
         {canAccessRoomDetails() && (
-          <div className="card mb-8 border-green-200 bg-green-50">
+          <div className="card border-green-200 bg-green-50">
             <div className="flex items-center mb-4">
               <Unlock className="w-6 h-6 text-green-600 mr-2" />
               <h2 className="text-lg font-semibold text-green-900">Enter Room Details</h2>
@@ -360,7 +344,7 @@ export default function GuestDashboard() {
 
         {/* Access Time Information */}
         {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
-          <div className="card mb-8 border-yellow-200 bg-yellow-50">
+          <div className="card border-yellow-200 bg-yellow-50">
             <div className="flex items-center mb-4">
               <Clock className="w-6 h-6 text-yellow-600 mr-2" />
               <h2 className="text-lg font-semibold text-yellow-900">Room Access Information</h2>
@@ -376,9 +360,87 @@ export default function GuestDashboard() {
           </div>
         )}
 
-        {/* Local Recommendations */}
-        {property.location_info && (
-          <div className="card mb-8">
+    </div>
+  )
+
+  const renderPropertySection = () => (
+    <div className="space-y-8">
+      {/* Property Information */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* WiFi Information */}
+        <div className="card">
+          <div className="flex items-center mb-3">
+            <Wifi className="w-5 h-5 text-blue-600 mr-2" />
+            <h3 className="text-lg font-semibold text-gray-900">WiFi Information</h3>
+          </div>
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm text-gray-600">Network Name</p>
+              <p className="font-mono font-medium">{property.wifi_name}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Password</p>
+              <p className="font-mono font-medium">{property.wifi_password}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Emergency Contact */}
+        {property.emergency_contact && (
+          <div className="card">
+            <div className="flex items-center mb-3">
+              <Phone className="w-5 h-5 text-red-600 mr-2" />
+              <h3 className="text-lg font-semibold text-gray-900">Emergency Contact</h3>
+            </div>
+            <p className="font-medium">{property.emergency_contact}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Check-in Instructions */}
+      {property.check_in_instructions && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-blue-800">{property.check_in_instructions}</p>
+          </div>
+        </div>
+      )}
+
+      {/* House Rules */}
+      {property.house_rules && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">House Rules</h2>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <p className="text-gray-800 whitespace-pre-line">{property.house_rules}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Property Amenities */}
+      {property.amenities && Object.keys(property.amenities).length > 0 && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Property Amenities</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Object.entries(property.amenities).map(([amenity, available]) => (
+              available && (
+                <div key={amenity} className="flex items-center p-2 bg-gray-50 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                  <span className="text-sm text-gray-700 capitalize">{amenity.replace('_', ' ')}</span>
+                </div>
+              )
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const renderLocalSection = () => (
+    <div className="space-y-8">
+      {/* Local Recommendations */}
+      {property.location_info && (
+        <div className="card">
             <div className="flex items-center mb-4">
               <MapPin className="w-6 h-6 text-blue-600 mr-2" />
               <h2 className="text-lg font-semibold text-gray-900">Local Recommendations</h2>
@@ -433,95 +495,88 @@ export default function GuestDashboard() {
             )}
           </div>
         )}
-        
-        {/* Check-in Instructions */}
-        {property.check_in_instructions && (
-          <div className="card mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800">{property.check_in_instructions}</p>
-            </div>
-          </div>
-        )}
+    </div>
+  )
 
-        {/* Property Information */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* WiFi Information */}
-          <div className="card">
-            <div className="flex items-center mb-3">
-              <Wifi className="w-5 h-5 text-blue-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">WiFi Information</h3>
-            </div>
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm text-gray-600">Network Name</p>
-                <p className="font-mono font-medium">{property.wifi_name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Password</p>
-                <p className="font-mono font-medium">{property.wifi_password}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Emergency Contact */}
-          {property.emergency_contact && (
-            <div className="card">
-              <div className="flex items-center mb-3">
-                <Phone className="w-5 h-5 text-red-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">Emergency Contact</h3>
-              </div>
-              <p className="font-medium">{property.emergency_contact}</p>
-            </div>
-          )}
+  const renderDocumentsSection = () => (
+    <div className="space-y-8">
+      {/* Contact Support */}
+      <div className="card">
+        <div className="text-center">
+          <MessageCircle className="w-12 h-12 text-primary-600 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Need Help?</h2>
+          <p className="text-gray-600 mb-4">
+            Our support team is here to help with any questions or issues during your stay.
+          </p>
+          <button
+            onClick={handleContactSupport}
+            className="btn-primary"
+          >
+            <Phone className="w-4 h-4 mr-2" />
+            Contact Support
+          </button>
         </div>
+      </div>
 
-
-        {/* House Rules */}
-        {property.house_rules && (
-          <div className="card mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">House Rules</h2>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-gray-800 whitespace-pre-line">{property.house_rules}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Property Amenities */}
-        {property.amenities && Object.keys(property.amenities).length > 0 && (
-          <div className="card mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Property Amenities</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {Object.entries(property.amenities).map(([amenity, available]) => (
-                available && (
-                  <div key={amenity} className="flex items-center p-2 bg-gray-50 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                    <span className="text-sm text-gray-700 capitalize">{amenity.replace('_', ' ')}</span>
-                  </div>
-                )
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Contact Support */}
-        <div className="card">
-          <div className="text-center">
-            <MessageCircle className="w-12 h-12 text-primary-600 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Need Help?</h2>
-            <p className="text-gray-600 mb-4">
-              Our support team is here to help with any questions or issues during your stay.
-            </p>
-            <button
-              onClick={handleContactSupport}
-              className="btn-primary"
-            >
-              <Phone className="w-4 h-4 mr-2" />
-              Contact Support
-            </button>
-          </div>
+      {/* Documents placeholder */}
+      <div className="card">
+        <div className="text-center py-8">
+          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Documents</h3>
+          <p className="text-gray-600">Important documents and agreements will appear here.</p>
         </div>
       </div>
     </div>
+  )
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <LoadingSpinner size="large" />
+        </div>
+      )
+    }
+
+    switch (activeSection) {
+      case 'overview':
+        return renderOverviewSection()
+      case 'property':
+        return renderPropertySection()
+      case 'local':
+        return renderLocalSection()
+      case 'documents':
+        return renderDocumentsSection()
+      default:
+        return renderOverviewSection()
+    }
+  }
+
+  return (
+    <DashboardLayout
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+    >
+      <div className="page-container">
+        {/* Page Header */}
+        <div className="page-header">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="page-title">Welcome, {reservation?.guest_name}!</h1>
+              <p className="page-subtitle">Your stay at {property?.name}</p>
+            </div>
+            <div className="text-right">
+              <Building className="w-8 h-8 text-primary-600 mx-auto mb-1" />
+              <p className="text-xs text-gray-500">Property</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="fade-in">
+          {renderContent()}
+        </div>
+      </div>
+    </DashboardLayout>
   )
 }

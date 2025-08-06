@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Zap
 } from 'lucide-react';
+import { PageHeader, EmptyState } from '../../ui';
 import LoadingSpinner from '../../LoadingSpinner';
 import CleaningTaskModal from '../modals/CleaningTaskModal';
 import { adminAPI } from '../../../services/api';
@@ -42,6 +43,10 @@ export default function CleaningTab() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalTasks, setTotalTasks] = useState(0);
 
   useEffect(() => {
     loadInitialData();
@@ -49,7 +54,7 @@ export default function CleaningTab() {
 
   useEffect(() => {
     loadCleaningTasks();
-  }, [filters]);
+  }, [filters, currentPage, pageSize]);
 
   const loadInitialData = async () => {
     try {
@@ -69,7 +74,11 @@ export default function CleaningTab() {
   const loadCleaningTasks = async () => {
     try {
       // Prepare filter parameters
-      const params = {};
+      const params = {
+        page: currentPage,
+        limit: pageSize
+      };
+      
       Object.entries(filters).forEach(([key, value]) => {
         if (value && value !== 'all') {
           params[key] = value;
@@ -82,7 +91,11 @@ export default function CleaningTab() {
       }
 
       const response = await adminAPI.getCleaningTasks(params);
-      setTasks(response.data.tasks || []);
+      const data = response.data;
+      
+      setTasks(data.tasks || []);
+      setTotalTasks(data.total || 0);
+      setHasMore(data.hasMore || false);
     } catch (error) {
       console.error('Error loading cleaning tasks:', error);
     }
@@ -406,12 +419,13 @@ export default function CleaningTab() {
       </div>
 
       {/* Tasks List */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {tasks.length > 0 ? (
           tasks.map((task) => (
-            <div key={task.id} className="card">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-start gap-3">
+            <div key={task.id} className="bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+              {/* Desktop Layout: First Row - Main Info */}
+              <div className="hidden md:flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
                   {bulkAssignMode && profile?.role !== 'cleaner' && (
                     <input
                       type="checkbox"
@@ -423,164 +437,307 @@ export default function CleaningTab() {
                           setSelectedTasks(prev => prev.filter(id => id !== task.id));
                         }
                       }}
-                      className="mt-1"
+                      className="h-4 w-4 text-primary-600 rounded border-gray-300 flex-shrink-0"
                     />
                   )}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {task.property_name || 'Unknown Property'}
-                      </h3>
-                      {task.priority === 'high' && (
-                        <div className="flex items-center bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                          <Zap className="w-4 h-4 mr-1" />
-                          <span className="text-xs font-medium">HIGH PRIORITY</span>
-                        </div>
-                      )}
+                  
+                  {/* Property & Room */}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="bg-primary-50 border border-primary-200 rounded-md px-3 py-1">
+                      <div className="text-sm font-bold text-primary-900 whitespace-nowrap">
+                        {task.room_unit_number || 'Room TBD'}
+                      </div>
                     </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 inline-block">
-                      <p className="text-lg font-bold text-blue-900">
-                      {task.room_unit_number || 'Unknown'}
-                      </p>
-                      <p className="text-sm text-blue-700">
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 text-sm truncate">
+                        {task.property_name || 'Unknown Property'}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
                         {task.room_type_name || 'Standard Room'}
-                      </p>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Priority Badge */}
+                  {task.priority === 'high' && (
+                    <div className="flex items-center bg-red-100 text-red-700 px-2 py-1 rounded-full flex-shrink-0">
+                      <Zap className="w-3 h-3 mr-1" />
+                      <span className="text-xs font-medium">HIGH</span>
+                    </div>
+                  )}
+
+                  {/* Task Details */}
+                  <div className="hidden lg:flex items-center gap-4 text-sm text-gray-600 min-w-0">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      {new Date(task.task_date).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <Home className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{getTaskTypeDisplay(task.task_type)}</span>
+                    </div>
+                    {task.cleaner_name && (
+                      <div className="flex items-center gap-1 whitespace-nowrap">
+                        <UserCheck className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{task.cleaner_name}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`status-badge ${getStatusColor(task.status)}`}>
-                    {task.status.replace('_', ' ')}
-                  </span>
-                </div>
+
+                {/* Status Badge */}
+                <span className={`status-badge ${getStatusColor(task.status)} text-xs px-3 py-1 flex-shrink-0 ml-2`}>
+                  {task.status.replace('_', ' ')}
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <div className="space-y-2">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    {new Date(task.task_date).toLocaleDateString()}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Home className="w-4 h-4 mr-2" />
-                    {getTaskTypeDisplay(task.task_type)}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {task.cleaner_name && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <UserCheck className="w-4 h-4 mr-2" />
-                      Cleaner: {task.cleaner_name}
-                    </div>
-                  )}
+              {/* Desktop Layout: Second Row - Actions & Additional Info */}
+              <div className="hidden md:flex items-center justify-between px-4 py-2">
+                <div className="flex items-center gap-3 text-xs text-gray-500 min-w-0 flex-1">
                   {task.room_access_code && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Home className="w-4 h-4 mr-2" />
-                      Access Code: {task.room_access_code}
-                    </div>
+                    <span className="whitespace-nowrap">Access: {task.room_access_code}</span>
                   )}
-                </div>
-
-                <div className="space-y-2">
                   {task.started_at && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Play className="w-4 h-4 mr-2" />
-                      Started: {new Date(task.started_at).toLocaleTimeString()}
-                    </div>
+                    <span className="whitespace-nowrap">Started: {new Date(task.started_at).toLocaleTimeString()}</span>
                   )}
                   {task.completed_at && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Completed: {new Date(task.completed_at).toLocaleTimeString()}
-                    </div>
+                    <span className="whitespace-nowrap">Completed: {new Date(task.completed_at).toLocaleTimeString()}</span>
                   )}
                   {task.is_overdue && (
-                    <div className="flex items-center text-sm text-red-600">
-                      <AlertCircle className="w-4 h-4 mr-2" />
+                    <span className="text-red-600 flex items-center gap-1 whitespace-nowrap">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
                       Overdue
-                    </div>
+                    </span>
+                  )}
+                  {task.special_notes && (
+                    <span className="text-yellow-600 flex items-center gap-1 whitespace-nowrap">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      Has Notes
+                    </span>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {task.status === 'pending' && (
+                    <button
+                      onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
+                      className="inline-flex items-center px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 whitespace-nowrap"
+                    >
+                      <Play className="w-3 h-3 mr-1" />
+                      Start
+                    </button>
+                  )}
+                  
+                  {task.status === 'in_progress' && (
+                    <>
+                      <button
+                        onClick={() => handleUpdateTaskStatus(task.id, 'pending')}
+                        className="inline-flex items-center px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 whitespace-nowrap"
+                      >
+                        <Pause className="w-3 h-3 mr-1" />
+                        Pause
+                      </button>
+                      <button
+                        onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                        className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap"
+                      >
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Complete
+                      </button>
+                    </>
+                  )}
+
+                  {/* Admin Actions */}
+                  {profile?.role !== 'cleaner' && (
+                    <>
+                      {!task.cleaner_id && (
+                        <select
+                          onChange={(e) => e.target.value && handleAssignCleaner(task.id, e.target.value)}
+                          className="text-xs border border-gray-300 rounded px-2 py-1 max-w-32"
+                          defaultValue=""
+                        >
+                          <option value="">Assign...</option>
+                          {cleaners.map(cleaner => (
+                            <option key={cleaner.id} value={cleaner.id}>
+                              {cleaner.full_name.split(' ')[0]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      <button
+                        onClick={() => handleOpenTaskModal(task)}
+                        className="p-1 text-gray-500 hover:text-primary-600"
+                        title="Edit Task"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="p-1 text-gray-500 hover:text-red-600"
+                        title="Delete Task"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
 
-              {task.special_notes && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex items-start">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-yellow-800">Special Notes:</p>
-                      <p className="text-sm text-yellow-700">{task.special_notes}</p>
+              {/* Mobile Layout */}
+              <div className="md:hidden">
+                {/* Mobile Header */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      {bulkAssignMode && profile?.role !== 'cleaner' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.includes(task.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTasks(prev => [...prev, task.id]);
+                            } else {
+                              setSelectedTasks(prev => prev.filter(id => id !== task.id));
+                            }
+                          }}
+                          className="h-5 w-5 text-primary-600 rounded border-gray-300 mt-1"
+                        />
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="bg-primary-50 border border-primary-200 rounded-md px-2 py-1">
+                            <div className="text-sm font-bold text-primary-900">
+                              {task.room_unit_number || 'Room TBD'}
+                            </div>
+                          </div>
+                          {task.priority === 'high' && (
+                            <div className="flex items-center bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                              <Zap className="w-3 h-3 mr-1" />
+                              <span className="text-xs font-medium">HIGH</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="font-medium text-gray-900 text-sm">
+                          {task.property_name || 'Unknown Property'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {task.room_type_name || 'Standard Room'}
+                        </div>
+                      </div>
                     </div>
+                    <span className={`status-badge ${getStatusColor(task.status)} text-xs px-2 py-1 ml-2`}>
+                      {task.status.replace('_', ' ')}
+                    </span>
                   </div>
-                </div>
-              )}
 
-              {/* Task Actions */}
-              <div className="flex flex-wrap gap-2">
-                {task.status === 'pending' && (
-                  <button
-                    onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
-                    className="btn-primary text-sm"
-                  >
-                    <Play className="w-4 h-4 mr-1" />
-                    Start
-                  </button>
-                )}
-                
-                {task.status === 'in_progress' && (
-                  <>
-                    <button
-                      onClick={() => handleUpdateTaskStatus(task.id, 'pending')}
-                      className="btn-secondary text-sm"
-                    >
-                      <Pause className="w-4 h-4 mr-1" />
-                      Pause
-                    </button>
-                    <button
-                      onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
-                      className="btn-primary text-sm"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Complete
-                    </button>
-                  </>
-                )}
+                  {/* Mobile Task Details */}
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-3">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(task.task_date).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Home className="w-3 h-3" />
+                      <span className="truncate">{getTaskTypeDisplay(task.task_type)}</span>
+                    </div>
+                    {task.cleaner_name && (
+                      <div className="flex items-center gap-1 col-span-2">
+                        <UserCheck className="w-3 h-3" />
+                        <span className="truncate">{task.cleaner_name}</span>
+                      </div>
+                    )}
+                  </div>
 
-                {/* Hide admin-only actions for cleaners */}
-                {profile?.role !== 'cleaner' && (
-                  <>
-                    {!task.cleaner_id && (
-                      <select
-                        onChange={(e) => e.target.value && handleAssignCleaner(task.id, e.target.value)}
-                        className="text-sm border border-gray-300 rounded px-2 py-1"
-                        defaultValue=""
+                  {/* Mobile Additional Info */}
+                  <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-3">
+                    {task.room_access_code && (
+                      <span className="bg-gray-100 px-2 py-1 rounded">Access: {task.room_access_code}</span>
+                    )}
+                    {task.is_overdue && (
+                      <span className="text-red-600 flex items-center gap-1 bg-red-50 px-2 py-1 rounded">
+                        <AlertCircle className="w-3 h-3" />
+                        Overdue
+                      </span>
+                    )}
+                    {task.special_notes && (
+                      <span className="text-yellow-600 flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded">
+                        <AlertCircle className="w-3 h-3" />
+                        Has Notes
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Mobile Action Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {task.status === 'pending' && (
+                      <button
+                        onClick={() => handleUpdateTaskStatus(task.id, 'in_progress')}
+                        className="inline-flex items-center px-3 py-2 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 min-h-[44px]"
                       >
-                        <option value="">Assign cleaner...</option>
-                        {cleaners.map(cleaner => (
-                          <option key={cleaner.id} value={cleaner.id}>
-                            {cleaner.full_name}
-                          </option>
-                        ))}
-                      </select>
+                        <Play className="w-4 h-4 mr-2" />
+                        Start
+                      </button>
+                    )}
+                    
+                    {task.status === 'in_progress' && (
+                      <>
+                        <button
+                          onClick={() => handleUpdateTaskStatus(task.id, 'pending')}
+                          className="inline-flex items-center px-3 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 min-h-[44px]"
+                        >
+                          <Pause className="w-4 h-4 mr-2" />
+                          Pause
+                        </button>
+                        <button
+                          onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                          className="inline-flex items-center px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 min-h-[44px]"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Complete
+                        </button>
+                      </>
                     )}
 
-                    <button
-                      onClick={() => handleOpenTaskModal(task)}
-                      className="btn-secondary text-sm"
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Edit
-                    </button>
+                    {/* Mobile Admin Actions */}
+                    {profile?.role !== 'cleaner' && (
+                      <>
+                        {!task.cleaner_id && (
+                          <select
+                            onChange={(e) => e.target.value && handleAssignCleaner(task.id, e.target.value)}
+                            className="text-sm border border-gray-300 rounded px-3 py-2 min-h-[44px] flex-1 min-w-[120px]"
+                            defaultValue=""
+                          >
+                            <option value="">Assign cleaner...</option>
+                            {cleaners.map(cleaner => (
+                              <option key={cleaner.id} value={cleaner.id}>
+                                {cleaner.full_name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
 
-                    <button
-                      onClick={() => handleDeleteTask(task.id)}
-                      className="text-red-600 hover:text-red-800 text-sm px-2 py-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
+                        <button
+                          onClick={() => handleOpenTaskModal(task)}
+                          className="inline-flex items-center justify-center p-3 text-gray-500 hover:text-primary-600 border border-gray-300 rounded min-h-[44px] min-w-[44px]"
+                          title="Edit Task"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="inline-flex items-center justify-center p-3 text-gray-500 hover:text-red-600 border border-gray-300 rounded min-h-[44px] min-w-[44px]"
+                          title="Delete Task"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ))
@@ -591,6 +748,67 @@ export default function CleaningTab() {
             <p className="text-gray-600">
               No tasks match your current filters. Try adjusting the filters or create a new task.
             </p>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {tasks.length > 0 && (
+          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+            <div className="flex-1 flex justify-between sm:hidden">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                disabled={!hasMore}
+                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div className="flex items-center space-x-4">
+                <p className="text-sm text-gray-700">
+                  Page <span className="font-medium">{currentPage}</span> - Showing {tasks.length} of {totalTasks} tasks
+                </p>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-700">Items per page:</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    disabled={!hasMore}
+                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </nav>
+              </div>
+            </div>
           </div>
         )}
       </div>

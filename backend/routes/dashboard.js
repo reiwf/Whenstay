@@ -74,6 +74,66 @@ router.get('/dashboard/stats', adminOnlyAuth, async (req, res) => {
   }
 });
 
+// Get today's dashboard statistics
+router.get('/dashboard/today-stats', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const stats = await databaseService.getTodayDashboardStats(userProfile);
+    res.status(200).json(stats);
+  } catch (error) {
+    console.error('Error fetching today dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch today dashboard statistics' });
+  }
+});
+
+// Get today's arrivals
+router.get('/dashboard/today-arrivals', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const arrivals = await databaseService.getTodayArrivals(userProfile);
+    res.status(200).json({
+      message: 'Today arrivals retrieved successfully',
+      arrivals,
+      count: arrivals.length
+    });
+  } catch (error) {
+    console.error('Error fetching today arrivals:', error);
+    res.status(500).json({ error: 'Failed to fetch today arrivals' });
+  }
+});
+
+// Get today's departures
+router.get('/dashboard/today-departures', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const departures = await databaseService.getTodayDepartures(userProfile);
+    res.status(200).json({
+      message: 'Today departures retrieved successfully',
+      departures,
+      count: departures.length
+    });
+  } catch (error) {
+    console.error('Error fetching today departures:', error);
+    res.status(500).json({ error: 'Failed to fetch today departures' });
+  }
+});
+
+// Get currently in-house guests
+router.get('/dashboard/in-house-guests', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const inHouseGuests = await databaseService.getInHouseGuests(userProfile);
+    res.status(200).json({
+      message: 'In-house guests retrieved successfully',
+      inHouseGuests,
+      count: inHouseGuests.length
+    });
+  } catch (error) {
+    console.error('Error fetching in-house guests:', error);
+    res.status(500).json({ error: 'Failed to fetch in-house guests' });
+  }
+});
+
 // Get all completed check-ins
 router.get('/checkins', adminAuth, async (req, res) => {
   try {
