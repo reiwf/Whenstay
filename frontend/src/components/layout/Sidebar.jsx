@@ -70,7 +70,7 @@ const Sidebar = ({
         <div className="flex items-center">
           {(!collapsed || mobile) && (
             <>
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
+              <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
                 <span className="text-white font-bold text-sm">W</span>
               </div>
               <h1 className="text-lg font-bold text-gray-900">Whenstay</h1>

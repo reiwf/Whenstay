@@ -454,45 +454,40 @@ export default function AdminDashboard() {
     <DashboardLayout
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      pageTitle={
+        activeSection === 'dashboard' ? 'Dashboard' :
+        activeSection === 'properties' ? (profile?.role === 'owner' ? 'My Properties' : 'Properties') :
+        activeSection === 'reservations' ? 'Reservations' :
+        activeSection === 'cleaning' ? (profile?.role === 'cleaner' ? 'My Tasks' : 'Cleaning') :
+        activeSection === 'users' ? 'Users' : ''
+      }
+      pageSubtitle={
+        activeSection === 'dashboard' ? 'Check-in Management Overview' :
+        activeSection === 'properties' ? 'Manage properties, rooms, and units' :
+        activeSection === 'reservations' ? 'View and manage reservations' :
+        activeSection === 'cleaning' ? 'Cleaning tasks and schedules' :
+        activeSection === 'users' ? 'User management and permissions' : ''
+      }
+      pageAction={
+        activeSection === 'dashboard' ? (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="btn-secondary text-sm"
+          >
+            {syncing ? (
+              <LoadingSpinner size="small" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Sync Beds24
+          </button>
+        ) : null
+      }
     >
-      <div className="page-container">
-        <PageHeader
-          title={
-            activeSection === 'dashboard' ? 'Dashboard' :
-            activeSection === 'properties' ? (profile?.role === 'owner' ? 'My Properties' : 'Properties') :
-            activeSection === 'reservations' ? 'Reservations' :
-            activeSection === 'cleaning' ? (profile?.role === 'cleaner' ? 'My Tasks' : 'Cleaning') :
-            activeSection === 'users' ? 'Users' : ''
-          }
-          subtitle={
-            activeSection === 'dashboard' ? 'Check-in Management Overview' :
-            activeSection === 'properties' ? 'Manage properties, rooms, and units' :
-            activeSection === 'reservations' ? 'View and manage reservations' :
-            activeSection === 'cleaning' ? 'Cleaning tasks and schedules' :
-            activeSection === 'users' ? 'User management and permissions' : ''
-          }
-          action={
-            activeSection === 'dashboard' ? (
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="btn-secondary text-sm"
-              >
-                {syncing ? (
-                  <LoadingSpinner size="small" />
-                ) : (
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                )}
-                Sync Beds24
-              </button>
-            ) : null
-          }
-        />
-
-        {/* Content */}
-        <div className="fade-in">
-          {renderContent()}
-        </div>
+      {/* Full-width Content */}
+      <div className="px-4 sm:px-6 lg:px-8 py-6 fade-in">
+        {renderContent()}
       </div>
     </DashboardLayout>
   )

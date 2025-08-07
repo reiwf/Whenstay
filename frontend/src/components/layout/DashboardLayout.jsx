@@ -2,8 +2,17 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import Sidebar from './Sidebar'
 import MobileHeader from './MobileHeader'
+import { PageHeader } from '../ui'
 
-const DashboardLayout = ({ children, activeSection, onSectionChange }) => {
+const DashboardLayout = ({ 
+  children, 
+  activeSection, 
+  onSectionChange,
+  pageTitle,
+  pageSubtitle,
+  pageAction,
+  onRefresh
+}) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { profile } = useAuth()
@@ -75,10 +84,11 @@ const DashboardLayout = ({ children, activeSection, onSectionChange }) => {
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
-
-        {/* Main Content */}
+        {/* Main Content - Full Width */}
         <main className="flex-1 relative overflow-auto">
-          {children}
+          <div className="w-full h-full">
+            {children}
+          </div>
         </main>
       </div>
     </div>

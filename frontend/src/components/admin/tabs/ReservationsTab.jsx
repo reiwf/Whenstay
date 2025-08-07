@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { 
   RefreshCw, 
-  Download, 
   Filter, 
   Calendar, 
+  PlaneLanding,
+  PlaneTakeoff,
   Users, 
-  CheckCircle, 
   Clock, 
   Mail, 
-  Search,
-  DollarSign,
+  Bed,
   Edit,
   Plus,
   Copy,
@@ -19,15 +18,12 @@ import {
   Home,
   Key,
   Wifi,
-  Info,
   MapPin,
-  Phone,
+  MoonStar,
   User,
-  FileText,
-  ChevronDown,
-  ChevronRight
+  FileText
 } from 'lucide-react'
-import { PageHeader, DataTable, EmptyState } from '../../ui'
+import { DataTableAdvanced, EmptyState } from '../../ui'
 import { adminAPI } from '../../../services/api'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
@@ -236,25 +232,11 @@ export default function ReservationsTab() {
             </span>
           </div>
           {roomInfo.roomType && (
-            <div className="text-sm text-blue-600 flex items-center ml-5">
+            <div className="text-sm text-gray-600 flex items-center ml-5">
               <Home className="w-3 h-3 mr-1" />
               {roomInfo.roomType}
-              {roomInfo.description && (
-                <span className="text-gray-500 ml-1">
-                  ({roomInfo.description})
-                </span>
-              )}
-            </div>
-          )}
-          {roomInfo.unitNumber && (
-            <div className="text-sm text-gray-600 flex items-center ml-5">
-              <Key className="w-3 h-3 mr-1" />
+              <Bed className="w-3 h-3 ml-1 mr-1" />
               {roomInfo.unitNumber}
-              {roomInfo.floorNumber && (
-                <span className="text-gray-500 ml-1">
-                  (Floor {roomInfo.floorNumber})
-                </span>
-              )}
             </div>
           )}
         </div>
@@ -293,20 +275,14 @@ export default function ReservationsTab() {
           {bookingName}
         </div>
         {guestName && guestName !== bookingName && (
-          <div className="text-sm text-blue-600 flex items-center">
-            <User className="w-3 h-3 mr-1" />
-            Guest: {guestName}
+          <div className="text-sm  flex items-center">
+            <Users className="w-3 h-3" />
+            {reservation.num_guests || 1} <span className='text-blue-700 ml-1'>{guestName}</span>
           </div>
         )}
         <div className="text-sm text-gray-500">
           {reservation.booking_email || reservation.guest_email}
         </div>
-        {(reservation.booking_phone || reservation.guest_phone || reservation.guest_contact) && (
-          <div className="text-sm text-gray-500 flex items-center">
-            <Phone className="w-3 h-3 mr-1" />
-            {reservation.booking_phone || reservation.guest_phone || reservation.guest_contact}
-          </div>
-        )}
       </div>
     )
   }
@@ -461,47 +437,181 @@ export default function ReservationsTab() {
     )
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header and Filters */}
-      <div className="card">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Reservation Management</h2>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => loadReservations(filters, currentPage)}
-              className="btn-secondary text-sm"
-            >
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Refresh
-            </button>
-            <button
-              onClick={() => {/* TODO: Export functionality */}}
-              className="btn-secondary text-sm"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export
-            </button>
-            <button
-              onClick={handleCreateReservation}
-              className="btn-primary text-sm"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add Reservation
-            </button>
+  // Define columns for the reservations table
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'guest_info',
+      header: 'Guest & Booking',
+      cell: ({ row }) => renderGuestInfo(row.original),
+    },
+    {
+      accessorKey: 'property_info',
+      header: 'Property & Room',
+      cell: ({ row }) => renderPropertyHierarchy(row.original),
+    },
+    {
+      accessorKey: 'check_in_date',
+      header: 'Check-in & Duration',
+      cell: ({ row }) => {
+        const reservation = row.original;
+        const nights = Math.ceil((new Date(reservation.check_out_date) - new Date(reservation.check_in_date)) / (1000 * 60 * 60 * 24));
+        return (
+          <div className="space-y-1">
+            <div className="text-sm text-gray-900 flex items-center">
+              <PlaneLanding className="w-4 h-4 mr-1" />
+              {new Date(reservation.check_in_date).toLocaleDateString()}
+            </div>
+            <div className="text-sm text-gray-500 flex items-center">
+              <PlaneTakeoff className="w-4 h-4 mr-1" />
+              {new Date(reservation.check_out_date).toLocaleDateString()}
+            </div>
+            <div className="text-sm text-gray-500 flex items-center">  
+              <MoonStar className="w-4 h-4 mr-1" />            
+              {nights}  
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ getValue }) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(getValue())}`}>
+          {getValue().replace('_', ' ')}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'total_amount',
+      header: 'Amount',
+      cell: ({ getValue, row }) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">
+            {getValue() || 0}
+          </div>
+          <div className="text-sm text-gray-500">
+            {row.original.currency || 'JPY'}
           </div>
         </div>
+      ),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const reservation = row.original;
+        return (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleEditReservation(reservation)}
+              className="text-gray-500 hover:text-primary-600"
+              title="Edit Reservation"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            
+            {reservation.status === 'pending' && (
+              <button
+                onClick={() => handleSendInvitation(reservation.id)}
+                className="inline-flex items-center px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                title="Send Check-in Invitation"
+              >
+                <Mail className="w-3 h-3 mr-1" />
+                Invite
+              </button>
+            )}
+            
+            {reservation.check_in_token && (
+              <>
+                <button
+                  onClick={() => handleCopyCheckinUrl(reservation)}
+                  className="text-blue-600 hover:text-blue-900"
+                  title="Copy Check-in URL"
+                >
+                  {copiedTokens[reservation.id] ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+                <button
+                  onClick={() => openCheckinPage(reservation)}
+                  className="text-green-600 hover:text-green-900"
+                  title="Open Check-in Page"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+  ], [copiedTokens, handleEditReservation, handleSendInvitation, handleCopyCheckinUrl, openCheckinPage]);
 
-        {/* Enhanced Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+  // Filter reservations based on current filters
+  const filteredReservations = useMemo(() => {
+    return reservations.filter(reservation => {
+      if (filters.status && reservation.status !== filters.status) return false;
+      if (filters.propertyId && reservation.property_id !== filters.propertyId) return false;
+      if (filters.roomTypeId && reservation.room_type_id !== filters.roomTypeId) return false;
+      if (filters.checkInDate && new Date(reservation.check_in_date).toDateString() !== new Date(filters.checkInDate).toDateString()) return false;
+      if (filters.checkInDateFrom && new Date(reservation.check_in_date) < new Date(filters.checkInDateFrom)) return false;
+      if (filters.checkInDateTo && new Date(reservation.check_in_date) > new Date(filters.checkInDateTo)) return false;
+      return true;
+    });
+  }, [reservations, filters]);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Reservation Management</h2>
+          <p className="text-gray-600">Manage guest reservations and check-ins</p>
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => loadReservations(filters, currentPage)}
+            className="btn-secondary"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
+          <button
+            onClick={handleCreateReservation}
+            className="btn-primary"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Reservation
+          </button>
+        </div>
+      </div>
+
+      {/* Enhanced Filters */}
+      <div className="card">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            <Filter className="w-5 h-5 inline mr-2" />
+            Filters
+          </h3>
+          <button
+            onClick={clearFilters}
+            className="text-sm text-gray-600 hover:text-gray-800"
+          >
+            <RefreshCw className="w-4 h-4 inline mr-1" />
+            Clear Filters
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={filters.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
             >
               <option value="">All Statuses</option>
               <option value="pending">Pending</option>
@@ -512,13 +622,11 @@ export default function ReservationsTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Property
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
             <select
               value={filters.propertyId}
               onChange={(e) => handleFilterChange('propertyId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
             >
               <option value="">All Properties</option>
               {properties.map((property) => (
@@ -530,13 +638,11 @@ export default function ReservationsTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Room Type
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Room Type</label>
             <select
               value={filters.roomTypeId}
               onChange={(e) => handleFilterChange('roomTypeId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
               disabled={!filters.propertyId}
             >
               <option value="">All Room Types</option>
@@ -549,263 +655,50 @@ export default function ReservationsTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Check-in Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
             <input
               type="date"
               value={filters.checkInDate}
               onChange={(e) => handleFilterChange('checkInDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              From Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
             <input
               type="date"
               value={filters.checkInDateFrom}
               onChange={(e) => handleFilterChange('checkInDateFrom', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              To Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
             <input
               type="date"
               value={filters.checkInDateTo}
               onChange={(e) => handleFilterChange('checkInDateTo', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="input-field"
             />
           </div>
         </div>
-
-        <div className="flex justify-between items-center">
-          <button
-            onClick={clearFilters}
-            className="text-sm text-gray-600 hover:text-gray-800 flex items-center"
-          >
-            <Filter className="w-4 h-4 mr-1" />
-            Clear Filters
-          </button>
-          <p className="text-sm text-gray-600">
-            {reservations.length} reservation{reservations.length !== 1 ? 's' : ''} found
-          </p>
-        </div>
       </div>
 
-      {/* Enhanced Reservations Table */}
-      <div className="card overflow-hidden">
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <LoadingSpinner size="large" />
-          </div>
-        ) : reservations.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Booking & Guest
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Property & Accommodation
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Dates & Duration
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Guests
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {reservations.map((reservation) => (
-                  <React.Fragment key={reservation.id}>
-                    <tr 
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => toggleRowExpansion(reservation.id)}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {renderGuestInfo(reservation)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {renderPropertyHierarchy(reservation)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm text-gray-900">
-                            <Calendar className="w-4 h-4 inline mr-1" />
-                            {new Date(reservation.check_in_date).toLocaleDateString()}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            to {new Date(reservation.check_out_date).toLocaleDateString()}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {Math.ceil((new Date(reservation.check_out_date) - new Date(reservation.check_in_date)) / (1000 * 60 * 60 * 24))} nights
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center">
-                          <Users className="w-4 h-4 mr-1" />
-                          {reservation.num_guests || 1}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          ${reservation.total_amount || 0}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {reservation.currency || 'USD'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleRowExpansion(reservation.id)
-                            }}
-                            className="text-gray-600 hover:text-primary-900"
-                            title="Toggle Details"
-                          >
-                            {expandedRows[reservation.id] ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                          </button>
-                          
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditReservation(reservation)
-                            }}
-                            className="text-gray-600 hover:text-primary-900"
-                            title="Edit Reservation"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          
-                          {reservation.status === 'pending' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleSendInvitation(reservation.id)
-                              }}
-                              className="text-primary-600 hover:text-primary-900"
-                              title="Send Check-in Invitation"
-                            >
-                              <Mail className="w-4 h-4" />
-                            </button>
-                          )}
-                          
-                          {reservation.check_in_token && (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleCopyCheckinUrl(reservation)
-                                }}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="Copy Check-in URL"
-                              >
-                                {copiedTokens[reservation.id] ? (
-                                  <Check className="w-4 h-4" />
-                                ) : (
-                                  <Copy className="w-4 h-4" />
-                                )}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  openCheckinPage(reservation)
-                                }}
-                                className="text-green-600 hover:text-green-900"
-                                title="Open Check-in Page"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {renderExpandedDetails(reservation)}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No reservations found</p>
-            <p className="text-sm text-gray-400 mt-2">
-              Try adjusting your filters or create a test reservation
-            </p>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {reservations.length > 0 && (
-          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(prev => prev + 1)}
-                disabled={!hasMore}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Page <span className="font-medium">{currentPage}</span>
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                    disabled={!hasMore}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Reservations Table */}
+      <DataTableAdvanced
+        data={filteredReservations || []}
+        columns={columns}
+        loading={loading}
+        searchable={true}
+        filterable={true}
+        exportable={true}
+        pageSize={15}
+        emptyMessage="No reservations found"
+        emptyIcon={Calendar}
+        className="w-full"
+      />
 
       {/* Reservation Modal */}
       {showReservationModal && (
