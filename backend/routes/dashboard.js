@@ -1,34 +1,136 @@
-const express = require('../$node_modules/express/index.js');
+const express = require('express');
 const router = express.Router();
 const databaseService = require('../services/databaseService');
 const beds24Service = require('../services/beds24Service');
 
-// Simple admin authentication middleware (you can enhance this with proper JWT)
-const adminAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Admin authentication required' });
+// Real authentication middleware with JWT verification
+const adminAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token and get user profile
+    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    
+    // Check if user has admin access (admin, owner, or cleaner roles)
+    if (!['admin', 'owner', 'cleaner'].includes(profile.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Attach user info to request for use in routes
+    req.user = user;
+    req.userProfile = profile;
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  
-  // For now, we'll use a simple token check
-  // In production, implement proper JWT verification
-  const token = authHeader.substring(7);
-  if (token !== process.env.ADMIN_TOKEN && token !== 'admin-dev-token') {
-    return res.status(401).json({ error: 'Invalid admin token' });
+};
+
+// Middleware for admin-only routes (admin and owner only)
+const adminOnlyAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token and get user profile
+    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    
+    // Check if user has admin access (admin or owner roles only)
+    if (!['admin', 'owner'].includes(profile.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Attach user info to request for use in routes
+    req.user = user;
+    req.userProfile = profile;
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  
-  next();
 };
 
 // Get dashboard statistics
-router.get('/dashboard/stats', adminAuth, async (req, res) => {
+router.get('/dashboard/stats', adminOnlyAuth, async (req, res) => {
   try {
     const stats = await databaseService.getDashboardStats();
     res.status(200).json(stats);
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+  }
+});
+
+// Get today's dashboard statistics
+router.get('/dashboard/today-stats', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const stats = await databaseService.getTodayDashboardStats(userProfile);
+    res.status(200).json(stats);
+  } catch (error) {
+    console.error('Error fetching today dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch today dashboard statistics' });
+  }
+});
+
+// Get today's arrivals
+router.get('/dashboard/today-arrivals', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const arrivals = await databaseService.getTodayArrivals(userProfile);
+    res.status(200).json({
+      message: 'Today arrivals retrieved successfully',
+      arrivals,
+      count: arrivals.length
+    });
+  } catch (error) {
+    console.error('Error fetching today arrivals:', error);
+    res.status(500).json({ error: 'Failed to fetch today arrivals' });
+  }
+});
+
+// Get today's departures
+router.get('/dashboard/today-departures', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const departures = await databaseService.getTodayDepartures(userProfile);
+    res.status(200).json({
+      message: 'Today departures retrieved successfully',
+      departures,
+      count: departures.length
+    });
+  } catch (error) {
+    console.error('Error fetching today departures:', error);
+    res.status(500).json({ error: 'Failed to fetch today departures' });
+  }
+});
+
+// Get currently in-house guests
+router.get('/dashboard/in-house-guests', adminAuth, async (req, res) => {
+  try {
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const inHouseGuests = await databaseService.getInHouseGuests(userProfile);
+    res.status(200).json({
+      message: 'In-house guests retrieved successfully',
+      inHouseGuests,
+      count: inHouseGuests.length
+    });
+  } catch (error) {
+    console.error('Error fetching in-house guests:', error);
+    res.status(500).json({ error: 'Failed to fetch in-house guests' });
   }
 });
 
@@ -170,12 +272,13 @@ router.post('/sync/beds24', adminAuth, async (req, res) => {
   }
 });
 
-// Get all reservations (with filters)
+// Get all reservations (with filters) - V5 Enhanced
 router.get('/reservations', adminAuth, async (req, res) => {
   try {
     const {
       status,
       propertyId,
+      roomTypeId,
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
@@ -188,6 +291,7 @@ router.get('/reservations', adminAuth, async (req, res) => {
     const filters = {
       status,
       propertyId,
+      roomTypeId,
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
@@ -210,6 +314,7 @@ router.get('/reservations', adminAuth, async (req, res) => {
       filters: {
         status,
         propertyId,
+        roomTypeId,
         checkInDate,
         checkInDateFrom,
         checkInDateTo,
@@ -223,35 +328,6 @@ router.get('/reservations', adminAuth, async (req, res) => {
   }
 });
 
-// Get reservation statistics (with filters)
-router.get('/reservations/stats', adminAuth, async (req, res) => {
-  try {
-    const {
-      propertyId,
-      checkInDate,
-      checkInDateFrom,
-      checkInDateTo
-    } = req.query;
-
-    const filters = {
-      propertyId,
-      checkInDate,
-      checkInDateFrom,
-      checkInDateTo
-    };
-
-    const stats = await databaseService.getReservationStats(filters);
-    
-    res.status(200).json({
-      message: 'Reservation statistics retrieved successfully',
-      stats,
-      filters
-    });
-  } catch (error) {
-    console.error('Error fetching reservation stats:', error);
-    res.status(500).json({ error: 'Failed to fetch reservation statistics' });
-  }
-});
 
 // Update reservation
 router.put('/reservations/:id', adminAuth, async (req, res) => {
@@ -283,13 +359,20 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     // Prepare update data with proper field mapping
     const reservationUpdateData = {};
     
-    // Map frontend field names to database field names
-    if (updateData.guestName !== undefined) reservationUpdateData.guest_name = updateData.guestName;
-    if (updateData.guestEmail !== undefined) reservationUpdateData.guest_email = updateData.guestEmail;
+    // Map frontend field names to V5 database field names
+    // Booking contact information (booking_* fields)
+    if (updateData.bookingName !== undefined) reservationUpdateData.booking_name = updateData.bookingName;
+    if (updateData.bookingEmail !== undefined) reservationUpdateData.booking_email = updateData.bookingEmail;
+    if (updateData.bookingPhone !== undefined) reservationUpdateData.booking_phone = updateData.bookingPhone;
+    
+    // Legacy field mappings for backward compatibility
+    if (updateData.guestName !== undefined) reservationUpdateData.booking_name = updateData.guestName;
+    if (updateData.guestEmail !== undefined) reservationUpdateData.booking_email = updateData.guestEmail;
+    if (updateData.phoneNumber !== undefined) reservationUpdateData.booking_phone = updateData.phoneNumber;
+    
+    // Booking details
     if (updateData.checkInDate !== undefined) reservationUpdateData.check_in_date = updateData.checkInDate;
     if (updateData.checkOutDate !== undefined) reservationUpdateData.check_out_date = updateData.checkOutDate;
-    if (updateData.roomNumber !== undefined) reservationUpdateData.room_number = updateData.roomNumber;
-    if (updateData.roomId !== undefined) reservationUpdateData.room_id = updateData.roomId;
     if (updateData.numGuests !== undefined) reservationUpdateData.num_guests = updateData.numGuests;
     if (updateData.numAdults !== undefined) reservationUpdateData.num_adults = updateData.numAdults;
     if (updateData.numChildren !== undefined) reservationUpdateData.num_children = updateData.numChildren;
@@ -297,14 +380,20 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
     if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
     if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24_booking_id = updateData.beds24BookingId;
-    if (updateData.phoneNumber !== undefined) reservationUpdateData.guest_contact = updateData.phoneNumber;
     if (updateData.specialRequests !== undefined) reservationUpdateData.special_requests = updateData.specialRequests;
     if (updateData.bookingSource !== undefined) reservationUpdateData.booking_source = updateData.bookingSource;
     
-    // Guest information fields
+    // V5 Room assignment
+    if (updateData.propertyId !== undefined) reservationUpdateData.property_id = updateData.propertyId;
+    if (updateData.roomTypeId !== undefined) reservationUpdateData.room_type_id = updateData.roomTypeId;
+    if (updateData.roomUnitId !== undefined) reservationUpdateData.room_unit_id = updateData.roomUnitId;
+    // Note: room_id and room_number fields have been removed in V5 schema
+    
+    // Guest personal information fields (guest_* fields)
     if (updateData.guestFirstname !== undefined) reservationUpdateData.guest_firstname = updateData.guestFirstname;
     if (updateData.guestLastname !== undefined) reservationUpdateData.guest_lastname = updateData.guestLastname;
-    if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_personal_email = updateData.guestPersonalEmail;
+    if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_mail = updateData.guestPersonalEmail;
+    if (updateData.guestContact !== undefined) reservationUpdateData.guest_contact = updateData.guestContact;
     if (updateData.guestAddress !== undefined) reservationUpdateData.guest_address = updateData.guestAddress;
     if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimated_checkin_time = updateData.estimatedCheckinTime;
     if (updateData.travelPurpose !== undefined) reservationUpdateData.travel_purpose = updateData.travelPurpose;
@@ -455,27 +544,130 @@ router.get('/webhooks/events', adminAuth, async (req, res) => {
   }
 });
 
-// Admin login (simplified)
-router.post('/login', async (req, res) => {
+// Authentication Routes
+
+// User login with email and password
+router.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
     
-    // Simple hardcoded admin credentials (enhance this in production)
-    if (username === 'admin' && password === 'admin123') {
-      res.status(200).json({
-        message: 'Login successful',
-        token: 'admin-dev-token', // In production, generate proper JWT
-        user: {
-          username: 'admin',
-          role: 'admin'
-        }
-      });
-    } else {
-      res.status(401).json({ error: 'Invalid credentials' });
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
+    
+    // Authenticate user
+    const { user, profile, session } = await databaseService.authenticateUser(email, password);
+    
+    res.status(200).json({
+      message: 'Login successful',
+      token: session?.access_token || `mock_token_${user.id}_${Date.now()}`,
+      user: {
+        id: user.id,
+        email: user.email,
+        profile: {
+          id: profile.id,
+          role: profile.role,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          company_name: profile.company_name,
+          is_active: profile.is_active,
+          created_at: profile.created_at
+        }
+      }
+    });
   } catch (error) {
-    console.error('Error during admin login:', error);
+    console.error('Error during login:', error);
+    
+    // Handle specific authentication errors
+    if (error.message.includes('Invalid email or password')) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    if (error.message.includes('User profile not found')) {
+      return res.status(401).json({ error: 'User profile not found' });
+    }
+    
+    if (error.message.includes('User account is deactivated')) {
+      return res.status(401).json({ error: 'User account is deactivated' });
+    }
+    
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get current user profile
+router.get('/auth/profile', adminAuth, async (req, res) => {
+  try {
+    // User profile is already attached by adminAuth middleware
+    const profile = req.userProfile;
+    const user = req.user;
+    
+    res.status(200).json({
+      message: 'Profile retrieved successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        profile: {
+          id: profile.id,
+          role: profile.role,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          company_name: profile.company_name,
+          is_active: profile.is_active,
+          created_at: profile.created_at
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// Logout (client-side token removal, server-side session invalidation)
+router.post('/auth/logout', adminAuth, async (req, res) => {
+  try {
+    // Note: With Supabase, logout is typically handled client-side
+    // Server-side logout would require session management
+    res.status(200).json({
+      message: 'Logout successful'
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Create test admin user (development only)
+router.post('/auth/create-test-admin', async (req, res) => {
+  try {
+    // Only allow in development environment
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Not available in production' });
+    }
+    
+    const profile = await databaseService.createTestAdminUser();
+    
+    res.status(201).json({
+      message: 'Test admin user created successfully',
+      profile: {
+        id: profile.id,
+        role: profile.role,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: 'admin@whenstay.com',
+        is_active: profile.is_active
+      }
+    });
+  } catch (error) {
+    console.error('Error creating test admin user:', error);
+    res.status(500).json({ 
+      error: 'Failed to create test admin user',
+      details: error.message 
+    });
   }
 });
 
@@ -485,12 +677,13 @@ router.post('/login', async (req, res) => {
 router.get('/properties', adminAuth, async (req, res) => {
   try {
     const { withStats } = req.query;
+    const userProfile = req.userProfile; // Available from adminAuth middleware
     
     let properties;
     if (withStats === 'true') {
-      properties = await databaseService.getPropertiesWithStats();
+      properties = await databaseService.getPropertiesWithStats(userProfile);
     } else {
-      properties = await databaseService.getAllProperties();
+      properties = await databaseService.getAllProperties(userProfile);
     }
     
     res.status(200).json({
@@ -532,14 +725,15 @@ router.post('/properties', adminAuth, async (req, res) => {
       ownerId,
       description,
       propertyType,
-      totalRooms,
       wifiName,
       wifiPassword,
       houseRules,
       checkInInstructions,
       emergencyContact,
       propertyAmenities,
-      locationInfo
+      locationInfo,
+      accessTime,
+      defaultCleanerId
     } = req.body;
     
     // Validate required fields
@@ -553,14 +747,15 @@ router.post('/properties', adminAuth, async (req, res) => {
       ownerId: ownerId || 'c339d395-9910-44cd-ae8a-362e153c35de', // Default admin user
       description,
       propertyType,
-      totalRooms,
       wifiName,
       wifiPassword,
       houseRules,
       checkInInstructions,
       emergencyContact,
       propertyAmenities,
-      locationInfo
+      locationInfo,
+      accessTime,
+      defaultCleanerId
     };
     
     const property = await databaseService.createProperty(propertyData);
@@ -610,9 +805,215 @@ router.delete('/properties/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Room Management Routes
+// Room Type Management Routes
 
-// Create room for a property
+// Get all room types for a property
+router.get('/properties/:propertyId/room-types', adminAuth, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const { withUnits } = req.query;
+    
+    let roomTypes;
+    if (withUnits === 'true') {
+      roomTypes = await databaseService.getRoomTypesWithUnits(propertyId);
+    } else {
+      roomTypes = await databaseService.getRoomTypesByProperty(propertyId);
+    }
+    
+    res.status(200).json({
+      message: 'Room types retrieved successfully',
+      roomTypes
+    });
+  } catch (error) {
+    console.error('Error fetching room types:', error);
+    res.status(500).json({ error: 'Failed to fetch room types' });
+  }
+});
+
+// Create room type for a property
+router.post('/properties/:propertyId/room-types', adminAuth, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const {
+      name,
+      description,
+      maxGuests,
+      basePrice,
+      currency,
+      roomAmenities,
+      bedConfiguration,
+      roomSizeSqm,
+      hasBalcony,
+      hasKitchen,
+      isAccessible
+    } = req.body;
+    
+    // Validate required fields
+    if (!name || !maxGuests) {
+      return res.status(400).json({ error: 'Name and max guests are required' });
+    }
+    
+    const roomTypeData = {
+      name,
+      description,
+      maxGuests,
+      basePrice,
+      currency: currency || 'USD',
+      roomAmenities,
+      bedConfiguration,
+      roomSizeSqm,
+      hasBalcony,
+      hasKitchen,
+      isAccessible
+    };
+    
+    const roomType = await databaseService.createRoomType(propertyId, roomTypeData);
+    
+    res.status(201).json({
+      message: 'Room type created successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error creating room type:', error);
+    res.status(500).json({ error: 'Failed to create room type' });
+  }
+});
+
+// Update room type
+router.put('/room-types/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const roomType = await databaseService.updateRoomType(id, updateData);
+    
+    res.status(200).json({
+      message: 'Room type updated successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error updating room type:', error);
+    res.status(500).json({ error: 'Failed to update room type' });
+  }
+});
+
+// Delete room type
+router.delete('/room-types/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const roomType = await databaseService.deleteRoomType(id);
+    
+    res.status(200).json({
+      message: 'Room type deleted successfully',
+      roomType
+    });
+  } catch (error) {
+    console.error('Error deleting room type:', error);
+    res.status(500).json({ error: 'Failed to delete room type' });
+  }
+});
+
+// Room Unit Management Routes
+
+// Get all room units for a room type
+router.get('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    
+    const roomUnits = await databaseService.getRoomUnitsByRoomType(roomTypeId);
+    
+    res.status(200).json({
+      message: 'Room units retrieved successfully',
+      roomUnits
+    });
+  } catch (error) {
+    console.error('Error fetching room units:', error);
+    res.status(500).json({ error: 'Failed to fetch room units' });
+  }
+});
+
+// Create room unit for a room type
+router.post('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const {
+      unitNumber,
+      floorNumber,
+      accessCode,
+      accessInstructions,
+      wifiName,
+      wifiPassword,
+      unitAmenities,
+      maintenanceNotes
+    } = req.body;
+    
+    // Validate required fields
+    if (!unitNumber) {
+      return res.status(400).json({ error: 'Unit number is required' });
+    }
+    
+    const roomUnitData = {
+      unitNumber,
+      floorNumber,
+      accessCode,
+      accessInstructions,
+      wifiName,
+      wifiPassword,
+      unitAmenities,
+      maintenanceNotes
+    };
+    
+    const roomUnit = await databaseService.createRoomUnit(roomTypeId, roomUnitData);
+    
+    res.status(201).json({
+      message: 'Room unit created successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error creating room unit:', error);
+    res.status(500).json({ error: 'Failed to create room unit' });
+  }
+});
+
+// Update room unit
+router.put('/room-units/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const roomUnit = await databaseService.updateRoomUnit(id, updateData);
+    
+    res.status(200).json({
+      message: 'Room unit updated successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error updating room unit:', error);
+    res.status(500).json({ error: 'Failed to update room unit' });
+  }
+});
+
+// Delete room unit
+router.delete('/room-units/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const roomUnit = await databaseService.deleteRoomUnit(id);
+    
+    res.status(200).json({
+      message: 'Room unit deleted successfully',
+      roomUnit
+    });
+  } catch (error) {
+    console.error('Error deleting room unit:', error);
+    res.status(500).json({ error: 'Failed to delete room unit' });
+  }
+});
+
+// Legacy Room Management Routes (for backward compatibility)
+
+// Create room for a property (deprecated - use room types/units instead)
 router.post('/properties/:propertyId/rooms', adminAuth, async (req, res) => {
   try {
     const { propertyId } = req.params;
@@ -669,7 +1070,7 @@ router.post('/properties/:propertyId/rooms', adminAuth, async (req, res) => {
   }
 });
 
-// Update room
+// Update room (deprecated)
 router.put('/rooms/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -687,7 +1088,7 @@ router.put('/rooms/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Delete room
+// Delete room (deprecated)
 router.delete('/rooms/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -707,7 +1108,7 @@ router.delete('/rooms/:id', adminAuth, async (req, res) => {
 // User Management Routes
 
 // Get all users
-router.get('/users', adminAuth, async (req, res) => {
+router.get('/users', adminOnlyAuth, async (req, res) => {
   try {
     const { page = 1, limit = 20, role, withDetails } = req.query;
     const offset = (page - 1) * limit;
@@ -938,6 +1339,226 @@ router.patch('/users/:id/status', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error updating user status:', error);
     res.status(500).json({ error: 'Failed to update user status' });
+  }
+});
+
+// Cleaning Task Management Routes
+
+// Get all cleaning tasks with filtering
+router.get('/cleaning-tasks', adminAuth, async (req, res) => {
+  try {
+    const {
+      status,
+      cleanerId,
+      propertyId,
+      roomUnitId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo,
+      taskType,
+      priority,
+      page = 1,
+      limit = 20,
+      sortBy = 'task_date',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const filters = {
+      status,
+      cleanerId,
+      propertyId,
+      roomUnitId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo,
+      taskType,
+      priority,
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
+      sortBy,
+      sortOrder
+    };
+
+    const userProfile = req.userProfile; // Available from adminAuth middleware
+    const tasks = await databaseService.getCleaningTasks(filters, userProfile);
+    
+    res.status(200).json({
+      message: 'Cleaning tasks retrieved successfully',
+      tasks,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        hasMore: tasks.length === parseInt(limit)
+      },
+      filters: {
+        status,
+        cleanerId,
+        propertyId,
+        roomUnitId,
+        taskDate,
+        taskDateFrom,
+        taskDateTo,
+        taskType,
+        priority,
+        sortBy,
+        sortOrder
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching cleaning tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch cleaning tasks' });
+  }
+});
+
+
+// Create new cleaning task
+router.post('/cleaning-tasks', adminAuth, async (req, res) => {
+  try {
+    const {
+      propertyId,
+      roomUnitId,
+      reservationId,
+      cleanerId,
+      taskDate,
+      taskType,
+      status,
+      priority,
+      estimatedDuration,
+      specialNotes
+    } = req.body;
+    
+    // Validate required fields (reservationId is now nullable)
+    if (!propertyId || !roomUnitId || !taskDate) {
+      return res.status(400).json({ 
+        error: 'Property ID, room unit ID, and task date are required' 
+      });
+    }
+    
+    const taskData = {
+      propertyId,
+      roomUnitId,
+      reservationId: reservationId || null, // Make reservation ID nullable
+      cleanerId,
+      taskDate,
+      taskType: taskType || 'checkout',
+      status: status || 'pending',
+      priority: priority || 'normal',
+      estimatedDuration,
+      specialNotes
+    };
+    
+    const task = await databaseService.createCleaningTask(taskData);
+    
+    res.status(201).json({
+      message: 'Cleaning task created successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error creating cleaning task:', error);
+    res.status(500).json({ error: 'Failed to create cleaning task' });
+  }
+});
+
+// Update cleaning task
+router.put('/cleaning-tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const task = await databaseService.updateCleaningTask(id, updateData);
+    
+    res.status(200).json({
+      message: 'Cleaning task updated successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error updating cleaning task:', error);
+    res.status(500).json({ error: 'Failed to update cleaning task' });
+  }
+});
+
+// Delete cleaning task
+router.delete('/cleaning-tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const task = await databaseService.deleteCleaningTask(id);
+    
+    res.status(200).json({
+      message: 'Cleaning task deleted successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error deleting cleaning task:', error);
+    res.status(500).json({ error: 'Failed to delete cleaning task' });
+  }
+});
+
+// Assign cleaner to task
+router.patch('/cleaning-tasks/:id/assign', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cleanerId } = req.body;
+    
+    if (!cleanerId) {
+      return res.status(400).json({ error: 'Cleaner ID is required' });
+    }
+    
+    const task = await databaseService.assignCleanerToTask(id, cleanerId);
+    
+    res.status(200).json({
+      message: 'Cleaner assigned to task successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Error assigning cleaner to task:', error);
+    res.status(500).json({ error: 'Failed to assign cleaner to task' });
+  }
+});
+
+// Get available cleaners
+router.get('/cleaners', adminAuth, async (req, res) => {
+  try {
+    const cleaners = await databaseService.getAvailableCleaners();
+    
+    res.status(200).json({
+      message: 'Available cleaners retrieved successfully',
+      cleaners
+    });
+  } catch (error) {
+    console.error('Error fetching available cleaners:', error);
+    res.status(500).json({ error: 'Failed to fetch available cleaners' });
+  }
+});
+
+// Get cleaning task statistics
+router.get('/cleaning-tasks/stats', adminAuth, async (req, res) => {
+  try {
+    const {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    } = req.query;
+
+    const filters = {
+      propertyId,
+      cleanerId,
+      taskDate,
+      taskDateFrom,
+      taskDateTo
+    };
+
+    const stats = await databaseService.getCleaningTaskStats(filters);
+    
+    res.status(200).json({
+      message: 'Cleaning task statistics retrieved successfully',
+      stats
+    });
+  } catch (error) {
+    console.error('Error fetching cleaning task stats:', error);
+    res.status(500).json({ error: 'Failed to fetch cleaning task statistics' });
   }
 });
 

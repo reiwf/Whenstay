@@ -1,5 +1,5 @@
-import { Link } from '../../$node_modules/react-router-dom/dist/index.js'
-import { Home, ArrowLeft } from '../../$node_modules/lucide-react/dist/lucide-react.js'
+import { Link } from 'react-router-dom'
+import { Home, ArrowLeft } from 'lucide-react'
 
 export default function NotFoundPage() {
   return (

@@ -1,5 +1,5 @@
-import { Link } from '../../$node_modules/react-router-dom/dist/index.js'
-import { CheckCircle, Clock, Shield, Smartphone } from '../../$node_modules/lucide-react/dist/lucide-react.js'
+import { Link } from 'react-router-dom'
+import { CheckCircle, Clock, Shield, Smartphone } from 'lucide-react'
 
 export default function HomePage() {
   return (
@@ -13,22 +13,10 @@ export default function HomePage() {
             </div>
             <div className="flex space-x-6">
               <Link
-                to="/admin"
+                to="/dashboard"
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
-                Admin
-              </Link>
-              <Link
-                to="/owner/login"
-                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-              >
-                Owner
-              </Link>
-              <Link
-                to="/cleaner/login"
-                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-              >
-                Cleaner
+                Login
               </Link>
             </div>
           </div>
@@ -206,7 +194,7 @@ export default function HomePage() {
               Streamlining your hotel experience with smart online check-in solutions.
             </p>
             <div className="flex justify-center space-x-6">
-              <Link to="/admin" className="text-gray-400 hover:text-white transition-colors">
+              <Link to="/dashboard" className="text-gray-400 hover:text-white transition-colors">
                 Admin Portal
               </Link>
             </div>

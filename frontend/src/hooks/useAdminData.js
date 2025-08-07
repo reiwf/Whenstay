@@ -1,10 +1,14 @@
-import { useState, useCallback } from '../../$node_modules/@types/react/index.js'
+import { useState, useCallback } from 'react'
 import { adminAPI } from '../services/api'
 
 export function useAdminData() {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState(null)
   const [checkins, setCheckins] = useState([])
+  const [todayStats, setTodayStats] = useState(null)
+  const [todayArrivals, setTodayArrivals] = useState([])
+  const [todayDepartures, setTodayDepartures] = useState([])
+  const [inHouseGuests, setInHouseGuests] = useState([])
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -25,35 +29,39 @@ export function useAdminData() {
     }
   }, [])
 
-  const createTestReservation = useCallback(async () => {
+  const loadTodayDashboardData = useCallback(async () => {
     try {
-      const testData = {
-        guestName: 'Test Guest',
-        guestEmail: 'test@example.com',
-        checkInDate: new Date().toISOString().split('T')[0],
-        checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        roomNumber: '101'
-      }
+      setLoading(true)
       
-      const response = await fetch('/api/reservations/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testData)
-      })
+      // Load today's dashboard data
+      const [todayStatsResponse, arrivalsResponse, departuresResponse, inHouseResponse] = await Promise.all([
+        adminAPI.getTodayStats(),
+        adminAPI.getTodayArrivals(),
+        adminAPI.getTodayDepartures(),
+        adminAPI.getInHouseGuests()
+      ])
       
-      if (response.ok) {
-        const result = await response.json()
-        console.log('Check-in URL:', result.reservation.checkinUrl)
-        await loadDashboardData()
-        return result
-      }
+      setTodayStats(todayStatsResponse.data)
+      setTodayArrivals(arrivalsResponse.data.arrivals || [])
+      setTodayDepartures(departuresResponse.data.departures || [])
+      setInHouseGuests(inHouseResponse.data.inHouseGuests || [])
     } catch (error) {
-      console.error('Error creating test reservation:', error)
-      throw error
+      console.error('Error loading today dashboard data:', error)
+      // Set empty data on error
+      setTodayStats({
+        todayArrivals: 0,
+        todayDepartures: 0,
+        inHouseGuests: 0,
+        pendingTodayCheckins: 0
+      })
+      setTodayArrivals([])
+      setTodayDepartures([])
+      setInHouseGuests([])
+    } finally {
+      setLoading(false)
     }
-  }, [loadDashboardData])
+  }, [])
+
 
   const syncBeds24 = useCallback(async () => {
     try {
@@ -69,8 +77,12 @@ export function useAdminData() {
     loading,
     stats,
     checkins,
+    todayStats,
+    todayArrivals,
+    todayDepartures,
+    inHouseGuests,
     loadDashboardData,
-    createTestReservation,
+    loadTodayDashboardData,
     syncBeds24
   }
 }

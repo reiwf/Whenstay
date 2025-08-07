@@ -1,4 +1,4 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
+import { useState } from 'react'
 import { 
   User, 
   Mail, 
@@ -8,7 +8,7 @@ import {
   Briefcase, 
   UserCheck,
   AlertCircle 
-} from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+} from 'lucide-react'
 import StepNavigation from '../shared/StepNavigation'
 
 export default function Step2GuestInformation({ 
@@ -83,7 +83,7 @@ export default function Step2GuestInformation({
         <div className="bg-green-50 border border-green-200 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
             <User className="w-5 h-5 mr-2" />
-            Personal Information
+            Who will stay with us?
           </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -136,7 +136,7 @@ export default function Step2GuestInformation({
             {/* Personal Email Address */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Personal Email Address *
+                Email Address *
               </label>
               <input
                 type="email"
@@ -154,9 +154,6 @@ export default function Step2GuestInformation({
                   {errors.personalEmail}
                 </p>
               )}
-              <p className="mt-1 text-sm text-gray-500">
-                Your personal email address (may be different from booking email)
-              </p>
             </div>
 
             {/* Contact Number */}
@@ -180,36 +177,9 @@ export default function Step2GuestInformation({
                   {errors.contactNumber}
                 </p>
               )}
-              <p className="mt-1 text-sm text-gray-500">
-                Include country code for international numbers
-              </p>
             </div>
 
-            {/* Address */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <MapPin className="w-4 h-4 inline mr-2" />
-                Address
-              </label>
-              <textarea
-                value={formData.address || ''}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                rows={3}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                  errors.address ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="123 Main Street, City, State/Province, Country, Postal Code"
-              />
-              {errors.address && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
-                  {errors.address}
-                </p>
-              )}
-              <p className="mt-1 text-sm text-gray-500">
-                Your current residential address
-              </p>
-            </div>
+            
           </div>
         </div>
 
@@ -263,71 +233,6 @@ export default function Step2GuestInformation({
           </div>
         </div>
 
-        {/* Emergency Contact Section */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-orange-900 mb-4 flex items-center">
-            <UserCheck className="w-5 h-5 mr-2" />
-            Emergency Contact
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Emergency Contact Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Emergency Contact Name
-              </label>
-              <input
-                type="text"
-                value={formData.emergencyContactName || ''}
-                onChange={(e) => handleInputChange('emergencyContactName', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                placeholder="Full name of emergency contact"
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Person to contact in case of emergency
-              </p>
-            </div>
-
-            {/* Emergency Contact Phone */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Emergency Contact Phone
-              </label>
-              <input
-                type="tel"
-                value={formData.emergencyContactPhone || ''}
-                onChange={(e) => handleInputChange('emergencyContactPhone', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                placeholder="+1 (555) 123-4567"
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Include country code for international numbers
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Information Note */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
-            <AlertCircle className="w-4 h-4 mr-2" />
-            Why do we need this information?
-          </h4>
-          <ul className="text-gray-700 text-sm space-y-1">
-            <li>• To verify your identity and ensure security</li>
-            <li>• To contact you about your reservation if needed</li>
-            <li>• To comply with local registration requirements</li>
-            <li>• To provide you with important property information</li>
-            <li>• To ensure we can reach you or your emergency contact if necessary</li>
-          </ul>
-        </div>
-
-        {/* Required Fields Notice */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">
-            <strong>Required fields are marked with *</strong> - Please ensure all required information is completed before proceeding.
-          </p>
-        </div>
       </form>
 
       <StepNavigation
@@ -335,8 +240,12 @@ export default function Step2GuestInformation({
         totalSteps={4}
         onNext={handleNext}
         onPrevious={onPrevious}
-        nextButtonText="Continue to Document Upload"
+        nextButtonText="Continue"
       />
     </div>
   )
 }
+
+
+
+

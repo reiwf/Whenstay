@@ -1,4 +1,4 @@
-const express = require('../$node_modules/express/index.js');
+const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
 const databaseService = require('../services/databaseService');
@@ -152,3 +152,5 @@ router.post('/test', async (req, res) => {
 });
 
 module.exports = router;
+
+

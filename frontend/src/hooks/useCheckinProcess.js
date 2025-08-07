@@ -284,3 +284,7 @@ export function useCheckinProcess(reservationId) {
 }
 
 export default useCheckinProcess
+
+
+
+

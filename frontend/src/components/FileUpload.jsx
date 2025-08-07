@@ -1,23 +1,36 @@
-import { useState, useRef } from '../../$node_modules/@types/react/index.js'
-import { Upload, X, FileImage, Loader2 } from '../../$node_modules/lucide-react/dist/lucide-react.js'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import { useState, useRef, useEffect } from 'react'
+import { Upload, X, FileImage, Loader2, Trash2, Camera } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { uploadFile } from '../services/fileUpload'
 
 export default function FileUpload({ 
   onFileUpload,
   onFileSelect, // Keep for backward compatibility
   onError,
+  onDeleteExisting, // Callback when deleting existing image
+  initialImageUrl = null, // URL of existing image from database
   accept = 'image/*', 
   maxSize = 5 * 1024 * 1024, // 5MB default
   className = '',
   bucketName = 'guest-documents',
-  folder = ''
+  folder = '',
+  showFileName = false // Whether to show filename for existing images
 }) {
   const [selectedFile, setSelectedFile] = useState(null)
-  const [preview, setPreview] = useState(null)
+  const [preview, setPreview] = useState(initialImageUrl)
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [hasExistingImage, setHasExistingImage] = useState(!!initialImageUrl)
   const fileInputRef = useRef(null)
+
+  // Update preview when initialImageUrl changes
+  useEffect(() => {
+    if (initialImageUrl && !selectedFile) {
+      setPreview(initialImageUrl)
+      setHasExistingImage(true)
+    }
+  }, [initialImageUrl, selectedFile])
 
   const validateFile = (file) => {
     if (!file) return false
@@ -117,9 +130,40 @@ export default function FileUpload({
     setDragOver(false)
   }
 
+  const handleDeleteExisting = async () => {
+    if (deleting) return
+    
+    setDeleting(true)
+    try {
+      if (onDeleteExisting) {
+        await onDeleteExisting()
+      }
+      
+      // Reset state
+      setPreview(null)
+      setHasExistingImage(false)
+      setSelectedFile(null)
+      
+      // Notify parent components
+      if (onFileSelect) {
+        onFileSelect(null)
+      }
+      if (onFileUpload) {
+        onFileUpload(null, null, null)
+      }
+      
+      toast.success('Image deleted successfully!')
+    } catch (error) {
+      console.error('Delete error:', error)
+      toast.error('Failed to delete image')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const removeFile = () => {
     setSelectedFile(null)
-    setPreview(null)
+    setPreview(hasExistingImage ? initialImageUrl : null)
     
     // Call callbacks to notify parent components
     if (onFileSelect) {
@@ -138,41 +182,94 @@ export default function FileUpload({
     fileInputRef.current?.click()
   }
 
-  if (selectedFile) {
+  // Show image preview (either existing or newly selected)
+  if (preview) {
     return (
-      <div className={`border border-gray-300 rounded-lg p-4 ${className}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            {preview ? (
-              <img 
-                src={preview} 
-                alt="Preview" 
-                className="w-12 h-12 object-cover rounded"
-              />
-            ) : (
-              <FileImage className="w-12 h-12 text-gray-400" />
-            )}
-            <div>
-              <p className="text-sm font-medium text-gray-900">
-                {selectedFile.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </p>
+      <div className={`space-y-4 ${className}`}>
+        {/* Large Image Preview */}
+        <div className="relative group">
+          <div className="relative overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-50">
+            <img 
+              src={preview} 
+              alt="Document preview" 
+              className="w-full h-90 sm:h-96 object-cover"
+            />
+            
+            {/* Delete Button Overlay */}
+            <div className="absolute top-2 right-2 flex gap-2">
+              {hasExistingImage && !selectedFile && (
+                <button
+                  type="button"
+                  onClick={handleDeleteExisting}
+                  disabled={deleting}
+                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors disabled:opacity-50"
+                  title="Delete image"
+                >
+                  {deleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              
+              {selectedFile && (
+                <button
+                  type="button"
+                  onClick={removeFile}
+                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                  title="Remove selected file"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
+
+            {/* Upload Progress Overlay */}
+            {uploading && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin" />
+                  <p className="text-sm">Uploading...</p>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* File Info */}
+          {selectedFile && showFileName && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {selectedFile.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Change Image Button */}
+        <div className="text-center">
           <button
             type="button"
-            onClick={removeFile}
-            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+            onClick={openFileDialog}
+            disabled={uploading || deleting}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
           >
-            <X className="w-5 h-5" />
+            <Camera className="w-4 h-4 mr-2" />
+            {hasExistingImage && !selectedFile ? 'Change Image' : 'Replace Image'}
           </button>
         </div>
       </div>
     )
   }
 
+  // Show upload area when no image is present
   return (
     <div className={className}>
       <div

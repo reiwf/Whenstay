@@ -1,11 +1,10 @@
-import { useState, useCallback } from '../../$node_modules/@types/react/index.js'
+import { useState, useCallback } from 'react'
 import { adminAPI } from '../services/api'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import toast from 'react-hot-toast'
 
 export function useReservations() {
   const [loading, setLoading] = useState(false)
   const [reservations, setReservations] = useState([])
-  const [stats, setStats] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
 
@@ -27,13 +26,9 @@ export function useReservations() {
         }
       })
 
-      const [reservationsResponse, statsResponse] = await Promise.all([
-        adminAPI.getReservations(params),
-        adminAPI.getReservationStats(filters)
-      ])
+      const reservationsResponse = await adminAPI.getReservations(params)
 
       setReservations(reservationsResponse.data.reservations)
-      setStats(statsResponse.data.stats)
       setHasMore(reservationsResponse.data.pagination.hasMore)
       setCurrentPage(page)
       
@@ -54,20 +49,67 @@ export function useReservations() {
       
       console.log('Updating reservation:', reservationId, reservationData)
       
-      // Call the API to update the reservation
-      await adminAPI.updateReservation(reservationId, reservationData)
+      // Map frontend data to backend expected format
+      const mappedData = {
+        // Basic booking information (maps to booking_* fields in DB)
+        guestName: reservationData.bookingName || reservationData.guestName,
+        guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
+        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        
+        // Stay details
+        checkInDate: reservationData.checkInDate,
+        checkOutDate: reservationData.checkOutDate,
+        numGuests: reservationData.numGuests,
+        numAdults: reservationData.numAdults,
+        numChildren: reservationData.numChildren,
+        totalAmount: reservationData.totalAmount,
+        currency: reservationData.currency,
+        status: reservationData.status,
+        specialRequests: reservationData.specialRequests,
+        bookingSource: reservationData.bookingSource,
+        beds24BookingId: reservationData.beds24BookingId,
+        
+        // Room assignment (V5 schema)
+        propertyId: reservationData.propertyId,
+        roomTypeId: reservationData.roomTypeId,
+        roomUnitId: reservationData.roomUnitId,
+        roomId: reservationData.roomId, // Legacy support
+        
+        // Guest personal information (guest_* fields in DB)
+        guestFirstname: reservationData.guestFirstname,
+        guestLastname: reservationData.guestLastname,
+        guestPersonalEmail: reservationData.guestPersonalEmail,
+        guestContact: reservationData.guestContact,
+        guestAddress: reservationData.guestAddress,
+        
+        // Check-in details
+        estimatedCheckinTime: reservationData.estimatedCheckinTime,
+        travelPurpose: reservationData.travelPurpose,
+        passportUrl: reservationData.passportUrl,
+        
+        // Emergency contact
+        emergencyContactName: reservationData.emergencyContactName,
+        emergencyContactPhone: reservationData.emergencyContactPhone,
+        
+        // Administrative
+        agreementAccepted: reservationData.agreementAccepted,
+        adminVerified: reservationData.adminVerified
+      }
       
-      // Update the local state
+      // Call the API to update the reservation
+      const response = await adminAPI.updateReservation(reservationId, mappedData)
+      
+      // Update the local state with the returned data
       setReservations(prev => 
         prev.map(reservation => 
           reservation.id === reservationId 
-            ? { ...reservation, ...reservationData }
+            ? { ...reservation, ...response.data.reservation }
             : reservation
         )
       )
       
       toast.success('Reservation updated successfully')
-      return true
+      return response.data.reservation
     } catch (error) {
       console.error('Error updating reservation:', error)
       console.error('Error details:', error.response?.data)
@@ -87,7 +129,33 @@ export function useReservations() {
     try {
       setLoading(true)
       
-      const response = await adminAPI.createReservation(reservationData)
+      // Map frontend data to backend expected format
+      const mappedData = {
+        // Basic booking information
+        guestName: reservationData.bookingName || reservationData.guestName,
+        guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
+        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        
+        // Stay details
+        checkInDate: reservationData.checkInDate,
+        checkOutDate: reservationData.checkOutDate,
+        numGuests: reservationData.numGuests,
+        numAdults: reservationData.numAdults,
+        numChildren: reservationData.numChildren,
+        totalAmount: reservationData.totalAmount,
+        currency: reservationData.currency,
+        specialRequests: reservationData.specialRequests,
+        bookingSource: reservationData.bookingSource,
+        beds24BookingId: reservationData.beds24BookingId || `MANUAL-${Date.now()}`,
+        
+        // Room assignment (V5 schema)
+        propertyId: reservationData.propertyId,
+        roomTypeId: reservationData.roomTypeId,
+        roomUnitId: reservationData.roomUnitId,
+        roomId: reservationData.roomId // Legacy support
+      }
+      
+      const response = await adminAPI.createReservation(mappedData)
       const newReservation = response.data.reservation
       
       // Add to local state
@@ -177,7 +245,6 @@ export function useReservations() {
     // State
     loading,
     reservations,
-    stats,
     currentPage,
     hasMore,
     

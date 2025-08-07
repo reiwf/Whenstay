@@ -1,6 +1,6 @@
-import { useState, useCallback } from '../../$node_modules/@types/react/index.js'
+import { useState, useCallback } from 'react'
 import { adminAPI } from '../services/api'
-import toast from '../../$node_modules/react-hot-toast/dist/index.js'
+import toast from 'react-hot-toast'
 
 export function useProperties() {
   const [properties, setProperties] = useState([])
@@ -93,6 +93,82 @@ export function useProperties() {
     }
   }, [loadProperties])
 
+  // Room Type Management
+  const createRoomType = useCallback(async (propertyId, roomTypeData) => {
+    try {
+      await adminAPI.createRoomType(propertyId, roomTypeData)
+      toast.success('Room type created successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error creating room type:', error)
+      toast.error('Failed to create room type')
+      throw error
+    }
+  }, [loadProperties])
+
+  const updateRoomType = useCallback(async (roomTypeId, roomTypeData) => {
+    try {
+      await adminAPI.updateRoomType(roomTypeId, roomTypeData)
+      toast.success('Room type updated successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error updating room type:', error)
+      toast.error('Failed to update room type')
+      throw error
+    }
+  }, [loadProperties])
+
+  const deleteRoomType = useCallback(async (roomTypeId) => {
+    if (!confirm('Are you sure you want to delete this room type? This will also delete all associated room units.')) return
+    
+    try {
+      await adminAPI.deleteRoomType(roomTypeId)
+      toast.success('Room type deleted successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error deleting room type:', error)
+      toast.error('Failed to delete room type')
+    }
+  }, [loadProperties])
+
+  // Room Unit Management
+  const createRoomUnit = useCallback(async (roomTypeId, roomUnitData) => {
+    try {
+      await adminAPI.createRoomUnit(roomTypeId, roomUnitData)
+      toast.success('Room unit created successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error creating room unit:', error)
+      toast.error('Failed to create room unit')
+      throw error
+    }
+  }, [loadProperties])
+
+  const updateRoomUnit = useCallback(async (roomUnitId, roomUnitData) => {
+    try {
+      await adminAPI.updateRoomUnit(roomUnitId, roomUnitData)
+      toast.success('Room unit updated successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error updating room unit:', error)
+      toast.error('Failed to update room unit')
+      throw error
+    }
+  }, [loadProperties])
+
+  const deleteRoomUnit = useCallback(async (roomUnitId) => {
+    if (!confirm('Are you sure you want to delete this room unit?')) return
+    
+    try {
+      await adminAPI.deleteRoomUnit(roomUnitId)
+      toast.success('Room unit deleted successfully')
+      await loadProperties()
+    } catch (error) {
+      console.error('Error deleting room unit:', error)
+      toast.error('Failed to delete room unit')
+    }
+  }, [loadProperties])
+
   return {
     properties,
     loading,
@@ -102,6 +178,12 @@ export function useProperties() {
     deleteProperty,
     createRoom,
     updateRoom,
-    deleteRoom
+    deleteRoom,
+    createRoomType,
+    updateRoomType,
+    deleteRoomType,
+    createRoomUnit,
+    updateRoomUnit,
+    deleteRoomUnit
   }
 }

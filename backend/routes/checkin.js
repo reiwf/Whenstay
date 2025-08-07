@@ -31,17 +31,19 @@ router.get('/:token', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
-    // Get reservation from database
-    const reservation = await databaseService.getReservationByToken(token);
+    // Get comprehensive reservation details using guest dashboard data method
+    const dashboardData = await databaseService.getGuestDashboardData(token);
     
-    if (!reservation) {
+    if (!dashboardData) {
       return res.status(404).json({ error: 'Invalid or expired check-in link' });
     }
 
-    // Check if check-in is already completed
-    const existingCheckin = await databaseService.getGuestCheckinByReservationId(reservation.id);
+    const reservation = dashboardData.reservation;
     
-    if (existingCheckin) {
+    // Check if check-in is already completed
+    const checkinCompleted = !!reservation.checkin_submitted_at;
+    
+    if (checkinCompleted) {
       return res.status(200).json({
         reservation: {
           id: reservation.id,
@@ -50,11 +52,27 @@ router.get('/:token', async (req, res) => {
           guestPhone: reservation.booking_phone,
           checkInDate: reservation.check_in_date,
           checkOutDate: reservation.check_out_date,
-          roomNumber: reservation.room_number,
-          numGuests: reservation.num_guests
+          roomNumber: dashboardData.room.room_number,
+          roomTypes: dashboardData.room.room_type_name,
+          numGuests: reservation.num_guests,
+          // Enhanced information from reservations_details view
+          propertyName: dashboardData.property.name,
+          roomTypeName: dashboardData.room.room_type_name,
+          roomTypeDescription: dashboardData.room.room_type_description,
+          unitNumber: dashboardData.room.unit_number,
+          floorNumber: dashboardData.room.floor_number,
+          bedConfiguration: dashboardData.room.bed_configuration,
+          roomSizeSqm: dashboardData.room.room_size_sqm,
+          hasBalcony: dashboardData.room.has_balcony,
+          hasKitchen: dashboardData.room.has_kitchen,
+          maxGuests: dashboardData.room.max_guests
         },
         checkinCompleted: true,
-        checkin: existingCheckin,
+        checkin: {
+          id: reservation.id,
+          submitted_at: reservation.checkin_submitted_at,
+          admin_verified: reservation.admin_verified || false
+        },
         guestData: {
           firstName: reservation.guest_firstname,
           lastName: reservation.guest_lastname,
@@ -73,7 +91,7 @@ router.get('/:token', async (req, res) => {
       });
     }
 
-    // Return reservation details for check-in form
+    // Return enhanced reservation details for check-in form
     return res.status(200).json({
       reservation: {
         id: reservation.id,
@@ -82,8 +100,20 @@ router.get('/:token', async (req, res) => {
         guestPhone: reservation.booking_phone,
         checkInDate: reservation.check_in_date,
         checkOutDate: reservation.check_out_date,
-        roomNumber: reservation.room_number,
-        numGuests: reservation.num_guests
+        roomNumber: dashboardData.room.room_number,
+        roomTypes: dashboardData.room.room_type_name,
+        numGuests: reservation.num_guests,
+        // Enhanced information from reservations_details view
+        propertyName: dashboardData.property.name,
+        roomTypeName: dashboardData.room.room_type_name,
+        roomTypeDescription: dashboardData.room.room_type_description,
+        unitNumber: dashboardData.room.unit_number,
+        floorNumber: dashboardData.room.floor_number,
+        bedConfiguration: dashboardData.room.bed_configuration,
+        roomSizeSqm: dashboardData.room.room_size_sqm,
+        hasBalcony: dashboardData.room.has_balcony,
+        hasKitchen: dashboardData.room.has_kitchen,
+        maxGuests: dashboardData.room.max_guests
       },
       checkinCompleted: false
     });

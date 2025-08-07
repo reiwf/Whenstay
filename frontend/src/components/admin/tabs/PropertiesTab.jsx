@@ -1,21 +1,27 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { Plus, Building, MapPin, Wifi, Edit, Trash2 } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState, useMemo } from 'react'
+import { Plus, Building, MapPin, Edit, Trash2, Home, Bed } from 'lucide-react'
+import { DataTableAdvanced, EmptyState } from '../../ui'
 import PropertyModal from '../modals/PropertyModal'
-import RoomModal from '../modals/RoomModal'
+import RoomTypeModal from '../modals/RoomTypeModal'
 
 export default function PropertiesTab({ 
   properties, 
   onCreateProperty, 
   onUpdateProperty, 
   onDeleteProperty,
-  onCreateRoom,
-  onUpdateRoom,
-  onDeleteRoom
+  onCreateRoomType,
+  onUpdateRoomType,
+  onDeleteRoomType,
+  onCreateRoomUnit,
+  onUpdateRoomUnit,
+  onDeleteRoomUnit,
+  onRefresh,
+  userRole
 }) {
   const [showPropertyModal, setShowPropertyModal] = useState(false)
-  const [showRoomModal, setShowRoomModal] = useState(false)
+  const [showRoomTypeModal, setShowRoomTypeModal] = useState(false)
   const [editingProperty, setEditingProperty] = useState(null)
-  const [editingRoom, setEditingRoom] = useState(null)
+  const [editingRoomType, setEditingRoomType] = useState(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState(null)
 
   const handleCreateProperty = async (propertyData) => {
@@ -30,173 +36,181 @@ export default function PropertiesTab({
     setEditingProperty(null)
   }
 
-  const handleCreateRoom = async (roomData) => {
-    await onCreateRoom(selectedPropertyId, roomData)
-    setShowRoomModal(false)
-    setEditingRoom(null)
+
+  const handleCreateRoomType = async (roomTypeData) => {
+    await onCreateRoomType(selectedPropertyId, roomTypeData)
+    setShowRoomTypeModal(false)
+    setEditingRoomType(null)
     setSelectedPropertyId(null)
   }
 
-  const handleUpdateRoom = async (roomData) => {
-    await onUpdateRoom(editingRoom.id, roomData)
-    setShowRoomModal(false)
-    setEditingRoom(null)
+  const handleUpdateRoomType = async (roomTypeId, roomTypeData) => {
+    await onUpdateRoomType(roomTypeId, roomTypeData)
+    // Don't close modal after update - let user continue editing
   }
+
+  // Check if user has admin permissions (not owner role)
+  const isReadOnly = userRole === 'owner'
+
+  // Define columns for the properties table
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'name',
+      header: 'Property Name',
+      cell: ({ getValue, row }) => (
+        <div className="flex items-center">
+          <Building className="w-4 h-4 mr-2 text-primary-600" />
+          <span className="font-medium text-gray-900">{getValue()}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'address',
+      header: 'Location',
+      cell: ({ getValue }) => (
+        <div className="flex items-center text-gray-600">
+          <MapPin className="w-4 h-4 mr-1" />
+          {getValue()}
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'room_types',
+      header: 'Room Types & Units',
+      cell: ({ getValue }) => {
+        const roomTypes = getValue() || [];
+        
+        if (roomTypes.length === 0) {
+          return (
+            <div className="flex items-center space-x-2 text-gray-400">
+              <Home className="w-4 h-4" />
+              <span>No room types</span>
+            </div>
+          );
+        }
+
+        const totalUnits = roomTypes.reduce((sum, rt) => sum + (rt.room_units?.length || 0), 0);
+        
+        return (
+          <div className="flex items-center space-x-2">
+            <Home className="w-4 h-4 text-gray-500" />
+            <span className="text-sm">{roomTypes.length} types</span>
+            <Bed className="w-3 h-3 text-gray-400 ml-2" />
+            <span className="text-sm text-gray-500">{totalUnits} units</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'stats',
+      header: 'Performance',
+      cell: ({ getValue }) => {
+        const stats = getValue();
+        if (!stats) return <span className="text-gray-400">-</span>;
+        return (
+          <div className="space-y-1">
+            <div className="text-sm">
+              <span className="text-gray-600">Revenue: </span>
+              <span className="font-medium">${stats.totalRevenue?.toFixed(0) || 0}</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              {stats.upcomingReservations} upcoming
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const property = row.original;
+        
+        return (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => {
+                setSelectedPropertyId(property.id)
+                setEditingRoomType(null)
+                setShowRoomTypeModal(true)
+              }}
+              className="inline-flex items-center px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+              title="Manage Room Types & Units"
+            >
+              <Home className="w-3 h-3 mr-1" />
+              Room
+            </button>
+            
+            {!isReadOnly && (
+              <>
+                <button
+                  onClick={() => {
+                    setEditingProperty(property)
+                    setShowPropertyModal(true)
+                  }}
+                  className="inline-flex items-center px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  title="Edit Property"
+                >
+                  <Building className="w-4 h-4 mr-1" />
+                  Property
+                </button>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+  ], [isReadOnly, onDeleteProperty]);
 
   return (
     <div className="space-y-6">
-      {/* Properties Header */}
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold text-gray-900">Property Management</h2>
-        <button
-          onClick={() => {
-            setEditingProperty(null)
-            setShowPropertyModal(true)
-          }}
-          className="btn-primary"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Property
-        </button>
-      </div>
-
-      {/* Properties List */}
-      {properties.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {properties.map((property) => (
-            <div key={property.id} className="card">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{property.name}</h3>
-                  <p className="text-sm text-gray-600 flex items-center mt-1">
-                    <MapPin className="w-4 h-4 mr-1" />
-                    {property.address}
-                  </p>
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => {
-                      setEditingProperty(property)
-                      setShowPropertyModal(true)
-                    }}
-                    className="text-gray-400 hover:text-primary-600"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDeleteProperty(property.id)}
-                    className="text-gray-400 hover:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Property Stats */}
-              {property.stats && (
-                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-gray-900">{property.stats.totalRooms}</p>
-                    <p className="text-xs text-gray-600">Rooms</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-gray-900">{property.stats.upcomingReservations}</p>
-                    <p className="text-xs text-gray-600">Upcoming</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-gray-900">${property.stats.totalRevenue?.toFixed(0) || 0}</p>
-                    <p className="text-xs text-gray-600">Revenue</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Property Details */}
-              <div className="space-y-2 mb-4">
-                {property.wifi_name && (
-                  <p className="text-sm text-gray-600 flex items-center">
-                    <Wifi className="w-4 h-4 mr-2" />
-                    {property.wifi_name}
-                  </p>
-                )}
-                {property.description && (
-                  <p className="text-sm text-gray-600">{property.description}</p>
-                )}
-              </div>
-
-              {/* Rooms */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-medium text-gray-900">Rooms ({property.rooms?.length || 0})</h4>
-                  <button
-                    onClick={() => {
-                      setSelectedPropertyId(property.id)
-                      setEditingRoom(null)
-                      setShowRoomModal(true)
-                    }}
-                    className="text-primary-600 hover:text-primary-700 text-sm"
-                  >
-                    <Plus className="w-3 h-3 inline mr-1" />
-                    Add Room
-                  </button>
-                </div>
-                
-                {property.rooms && property.rooms.length > 0 ? (
-                  <div className="space-y-2">
-                    {property.rooms.slice(0, 3).map((room) => (
-                      <div key={room.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <div>
-                          <span className="text-sm font-medium">{room.room_number}</span>
-                          {room.room_name && (
-                            <span className="text-sm text-gray-600 ml-2">- {room.room_name}</span>
-                          )}
-                        </div>
-                        <div className="flex space-x-1">
-                          <button
-                            onClick={() => {
-                              setEditingRoom(room)
-                              setShowRoomModal(true)
-                            }}
-                            className="text-gray-400 hover:text-primary-600"
-                          >
-                            <Edit className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => onDeleteRoom(room.id)}
-                            className="text-gray-400 hover:text-red-600"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {property.rooms.length > 3 && (
-                      <p className="text-xs text-gray-500 text-center">
-                        +{property.rooms.length - 3} more rooms
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No rooms added yet</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <Building className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">No properties found</p>
-          <p className="text-sm text-gray-400 mt-2">
-            Create your first property to get started
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isReadOnly ? 'My Properties' : 'Property Management'}
+          </h2>
+          <p className="text-gray-600">
+            {isReadOnly 
+              ? 'View and manage your property portfolio' 
+              : 'Manage properties, room types, and units'
+            }
           </p>
         </div>
-      )}
+        {!isReadOnly && (
+          <button
+            onClick={() => {
+              setEditingProperty(null)
+              setShowPropertyModal(true)
+            }}
+            className="btn-primary"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Property
+          </button>
+        )}
+      </div>
+
+      {/* Properties Table */}
+      <DataTableAdvanced
+        data={properties || []}
+        columns={columns}
+        loading={false}
+        searchable={true}
+        filterable={true}
+        exportable={true}
+        pageSize={15}
+        emptyMessage="No properties found"
+        emptyIcon={Building}
+        className="w-full"
+      />
 
       {/* Property Modal */}
       {showPropertyModal && (
         <PropertyModal
           property={editingProperty}
           onSave={editingProperty ? handleUpdateProperty : handleCreateProperty}
+          onDelete={onDeleteProperty}
           onClose={() => {
             setShowPropertyModal(false)
             setEditingProperty(null)
@@ -204,14 +218,21 @@ export default function PropertiesTab({
         />
       )}
 
-      {/* Room Modal */}
-      {showRoomModal && (
-        <RoomModal
-          room={editingRoom}
-          onSave={editingRoom ? handleUpdateRoom : handleCreateRoom}
+
+      {/* Room Type Modal */}
+      {showRoomTypeModal && (
+        <RoomTypeModal
+          roomType={editingRoomType}
+          propertyId={selectedPropertyId}
+          onCreateRoomType={handleCreateRoomType}
+          onUpdateRoomType={handleUpdateRoomType}
+          onCreateRoomUnit={onCreateRoomUnit}
+          onUpdateRoomUnit={onUpdateRoomUnit}
+          onDeleteRoomUnit={onDeleteRoomUnit}
+          onDeleteRoomType={onDeleteRoomType}
           onClose={() => {
-            setShowRoomModal(false)
-            setEditingRoom(null)
+            setShowRoomTypeModal(false)
+            setEditingRoomType(null)
             setSelectedPropertyId(null)
           }}
         />

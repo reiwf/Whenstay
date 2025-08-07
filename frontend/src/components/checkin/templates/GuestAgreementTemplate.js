@@ -11,8 +11,7 @@ By completing this check-in process, you acknowledge that you have read, underst
 • No parties or events are allowed without prior written consent
 
 **2. CHECK-IN AND CHECK-OUT**
-• Check-in time is after 3:00 PM, check-out time is before 11:00 AM
-• Late check-out may be available upon request and may incur additional charges
+• Check-in time is after 4:00 PM, check-out time is before 10:00 AM
 • You are responsible for returning all keys, access cards, and property items upon departure
 • Room access codes are confidential and should not be shared with unauthorized persons
 
@@ -60,3 +59,7 @@ By checking the agreement box and completing your check-in, you acknowledge that
 `
 
 export default GUEST_AGREEMENT_TEMPLATE
+
+
+
+

@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { Upload, FileText, CheckCircle, AlertCircle } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 import FileUpload from '../../FileUpload'
 import StepNavigation from '../shared/StepNavigation'
 
@@ -22,6 +22,16 @@ export default function Step3DocumentUpload({
 
   const handleUploadError = (error) => {
     setUploadError(error)
+  }
+
+  const handleDeleteExisting = async () => {
+    // Clear the existing passport URL from form data
+    onUpdateFormData({ 
+      passportFile: null,
+      passportUrl: null,
+      passportFilePath: null
+    })
+    setUploadError('')
   }
 
   const handleNext = () => {
@@ -52,65 +62,26 @@ export default function Step3DocumentUpload({
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h4 className="font-medium text-blue-800 mb-2">Accepted Documents:</h4>
             <ul className="text-blue-700 space-y-1">
               <li>• Passport (preferred)</li>
               <li>• Driver's License</li>
-              <li>• National ID Card</li>
-              <li>• Government-issued Photo ID</li>
             </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-blue-800 mb-2">Photo Guidelines:</h4>
-            <ul className="text-blue-700 space-y-1">
-              <li>• Clear, well-lit photo</li>
-              <li>• All text must be readable</li>
-              <li>• No glare or shadows</li>
-              <li>• Document must be flat</li>
-            </ul>
-          </div>
+          </div>          
         </div>
       </div>
 
       {/* File Upload Section */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-6">
-        {isDocumentUploaded ? (
-          <div className="text-center">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Document Uploaded Successfully
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Your {formData.passportFile?.name || 'document'} has been uploaded
-            </p>
-            <button
-              onClick={() => onUpdateFormData({ passportFile: null, passportUrl: null })}
-              className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-            >
-              Upload a different document
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div className="text-center mb-6">
-              <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Upload Your Document
-              </h3>
-              <p className="text-gray-600">
-                Drag and drop your file here, or click to browse
-              </p>
-            </div>
-            
-            <FileUpload
-              onFileUpload={handleFileUpload}
-              onError={handleUploadError}
-              accept="image/*"
-              maxSize={10 * 1024 * 1024} // 10MB
-              className="w-full"
-            />
-          </div>
-        )}
+      <div className="mb-6">
+        <FileUpload
+          onFileUpload={handleFileUpload}
+          onError={handleUploadError}
+          onDeleteExisting={handleDeleteExisting}
+          initialImageUrl={formData.passportUrl}
+          accept="image/*"
+          maxSize={10 * 1024 * 1024} // 10MB
+          className="w-full"
+          showFileName={true}
+        />
       </div>
 
       {/* Upload Error */}
@@ -146,24 +117,6 @@ export default function Step3DocumentUpload({
         </div>
       </div>
 
-      {/* Tips for Good Photos */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-        <h4 className="text-sm font-semibold text-yellow-900 mb-2">
-          Tips for a Good Photo
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-yellow-800 text-sm">
-          <ul className="space-y-1">
-            <li>• Use good lighting (natural light works best)</li>
-            <li>• Place document on a flat, dark surface</li>
-            <li>• Hold camera directly above the document</li>
-          </ul>
-          <ul className="space-y-1">
-            <li>• Ensure all corners are visible</li>
-            <li>• Avoid shadows and reflections</li>
-            <li>• Make sure text is sharp and readable</li>
-          </ul>
-        </div>
-      </div>
 
       <StepNavigation
         currentStep={3}

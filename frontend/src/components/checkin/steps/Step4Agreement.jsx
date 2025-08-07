@@ -1,5 +1,5 @@
-import { useState } from '../../../../$node_modules/@types/react/index.js'
-import { FileText, CheckCircle, AlertCircle } from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
+import { useState } from 'react'
+import { FileText, CheckCircle, AlertCircle } from 'lucide-react'
 import StepNavigation from '../shared/StepNavigation'
 import { GUEST_AGREEMENT_TEMPLATE } from '../templates/GuestAgreementTemplate'
 
@@ -8,7 +8,9 @@ export default function Step4Agreement({
   onUpdateFormData, 
   onSubmit, 
   onPrevious,
-  isSubmitting = false 
+  isSubmitting = false,
+  checkinCompleted = false,
+  isModificationMode = false
 }) {
   const [hasReadAgreement, setHasReadAgreement] = useState(false)
   const [agreementAccepted, setAgreementAccepted] = useState(formData.agreementAccepted || false)
@@ -130,9 +132,9 @@ export default function Step4Agreement({
             checked={agreementAccepted}
             onChange={(e) => handleAgreementChange(e.target.checked)}
             disabled={!hasReadAgreement}
-            className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50"
+            className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 transform scale-150"
           />
-          <label htmlFor="agreement" className="text-sm text-gray-700">
+          <label htmlFor="agreement" className="text-sm text-gray-700 cursor-pointer select-none">
             <span className="font-medium">I acknowledge that I have read, understood, and agree to comply with all terms and conditions outlined in this guest agreement.</span>
             <br />
             <span className="text-gray-600">
@@ -164,19 +166,6 @@ export default function Step4Agreement({
         </div>
       )}
 
-      {/* Final Information */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-        <h4 className="text-sm font-semibold text-blue-900 mb-2">
-          What happens next?
-        </h4>
-        <ul className="text-blue-800 text-sm space-y-1">
-          <li>• Your check-in information will be submitted for review</li>
-          <li>• You'll receive a confirmation email with property access details</li>
-          <li>• Property management will verify your information</li>
-          <li>• You'll be notified when your check-in is approved</li>
-        </ul>
-      </div>
-
       <StepNavigation
         currentStep={4}
         totalSteps={4}
@@ -185,6 +174,7 @@ export default function Step4Agreement({
         isNextDisabled={!agreementAccepted || !hasReadAgreement}
         isLoading={isSubmitting}
         nextButtonText="Complete Check-in"
+        showNext={!(checkinCompleted && agreementAccepted && !isModificationMode)}
       />
     </div>
   )

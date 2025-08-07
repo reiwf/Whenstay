@@ -1,8 +1,8 @@
-const express = require('./$node_modules/express/index.js');
-const cors = require('./$node_modules/cors/lib/index.js');
-const helmet = require('./$node_modules/helmet/index.d.cts');
-const rateLimit = require('./$node_modules/express-rate-limit/dist/index.d.cts');
-require('./$node_modules/dotenv/lib/main.js').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,14 +39,16 @@ app.get('/health', (req, res) => {
 const webhookRoutes = require('./routes/webhooks');
 const reservationRoutes = require('./routes/reservations');
 const checkinRoutes = require('./routes/checkin');
-const adminRoutes = require('./routes/admin');
+const dashboardRoutes = require('./routes/dashboard');
+const guestRoutes = require('./routes/guest');
 const testRoutes = require('./routes/test');
 
 // API routes
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/checkin', checkinRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/guest', guestRoutes);
 app.use('/api/test', testRoutes);
 
 // 404 handler

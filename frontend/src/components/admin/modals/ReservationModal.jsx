@@ -1,4 +1,4 @@
-import { useState, useEffect } from '../../../../$node_modules/@types/react/index.js'
+import { useState, useEffect } from 'react'
 import { 
   Calendar, 
   Users, 
@@ -21,19 +21,21 @@ import {
   CreditCard,
   BookImage,
   UserPlus
-} from '../../../../$node_modules/lucide-react/dist/lucide-react.js'
-import toast from '../../../../$node_modules/react-hot-toast/dist/index.js'
+} from 'lucide-react'
+import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
   const [formData, setFormData] = useState({
-    // Basic guest info
-    guestName: reservation?.guest_name || '',
+    // Basic booking info (maps to booking_* fields in DB)
+    bookingName: reservation?.booking_name || reservation?.guest_name || '',
+    bookingEmail: reservation?.booking_email || reservation?.guest_email || '',
+    bookingPhone: reservation?.booking_phone || reservation?.guest_phone || '',
+    
+    // Guest personal info (maps to guest_* fields in DB)
     guestFirstname: reservation?.guest_firstname || '',
     guestLastname: reservation?.guest_lastname || '',
-    guestEmail: reservation?.guest_email || '',
-    guestPersonalEmail: reservation?.guest_personal_email || '',
-    guestPhone: reservation?.guest_phone || '',
+    guestPersonalEmail: reservation?.guest_mail || reservation?.guest_personal_email || '',
     guestContact: reservation?.guest_contact || '',
     guestAddress: reservation?.guest_address || '',
     
@@ -46,10 +48,15 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     totalAmount: reservation?.total_amount || '',
     currency: reservation?.currency || 'USD',
     status: reservation?.status || 'pending',
-    roomId: reservation?.room_id || '',
     specialRequests: reservation?.special_requests || '',
     bookingSource: reservation?.booking_source || '',
     beds24BookingId: reservation?.beds24_booking_id || '',
+    
+    // V5 Room assignment
+    propertyId: reservation?.property_id || '',
+    roomTypeId: reservation?.room_type_id || '',
+    roomUnitId: reservation?.room_unit_id || '',
+    roomId: reservation?.room_id || '', // Legacy support
     
     // Check-in information
     estimatedCheckinTime: reservation?.estimated_checkin_time || '',
@@ -74,33 +81,59 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     admin: false
   })
 
-  // Get available rooms from properties
+  // Get available rooms from properties (V5 schema: room_types -> room_units)
   const availableRooms = properties.reduce((rooms, property) => {
+    // V5 structure: room_types -> room_units
+    if (property.room_types) {
+      property.room_types.forEach(roomType => {
+        if (roomType.room_units) {
+          roomType.room_units.forEach(roomUnit => {
+            rooms.push({
+              id: roomUnit.id,
+              roomUnitId: roomUnit.id,
+              roomTypeId: roomType.id,
+              propertyId: property.id,
+              label: `${property.name} - ${roomType.name} - Unit ${roomUnit.unit_number}${roomUnit.floor_number ? ` (Floor ${roomUnit.floor_number})` : ''}`,
+              propertyName: property.name,
+              roomTypeName: roomType.name,
+              unitNumber: roomUnit.unit_number,
+              floorNumber: roomUnit.floor_number
+            })
+          })
+        }
+      })
+    }
+    
+    // Legacy support: direct rooms
     if (property.rooms) {
       property.rooms.forEach(room => {
         rooms.push({
           id: room.id,
+          roomId: room.id, // Legacy room ID
+          propertyId: property.id,
           label: `${property.name} - Room ${room.room_number}${room.room_name ? ` (${room.room_name})` : ''}`,
           propertyName: property.name,
           roomNumber: room.room_number,
-          roomName: room.room_name
+          roomName: room.room_name,
+          isLegacy: true
         })
       })
     }
+    
     return rooms
   }, [])
 
   const validateForm = () => {
     const newErrors = {}
 
-    // Required fields
-    if (!formData.guestName.trim()) {
-      newErrors.guestName = 'Guest name is required'
+    // Required fields - using correct field names
+    if (!formData.bookingName.trim()) {
+      newErrors.bookingName = 'Guest name is required'
     }
-    if (!formData.guestEmail.trim()) {
-      newErrors.guestEmail = 'Guest email is required'
-    } else if (!/\S+@\S+\.\S+/.test(formData.guestEmail)) {
-      newErrors.guestEmail = 'Please enter a valid email address'
+    if (!formData.bookingEmail.trim()) {
+      newErrors.bookingEmail = 'Guest email is required'
+    } else if (!/\S+@\S+\.\S+/.test(formData.bookingEmail)) {
+      newErrors.bookingEmail = 'Please enter a valid email address'
     }
     if (!formData.checkInDate) {
       newErrors.checkInDate = 'Check-in date is required'
@@ -108,8 +141,10 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     if (!formData.checkOutDate) {
       newErrors.checkOutDate = 'Check-out date is required'
     }
-    if (!formData.roomId) {
-      newErrors.roomId = 'Room selection is required'
+    
+    // Room assignment validation - check for either V5 or legacy room assignment
+    if (!formData.roomUnitId && !formData.roomId) {
+      newErrors.roomAssignment = 'Room selection is required'
     }
 
     // Date validation
@@ -154,13 +189,15 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     
     try {
       const submitData = {
-        // Basic guest info
-        guestName: formData.guestName,
+        // Basic booking info (maps to booking_* fields in DB)
+        bookingName: formData.bookingName,
+        bookingEmail: formData.bookingEmail,
+        bookingPhone: formData.bookingPhone || null,
+        
+        // Guest personal info (maps to guest_* fields in DB)
         guestFirstname: formData.guestFirstname || null,
         guestLastname: formData.guestLastname || null,
-        guestEmail: formData.guestEmail,
         guestPersonalEmail: formData.guestPersonalEmail || null,
-        phoneNumber: formData.guestPhone || null,
         guestContact: formData.guestContact || null,
         guestAddress: formData.guestAddress || null,
         
@@ -173,10 +210,15 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         totalAmount: formData.totalAmount ? parseFloat(formData.totalAmount) : null,
         currency: formData.currency,
         status: formData.status,
-        roomId: formData.roomId,
         specialRequests: formData.specialRequests || null,
         bookingSource: formData.bookingSource || null,
         beds24BookingId: formData.beds24BookingId || null,
+        
+        // V5 Room assignment
+        propertyId: formData.propertyId || null,
+        roomTypeId: formData.roomTypeId || null,
+        roomUnitId: formData.roomUnitId || null,
+        // Note: roomId field removed in V5 schema
         
         // Check-in information
         estimatedCheckinTime: formData.estimatedCheckinTime || null,
@@ -377,17 +419,17 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         <input
                           type="text"
                           required
-                          value={formData.guestName}
-                          onChange={(e) => setFormData({ ...formData, guestName: e.target.value })}
+                          value={formData.bookingName}
+                          onChange={(e) => setFormData({ ...formData, bookingName: e.target.value })}
                           className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            errors.guestName ? 'border-red-300' : 'border-gray-300'
+                            errors.bookingName ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="John Smith"
                         />
-                        {errors.guestName && (
+                        {errors.bookingName && (
                           <p className="text-red-500 text-xs mt-1 flex items-center">
                             <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.guestName}
+                            {errors.bookingName}
                           </p>
                         )}
                       </div>
@@ -399,17 +441,17 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         <input
                           type="email"
                           required
-                          value={formData.guestEmail}
-                          onChange={(e) => setFormData({ ...formData, guestEmail: e.target.value })}
+                          value={formData.bookingEmail}
+                          onChange={(e) => setFormData({ ...formData, bookingEmail: e.target.value })}
                           className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            errors.guestEmail ? 'border-red-300' : 'border-gray-300'
+                            errors.bookingEmail ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="john@example.com"
                         />
-                        {errors.guestEmail && (
+                        {errors.bookingEmail && (
                           <p className="text-red-500 text-xs mt-1 flex items-center">
                             <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.guestEmail}
+                            {errors.bookingEmail}
                           </p>
                         )}
                       </div>
@@ -420,8 +462,8 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         </label>
                         <input
                           type="tel"
-                          value={formData.guestPhone}
-                          onChange={(e) => setFormData({ ...formData, guestPhone: e.target.value })}
+                          value={formData.bookingPhone}
+                          onChange={(e) => setFormData({ ...formData, bookingPhone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="+1 (555) 123-4567"
                         />
@@ -561,10 +603,33 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                       </label>
                       <select
                         required
-                        value={formData.roomId}
-                        onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                        value={formData.roomUnitId || formData.roomId || ''}
+                        onChange={(e) => {
+                          const selectedRoom = availableRooms.find(room => room.id === e.target.value)
+                          if (selectedRoom) {
+                            if (selectedRoom.isLegacy) {
+                              // Legacy room selection
+                              setFormData({ 
+                                ...formData, 
+                                roomId: selectedRoom.id,
+                                roomUnitId: '',
+                                roomTypeId: '',
+                                propertyId: selectedRoom.propertyId
+                              })
+                            } else {
+                              // V5 room unit selection
+                              setFormData({ 
+                                ...formData, 
+                                roomUnitId: selectedRoom.roomUnitId,
+                                roomTypeId: selectedRoom.roomTypeId,
+                                propertyId: selectedRoom.propertyId,
+                                roomId: '' // Clear legacy room ID
+                              })
+                            }
+                          }
+                        }}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          errors.roomId ? 'border-red-300' : 'border-gray-300'
+                          errors.roomAssignment ? 'border-red-300' : 'border-gray-300'
                         }`}
                       >
                         <option value="">Select a room</option>
@@ -574,10 +639,10 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           </option>
                         ))}
                       </select>
-                      {errors.roomId && (
+                      {errors.roomAssignment && (
                         <p className="text-red-500 text-xs mt-1 flex items-center">
                           <AlertCircle className="w-3 h-3 mr-1" />
-                          {errors.roomId}
+                          {errors.roomAssignment}
                         </p>
                       )}
                     </div>

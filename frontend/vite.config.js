@@ -1,9 +1,15 @@
-import { defineConfig } from './$node_modules/vite/dist/node/index.js'
-import react from './$node_modules/@vitejs/plugin-react/dist/index.js'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
   server: {
     port: 3000,
     strictPort: false,

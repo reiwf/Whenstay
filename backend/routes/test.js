@@ -1,6 +1,6 @@
-const express = require('../$node_modules/express/index.js');
+const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('../$node_modules/uuid/dist/index.js');
+const { v4: uuidv4 } = require('uuid');
 
 // Simple test reservations data with consistent tokens
 const testReservations = [
