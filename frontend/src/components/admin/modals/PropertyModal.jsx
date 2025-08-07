@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Building, Users, Wifi, Settings, Bed, Plus, X, Check } from 'lucide-react'
+import { MapPin, Building, Users, Wifi, Settings, Bed, Plus, X, Check, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 import { adminAPI } from '../../../services/api'
@@ -47,7 +47,7 @@ const TABS = [
   { id: 'integration', label: 'Integration', icon: Settings }
 ]
 
-export default function PropertyModal({ property, onSave, onClose }) {
+export default function PropertyModal({ property, onSave, onClose, onDelete }) {
   const { profile } = useAuth()
   const [activeTab, setActiveTab] = useState('basic')
   const [loading, setLoading] = useState(false)
@@ -199,6 +199,23 @@ export default function PropertyModal({ property, onSave, onClose }) {
       toast.error('Failed to save property')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!property || !onDelete) return
+    
+    if (!confirm(`Are you sure you want to delete "${property.name}"? This will also delete all associated room types and units. This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await onDelete(property.id)
+      toast.success('Property deleted successfully')
+      onClose()
+    } catch (error) {
+      console.error('Error deleting property:', error)
+      toast.error('Failed to delete property')
     }
   }
 
@@ -639,19 +656,15 @@ export default function PropertyModal({ property, onSave, onClose }) {
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
             <div className="flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                {activeTab !== 'basic' && (
+              <div className="flex items-center space-x-4">
+                {property && onDelete && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const currentIndex = TABS.findIndex(tab => tab.id === activeTab)
-                      if (currentIndex > 0) {
-                        setActiveTab(TABS[currentIndex - 1].id)
-                      }
-                    }}
-                    className="text-primary-600 hover:text-primary-700"
+                    onClick={handleDelete}
+                    className="flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
                   >
-                    ← Previous
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Property
                   </button>
                 )}
               </div>
