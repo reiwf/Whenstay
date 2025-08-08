@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 const beds24Service = require('../services/beds24Service');
 
 // Real authentication middleware with JWT verification

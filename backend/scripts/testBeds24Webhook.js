@@ -3,7 +3,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const express = require('express');
 const axios = require('axios');
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 
 
 // Sample Beds24 webhook payload based on the example in the database

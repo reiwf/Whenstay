@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 
 async function testBookingExtension() {
   console.log('🧪 Testing Booking Extension Scenario...\n');

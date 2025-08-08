@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 const emailService = require('../services/emailService');
 const { supabaseAdmin } = require('../config/supabase');
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 const emailService = require('../services/emailService');
 
 // Middleware to capture raw body for webhook signature verification
