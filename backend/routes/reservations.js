@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 
 // Get reservations from Beds24 (for testing/debugging)
 router.get('/beds24', async (req, res) => {

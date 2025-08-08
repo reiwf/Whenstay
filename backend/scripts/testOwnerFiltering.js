@@ -1,5 +1,5 @@
 require('dotenv').config();
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 
 async function testOwnerFiltering() {
   try {

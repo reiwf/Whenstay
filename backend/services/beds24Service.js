@@ -1,5 +1,6 @@
 const axios = require('axios');
-const databaseService = require('./databaseService');
+const databaseService = require('./index');
+const { supabaseAdmin } = require('../config/supabase');
 
 class Beds24Service {
   constructor() {
@@ -188,7 +189,7 @@ class Beds24Service {
           
           try {
             // Try to find room unit by room type and unit number using databaseService
-            const { data: existingUnits, error } = await databaseService.supabaseAdmin
+            const { data: existingUnits, error } = await supabaseAdmin
               .from('room_units')
               .select('id')
               .eq('room_type_id', roomTypeId)

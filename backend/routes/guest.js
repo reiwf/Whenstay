@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const databaseService = require('../services');
 
 // Get guest dashboard data by check-in token
 router.get('/:token', async (req, res) => {
