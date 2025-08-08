@@ -14,8 +14,8 @@ import {
   CheckCircle,
   Home,
   MessageCircle,
-  Bed,
-  Star,
+  PlaneLanding,
+  PlaneTakeoff,
   Building,
   Utensils,
   Camera,
@@ -23,10 +23,10 @@ import {
   ShoppingBag,
   Coffee,
   Unlock,
-  FileText
+  FileText,
+  ArrowLeft
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
-import DashboardLayout from '../components/layout/DashboardLayout'
 
 export default function GuestDashboard() {
   const { token } = useParams()
@@ -36,6 +36,7 @@ export default function GuestDashboard() {
   const [dashboardData, setDashboardData] = useState(null)
   const [checkinStatus, setCheckinStatus] = useState(null)
   const [activeSection, setActiveSection] = useState('overview')
+  const [countdown, setCountdown] = useState('')
 
   useEffect(() => {
     if (token) {
@@ -56,6 +57,92 @@ export default function GuestDashboard() {
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location.state, navigate, location.pathname])
+
+  // Countdown timer effect
+  useEffect(() => {
+    let intervalId = null
+
+    const updateCountdown = () => {
+      if (!dashboardData || !dashboardData.property?.access_time || canAccessRoomDetails()) {
+        setCountdown('')
+        return
+      }
+
+      const { reservation, property } = dashboardData
+      const now = new Date()
+      const today = now.getFullYear() + '-' + 
+                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(now.getDate()).padStart(2, '0')
+      
+      const checkinDateObj = new Date(reservation.check_in_date)
+      const checkinDate = checkinDateObj.getFullYear() + '-' + 
+                         String(checkinDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+                         String(checkinDateObj.getDate()).padStart(2, '0')
+
+      // Create target access time
+      const [accessHour, accessMinute] = property.access_time.split(':').map(num => parseInt(num, 10))
+      
+      let targetTime
+      if (today < checkinDate) {
+        // Before check-in date - target is access time on check-in date
+        targetTime = new Date(checkinDateObj)
+        targetTime.setHours(accessHour, accessMinute, 0, 0)
+      } else if (today === checkinDate) {
+        // On check-in date - target is access time today
+        targetTime = new Date()
+        targetTime.setHours(accessHour, accessMinute, 0, 0)
+      } else {
+        // After check-in date - no countdown needed
+        setCountdown('')
+        return
+      }
+
+      const timeDiff = targetTime.getTime() - now.getTime()
+      
+      if (timeDiff <= 0) {
+        setCountdown('Available now!')
+        return
+      }
+
+      // Calculate time remaining
+      const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000)
+
+      // Set countdown as object with individual values
+      setCountdown({
+        days,
+        hours,
+        minutes,
+        seconds,
+        expired: false
+      })
+    }
+
+    if (dashboardData && !canAccessRoomDetails()) {
+      updateCountdown()
+      intervalId = setInterval(updateCountdown, 1000)
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [dashboardData, checkinStatus])
+
+   const formatCountdown = (countdown) => {
+    if (!countdown || countdown.expired) return null
+    
+    const parts = []
+    if (countdown.days > 0) parts.push(`${countdown.days}d`)
+    if (countdown.hours > 0) parts.push(`${countdown.hours}h`)
+    if (countdown.minutes > 0) parts.push(`${countdown.minutes}m`)
+    if (countdown.seconds > 0 || parts.length === 0) parts.push(`${countdown.seconds}s`)
+    
+    return parts.join(' ')
+  }
 
   const loadGuestData = async () => {
     try {
@@ -122,7 +209,6 @@ export default function GuestDashboard() {
   // Check if guest can access room details based on time and check-in status
   const canAccessRoomDetails = () => {
     if (!dashboardData || !checkinStatus?.completed) {
-      console.log('Cannot access room details: Dashboard data or check-in not completed')
       return false
     }
 
@@ -140,24 +226,17 @@ export default function GuestDashboard() {
                        String(checkinDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
                        String(checkinDateObj.getDate()).padStart(2, '0')
     
-    console.log('Today (Local YYYY-MM-DD):', today)
-    console.log('Check-in Date (Local YYYY-MM-DD):', checkinDate)
-    console.log('Current local time:', now.toLocaleTimeString())
-
     // Check if today is before the check-in date
     if (today < checkinDate) {
-      console.log('Before check-in date, access denied')
       return false
     }
 
     // If today is after the check-in date, allow full access
     if (today > checkinDate) {
-      console.log('After check-in date, full access granted')
       return true
     }
 
-    // If today IS the check-in date, check access time
-    console.log('Today is check-in date, checking access time...')
+
     
     // If there's an access time specified, check if current time is past access time
     if (property.access_time) {
@@ -168,19 +247,12 @@ export default function GuestDashboard() {
       // Parse access time (format: "14:00:00" or "14:00")
       const [accessHour, accessMinute] = property.access_time.split(':').map(num => parseInt(num, 10))
       const accessTimeInMinutes = accessHour * 60 + accessMinute
-
-      console.log('Current time in minutes:', currentTimeInMinutes)
-      console.log('Access time in minutes:', accessTimeInMinutes)
-      console.log('Access time:', property.access_time)
       
       const canAccess = currentTimeInMinutes >= accessTimeInMinutes
-      console.log('Can access room details:', canAccess)
       
       return canAccess
     }
 
-    // If no access time is set, allow access immediately on check-in date
-    console.log('No access time set, allowing access on check-in date')
     return true
   }
 
@@ -238,23 +310,17 @@ export default function GuestDashboard() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="flex items-center">
-                <Calendar className="w-5 h-5 text-gray-400 mr-3" />
+                <PlaneLanding className="w-5 h-5 text-gray-400 mr-3" />
                 <div>
                   <p className="text-sm text-gray-600">Check-in Date</p>
                   <p className="font-medium">{new Date(reservation.check_in_date).toLocaleDateString()}</p>
                 </div>
               </div>
               
-              <div className="flex items-center">
-                <Calendar className="w-5 h-5 text-gray-400 mr-3" />
-                <div>
-                  <p className="text-sm text-gray-600">Check-out Date</p>
-                  <p className="font-medium">{new Date(reservation.check_out_date).toLocaleDateString()}</p>
-                </div>
-              </div>
+              
               
               <div className="flex items-center">
                 <Users className="w-5 h-5 text-gray-400 mr-3" />
@@ -264,29 +330,12 @@ export default function GuestDashboard() {
                 </div>
               </div>
             </div>
-
             <div className="space-y-4">
               <div className="flex items-center">
-                <Building className="w-5 h-5 text-gray-400 mr-3" />
+                <PlaneTakeoff className="w-5 h-5 text-gray-400 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Property</p>
-                  <p className="font-medium">{property.name}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center">
-                <Home className="w-5 h-5 text-gray-400 mr-3" />
-                <div>
-                  <p className="text-sm text-gray-600">Room</p>
-                  <p className="font-medium">{room.room_name}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center">
-                <MapPin className="w-5 h-5 text-gray-400 mr-3" />
-                <div>
-                  <p className="text-sm text-gray-600">Address</p>
-                  <p className="font-medium">{property.address}</p>
+                  <p className="text-sm  text-gray-600">Check-out Date</p>
+                  <p className="font-medium">{new Date(reservation.check_out_date).toLocaleDateString()}</p>
                 </div>
               </div>
             </div>
@@ -378,25 +427,57 @@ export default function GuestDashboard() {
           </div>
         )}
 
-        {/* Access Time Information */}
+        {/* Access Time Information with Countdown */}
         {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
           <div className="card border-yellow-200 bg-yellow-50">
             <div className="flex items-center mb-4">
               <Clock className="w-6 h-6 text-yellow-600 mr-2" />
-              <h2 className="text-lg font-semibold text-yellow-900">Room Access Information</h2>
+              <h2 className="text-lg font-semibold text-yellow-900">Room Access Countdown</h2>
             </div>
-            <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-4">
-              <p className="text-yellow-800">
-                <strong>Room access details will be available from {formatAccessTime(property.access_time)} on your check-in date.</strong>
-              </p>
-              <p className="text-sm text-yellow-700 mt-2">
-                Please return to this page after {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()} to view your room access code and detailed instructions.
-              </p>
+            
+            <div className="space-y-4">
+              {/* Countdown Display */}
+              {countdown && typeof countdown === 'object' && !countdown.expired && (
+                <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-6 text-center">
+                  <div className="mb-4">
+                    <p className="text-sm text-yellow-700 mb-2">Room access available in:</p>
+                  </div>
+                  
+                  {/* Time breakdown - always show when countdown exists */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-yellow-900">{countdown.days || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Days</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-yellow-900">{countdown.hours || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Hours</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-yellow-900">{countdown.minutes || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Minutes</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-yellow-900">{countdown.seconds || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Seconds</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Access Time Information */}
+              <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-4">
+                <p className="text-yellow-800">
+                  <strong>Room access details will be available at {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()}.</strong>
+                </p>
+                <p className="text-sm text-yellow-700 mt-2">
+                  Your room access code and detailed instructions will automatically appear when the access time arrives.
+                </p>
+              </div>
             </div>
           </div>
-        )}
-
-    </div>
+        )}        
+    </div>    
   )
 
   const renderPropertySection = () => (
@@ -404,6 +485,36 @@ export default function GuestDashboard() {
       {/* Property Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* WiFi Information */}
+        <div className="card">
+          <div className="space-y-4">
+              <div className="flex items-center">
+                <Building className="w-5 h-5 text-gray-400 mr-3" />
+                <div>
+                  <p className="text-sm text-gray-600">Property</p>
+                  <p className="font-medium">{property.name}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center">
+                <Home className="w-5 h-5 text-gray-400 mr-3" />
+                <div>
+                  <p className="text-sm text-gray-600">Room</p>
+                  <p className="font-medium">{room.room_name}</p>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        {/* Check-in Instructions */}
+        {property.check_in_instructions && (
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800">{property.check_in_instructions}</p>
+            </div>
+          </div>
+        )} 
+
         <div className="card">
           <div className="flex items-center mb-3">
             <Wifi className="w-5 h-5 text-blue-600 mr-2" />
@@ -433,15 +544,7 @@ export default function GuestDashboard() {
         )}
       </div>
 
-      {/* Check-in Instructions */}
-      {property.check_in_instructions && (
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800">{property.check_in_instructions}</p>
-          </div>
-        </div>
-      )}
+       
 
       {/* House Rules */}
       {property.house_rules && (
@@ -588,31 +691,74 @@ export default function GuestDashboard() {
     }
   }
 
+  const navigationItems = [
+    { id: 'overview', label: 'Overview', icon: Home },
+    { id: 'property', label: 'Property', icon: Building },
+    { id: 'local', label: 'Local', icon: MapPin },
+    { id: 'documents', label: 'Support', icon: MessageCircle }
+  ]
+
   return (
-    <DashboardLayout
-      activeSection={activeSection}
-      onSectionChange={setActiveSection}
-    >
-      <div className="page-container">
-        {/* Page Header */}
-        <div className="page-header">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="page-title">Welcome, {reservation?.guest_name}!</h1>
-              <p className="page-subtitle">Your stay at {property?.name}</p>
-            </div>
-            <div className="text-right">
-              <Building className="w-8 h-8 text-primary-600 mx-auto mb-1" />
-              <p className="text-xs text-gray-500">Property</p>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Mobile Header */}
+      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => navigate('/')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900 truncate">
+                  Hello, {reservation?.guest_name}!
+                </h1>
+                <p className="text-sm text-gray-600 truncate">
+                  {property?.name}
+                </p>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="fade-in">
+      {/* Main Content */}
+      <div className="flex-1 pb-20">
+        <div className="px-4 py-6 max-w-4xl mx-auto">
           {renderContent()}
         </div>
       </div>
-    </DashboardLayout>
+
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-10">
+        <div className="grid grid-cols-4 gap-1">
+          {navigationItems.map((item) => {
+            const IconComponent = item.icon
+            const isActive = activeSection === item.id
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`flex flex-col items-center py-3 px-2 transition-colors ${
+                  isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <IconComponent className={`w-5 h-5 mb-1 ${
+                  isActive ? 'text-blue-600' : 'text-gray-400'
+                }`} />
+                <span className="text-xs font-medium truncate">
+                  {item.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
