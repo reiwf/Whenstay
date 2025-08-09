@@ -238,6 +238,7 @@ create table public.reservations (
   price numeric null,
   "timeStamp" timestamp with time zone null,
   lang text null,
+  access_read boolean null default false,
   constraint reservations_pkey primary key (id),
   constraint reservations_check_in_token_key unique (check_in_token),
   constraint reservations_beds24_booking_id_key unique (beds24_booking_id),

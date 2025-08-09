@@ -685,6 +685,28 @@ class DatabaseService {
     }
   }
 
+  // Update access_read status to true when guest views access code
+  async updateAccessRead(checkinToken) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .update({ access_read: true })
+        .eq('check_in_token', checkinToken)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating access read status:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error updating access read status:', error);
+      return null;
+    }
+  }
+
   // Log reservation webhook events
   async logReservationWebhook(beds24BookingId, payload, processed = false) {
     try {
@@ -2266,6 +2288,7 @@ class DatabaseService {
           checkin_submitted_at: data.checkin_submitted_at,
           admin_verified: data.admin_verified,
           verified_at: data.verified_at,
+          access_read: data.access_read || false,
           
           // Computed fields for backward compatibility
           guest_name: data.booking_name,

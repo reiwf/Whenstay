@@ -37,6 +37,7 @@ export default function GuestDashboard() {
   const [checkinStatus, setCheckinStatus] = useState(null)
   const [activeSection, setActiveSection] = useState('overview')
   const [countdown, setCountdown] = useState('')
+  const [accessCodeRevealed, setAccessCodeRevealed] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -156,7 +157,15 @@ export default function GuestDashboard() {
       
       const data = await response.json()
       setDashboardData(data)
-      setCheckinStatus({ completed: data.checkin_status === 'completed' })
+      setCheckinStatus({ 
+        completed: data.checkin_status === 'completed',
+        access_read: data.reservation?.access_read || false
+      })
+      
+      // If access_read is true, show the access code immediately
+      if (data.reservation?.access_read) {
+        setAccessCodeRevealed(true)
+      }
       
     } catch (error) {
       console.error('Error loading guest data:', error)
@@ -169,6 +178,27 @@ export default function GuestDashboard() {
 
   const handleContactSupport = () => {
     toast.success('Support contact feature coming soon!')
+  }
+
+  const handleRevealAccessCode = async () => {
+    try {
+      const response = await fetch(`/api/guest/${token}/access-read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        setAccessCodeRevealed(true)
+        toast.success('Access code revealed!')
+      } else {
+        toast.error('Failed to reveal access code')
+      }
+    } catch (error) {
+      console.error('Error revealing access code:', error)
+      toast.error('Failed to reveal access code')
+    }
   }
 
   const getContentIcon = (type) => {
@@ -377,14 +407,27 @@ export default function GuestDashboard() {
                     <span className="text-sm font-medium text-green-800">Room Access Code</span>
                     <Key className="w-4 h-4 text-green-600" />
                   </div>
-                  <p className="text-3xl font-mono font-bold text-green-900">{room.access_code}</p>
+                  
+                  {/* Show button to reveal code if access_read is false, otherwise show the code */}
+                  {!checkinStatus?.access_read && !accessCodeRevealed ? (
+                    <div className="text-center py-4">
+                      <button
+                        onClick={handleRevealAccessCode}
+                        className="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+                      >
+                        Get Code
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-3xl font-mono font-bold text-green-900">{room.access_code}</p>
+                  )}
                 </div>
                 
                 {room.unit_number && (
                   <div className="flex items-center">
                     <Home className="w-5 h-5 text-green-600 mr-3" />
                     <div>
-                      <p className="text-sm text-green-700">Unit Number</p>
+                      <p className="text-sm text-green-700">Room Number</p>
                       <p className="font-medium text-green-900">{room.unit_number}</p>
                     </div>
                   </div>
@@ -462,6 +505,7 @@ export default function GuestDashboard() {
                       <div className="text-xs text-yellow-700 font-medium">Seconds</div>
                     </div>
                   </div>
+                  <p className="text-sm text-yellow-700 mt-2">Comeback later</p>
                 </div>
               )}
               
