@@ -53,6 +53,8 @@ export function DataTableAdvanced({
   onRowClick,
   className = '',
   loading = false,
+  searchableFields = [],
+  customSearchFunction = null,
 }) {
   const [sorting, setSorting] = useState([])
   const [columnFilters, setColumnFilters] = useState([])
@@ -96,6 +98,50 @@ export function DataTableAdvanced({
     })
   }
 
+  // Enhanced global filter function
+  const enhancedGlobalFilterFn = (row, columnId, value) => {
+    if (!value) return true
+    
+    const searchValue = value.toLowerCase()
+    
+    // Use custom search function if provided
+    if (customSearchFunction) {
+      return customSearchFunction(row.original, searchValue)
+    }
+    
+    // Use searchable fields if provided
+    if (searchableFields && searchableFields.length > 0) {
+      return searchableFields.some(fieldConfig => {
+        if (typeof fieldConfig === 'string') {
+          // Simple field name
+          const fieldValue = row.original[fieldConfig]
+          return fieldValue?.toString().toLowerCase().includes(searchValue)
+        } else if (typeof fieldConfig === 'object') {
+          // Field configuration object
+          const { fields, combiner } = fieldConfig
+          if (combiner) {
+            // Use combiner function to create searchable text
+            const combinedText = combiner(row.original)
+            return combinedText?.toLowerCase().includes(searchValue)
+          } else if (fields) {
+            // Search across multiple fields
+            return fields.some(field => {
+              const fieldValue = row.original[field]
+              return fieldValue?.toString().toLowerCase().includes(searchValue)
+            })
+          }
+        }
+        return false
+      })
+    }
+    
+    // Fallback to default behavior - search all string values
+    return Object.values(row.original).some(cellValue => {
+      if (cellValue == null) return false
+      return cellValue.toString().toLowerCase().includes(searchValue)
+    })
+  }
+
   // Enhanced data with date range filtering applied manually
   const filteredData = useMemo(() => {
     if (!dateRange) return data
@@ -122,7 +168,7 @@ export function DataTableAdvanced({
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
-    globalFilterFn: 'includesString',
+    globalFilterFn: enhancedGlobalFilterFn,
     state: {
       sorting,
       columnFilters,

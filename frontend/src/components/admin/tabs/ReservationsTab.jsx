@@ -554,6 +554,54 @@ export default function ReservationsTab() {
     });
   }, [reservations, filters]);
 
+  // Define searchable fields for enhanced search
+  const searchableFields = useMemo(() => [
+    // Individual fields
+    'booking_name',
+    'guest_firstname', 
+    'guest_lastname',
+    'guest_email',
+    'booking_email',
+    'property_name',
+    'room_type_name',
+    'room_name',
+    'unit_number',
+    'room_number',
+    
+    // Combined search fields
+    {
+      combiner: (row) => {
+        // Full guest name combination
+        const bookingName = row.booking_name || row.guest_name || '';
+        const guestName = row.guest_firstname && row.guest_lastname 
+          ? `${row.guest_firstname} ${row.guest_lastname}`.trim()
+          : '';
+        return [bookingName, guestName].filter(Boolean).join(' ');
+      }
+    },
+    {
+      combiner: (row) => {
+        // Property and room combination
+        const parts = [];
+        if (row.property_name && row.property_name !== 'N/A' && row.property_name !== 'Property Information Unavailable') {
+          parts.push(row.property_name);
+        }
+        if (row.room_type_name) {
+          parts.push(row.room_type_name);
+        }
+        if (row.unit_number) {
+          parts.push(`Unit ${row.unit_number}`);
+        } else if (row.room_number && row.room_number !== 'N/A') {
+          parts.push(`Room ${row.room_number}`);
+        }
+        if (row.room_name && row.room_name !== 'N/A') {
+          parts.push(row.room_name);
+        }
+        return parts.join(' ');
+      }
+    }
+  ], []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -659,6 +707,7 @@ export default function ReservationsTab() {
         emptyMessage="No reservations found"
         emptyIcon={Calendar}
         className="w-full"
+        searchableFields={searchableFields}
       />
 
       {/* Reservation Modal */}

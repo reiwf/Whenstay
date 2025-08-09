@@ -379,6 +379,45 @@ export default function CleaningTab() {
     });
   }, [tasks, filters]);
 
+  // Define searchable fields for enhanced search
+  const searchableFields = useMemo(() => [
+    // Individual fields
+    'property_name',
+    'room_type_name',
+    'room_unit_number',
+    'room_access_code',
+    'task_type',
+    'cleaner_name',
+    
+    // Combined search fields
+    {
+      combiner: (row) => {
+        // Property and room combination
+        const parts = [];
+        if (row.property_name) {
+          parts.push(row.property_name);
+        }
+        if (row.room_type_name) {
+          parts.push(row.room_type_name);
+        }
+        if (row.room_unit_number) {
+          parts.push(`Unit ${row.room_unit_number}`);
+        }
+        if (row.room_access_code) {
+          parts.push(`Code ${row.room_access_code}`);
+        }
+        return parts.join(' ');
+      }
+    },
+    {
+      combiner: (row) => {
+        // Task type formatted for display
+        const taskType = row.task_type || '';
+        return taskType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+      }
+    }
+  ], []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -495,6 +534,7 @@ export default function CleaningTab() {
         emptyMessage="No cleaning tasks found"
         emptyIcon={Calendar}
         className="w-full"
+        searchableFields={searchableFields}
       />
 
       {/* Task Modal */}
