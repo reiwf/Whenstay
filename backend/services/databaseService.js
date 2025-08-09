@@ -2528,53 +2528,95 @@ class DatabaseService {
         throw new Error('Failed to fetch cleaning tasks');
       }
 
-      // Transform data for frontend consumption
-      const transformedTasks = data.map(task => ({
-        ...task,
-        // Property information
-        property_name: task.properties?.name || 'Unknown Property',
-        property_address: task.properties?.address || null,
-        property_wifi_name: task.properties?.wifi_name || null,
-        property_emergency_contact: task.properties?.emergency_contact || null,
-        
-        // Room information
-        room_unit_number: task.room_units?.unit_number || 'Unknown',
-        room_floor_number: task.room_units?.floor_number || null,
-        room_access_code: task.room_units?.access_code || null,
-        room_access_instructions: task.room_units?.access_instructions || null,
-        room_type_name: task.room_units?.room_types?.name || 'Standard Room',
-        room_type_description: task.room_units?.room_types?.description || null,
-        room_max_guests: task.room_units?.room_types?.max_guests || null,
-        room_bed_configuration: task.room_units?.room_types?.bed_configuration || null,
-        
-        // Reservation information
-        reservation_booking_id: task.reservations?.beds24_booking_id || null,
-        guest_name: task.reservations?.booking_name || 
-                   `${task.reservations?.guest_firstname || ''} ${task.reservations?.guest_lastname || ''}`.trim() || 
-                   'Unknown Guest',
-        guest_email: task.reservations?.booking_email || task.reservations?.guest_mail || null,
-        guest_phone: task.reservations?.booking_phone || task.reservations?.guest_contact || null,
-        guest_checkin_date: task.reservations?.check_in_date || null,
-        guest_checkout_date: task.reservations?.check_out_date || null,
-        guest_count: task.reservations?.num_guests || null,
-        guest_special_requests: task.reservations?.special_requests || null,
-        
-        // Cleaner information
-        cleaner_name: task.user_profiles ? 
-                     `${task.user_profiles.first_name} ${task.user_profiles.last_name}`.trim() : 
-                     null,
-        cleaner_phone: task.user_profiles?.phone || null,
-        
-        // Computed fields
-        is_overdue: task.status === 'pending' && new Date(task.task_date) < new Date(),
-        duration_minutes: task.estimated_duration || 0,
-        
-        // Clean up nested objects for simpler frontend handling
-        property: task.properties,
-        room_unit: task.room_units,
-        reservation: task.reservations,
-        cleaner: task.user_profiles
-      }));
+      // Check for same-day check-ins and calculate smart priority
+      const tasksWithSmartPriority = await Promise.all(
+        data.map(async (task) => {
+          let calculatedPriority = task.priority || 'normal';
+          let hasSameDayCheckin = false;
+          
+          // Check if there's a same-day check-in for this room unit
+          if (task.room_unit_id && task.task_date) {
+            try {
+              const { data: sameDayCheckins, error: checkinError } = await supabaseAdmin
+                .from('reservations')
+                .select('id, check_in_date, booking_name')
+                .eq('room_unit_id', task.room_unit_id)
+                .eq('check_in_date', task.task_date)
+                .limit(1);
+              
+              if (!checkinError && sameDayCheckins && sameDayCheckins.length > 0) {
+                hasSameDayCheckin = true;
+                if (calculatedPriority !== 'high') {
+                  calculatedPriority = 'high';
+                  console.log(`Setting high priority for task ${task.id} - same-day check-in found for room ${task.room_units?.unit_number}`);
+                }
+              }
+            } catch (error) {
+              console.error('Error checking for same-day check-ins:', error);
+              // Keep original priority if check fails
+            }
+          }
+          
+          // If no same-day check-in found but task is currently high priority, downgrade to normal
+          if (!hasSameDayCheckin && calculatedPriority === 'high') {
+            calculatedPriority = 'normal';
+            console.log(`Downgrading task ${task.id} from high to normal priority - no same-day check-in found for room ${task.room_units?.unit_number}`);
+          }
+          
+          return {
+            ...task,
+            // Override priority with calculated value
+            priority: calculatedPriority,
+            
+            // Property information
+            property_name: task.properties?.name || 'Unknown Property',
+            property_address: task.properties?.address || null,
+            property_wifi_name: task.properties?.wifi_name || null,
+            property_emergency_contact: task.properties?.emergency_contact || null,
+            
+            // Room information
+            room_unit_number: task.room_units?.unit_number || 'Unknown',
+            room_floor_number: task.room_units?.floor_number || null,
+            room_access_code: task.room_units?.access_code || null,
+            room_access_instructions: task.room_units?.access_instructions || null,
+            room_type_name: task.room_units?.room_types?.name || 'Standard Room',
+            room_type_description: task.room_units?.room_types?.description || null,
+            room_max_guests: task.room_units?.room_types?.max_guests || null,
+            room_bed_configuration: task.room_units?.room_types?.bed_configuration || null,
+            
+            // Reservation information
+            reservation_booking_id: task.reservations?.beds24_booking_id || null,
+            guest_name: task.reservations?.booking_name || 
+                       `${task.reservations?.guest_firstname || ''} ${task.reservations?.guest_lastname || ''}`.trim() || 
+                       'Unknown Guest',
+            guest_email: task.reservations?.booking_email || task.reservations?.guest_mail || null,
+            guest_phone: task.reservations?.booking_phone || task.reservations?.guest_contact || null,
+            guest_checkin_date: task.reservations?.check_in_date || null,
+            guest_checkout_date: task.reservations?.check_out_date || null,
+            guest_count: task.reservations?.num_guests || null,
+            guest_special_requests: task.reservations?.special_requests || null,
+            
+            // Cleaner information
+            cleaner_name: task.user_profiles ? 
+                         `${task.user_profiles.first_name} ${task.user_profiles.last_name}`.trim() : 
+                         null,
+            cleaner_phone: task.user_profiles?.phone || null,
+            
+            // Computed fields
+            is_overdue: task.status === 'pending' && new Date(task.task_date) < new Date(),
+            duration_minutes: task.estimated_duration || 0,
+            has_same_day_checkin: calculatedPriority === 'high' && task.priority !== 'high', // Indicates auto-calculated priority
+            
+            // Clean up nested objects for simpler frontend handling
+            property: task.properties,
+            room_unit: task.room_units,
+            reservation: task.reservations,
+            cleaner: task.user_profiles
+          };
+        })
+      );
+
+      return tasksWithSmartPriority;
 
       return transformedTasks;
     } catch (error) {

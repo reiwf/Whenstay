@@ -36,8 +36,7 @@ export default function CleaningTab() {
     taskDate: '',
     taskDateFrom: '',
     taskDateTo: '',
-    taskType: 'all',
-    priority: 'all'
+    taskType: 'all'
   });
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -135,8 +134,7 @@ export default function CleaningTab() {
       taskDate: '',
       taskDateFrom: '',
       taskDateTo: '',
-      taskType: 'all',
-      priority: 'all'
+      taskType: 'all'
     });
   };
 
@@ -383,7 +381,6 @@ export default function CleaningTab() {
       if (filters.propertyId && task.property_id !== filters.propertyId) return false;
       if (filters.cleanerId && task.cleaner_id !== filters.cleanerId) return false;
       if (filters.taskType !== 'all' && task.task_type !== filters.taskType) return false;
-      if (filters.priority !== 'all' && task.priority !== filters.priority) return false;
       if (filters.taskDate && new Date(task.task_date).toDateString() !== new Date(filters.taskDate).toDateString()) return false;
       if (filters.taskDateFrom && new Date(task.task_date) < new Date(filters.taskDateFrom)) return false;
       if (filters.taskDateTo && new Date(task.task_date) > new Date(filters.taskDateTo)) return false;
@@ -477,7 +474,7 @@ export default function CleaningTab() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
              <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Task Date</label>
             <input
@@ -506,19 +503,6 @@ export default function CleaningTab() {
               onChange={(e) => handleFilterChange('taskDateTo', e.target.value)}
               className="input-field"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-            <select
-              value={filters.priority}
-              onChange={(e) => handleFilterChange('priority', e.target.value)}
-              className="input-field"
-            >
-              <option value="all">All Priorities</option>
-              <option value="high">High</option>
-              <option value="normal">Normal</option>
-            </select>
           </div>
         </div>
       </div>

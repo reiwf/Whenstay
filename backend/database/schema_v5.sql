@@ -72,6 +72,59 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION manage_cleaning_task()
+RETURNS trigger AS $$
+BEGIN
+    -- 1. Delete old cleaning task if room or checkout date changed
+    DELETE FROM cleaning_tasks
+    WHERE reservation_id = NEW.id;
+
+    -- 2. Insert new cleaning task
+    INSERT INTO cleaning_tasks (
+        property_id,
+        room_unit_id,
+        reservation_id,
+        cleaner_id,
+        task_date,
+        task_type,
+        status,
+        priority,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        NEW.property_id,
+        NEW.room_unit_id,
+        NEW.id,
+        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
+        NEW.check_out_date,
+        'checkout',
+        'pending',
+        'normal', -- temporary, will recalc below
+        now(),
+        now()
+    );
+
+    -- 3. Recalculate priority for all tasks of this room & date
+    UPDATE cleaning_tasks ct
+    SET priority = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.room_unit_id = ct.room_unit_id
+              AND r.check_in_date = ct.task_date
+              AND r.id <> ct.reservation_id
+        )
+        THEN 'high'
+        ELSE 'normal'
+    END,
+    updated_at = now()
+    WHERE ct.room_unit_id = NEW.room_unit_id
+      AND ct.task_date = NEW.check_out_date;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- User Profiles Table
 CREATE TABLE IF NOT EXISTS public.user_profiles (
   id uuid not null,
@@ -272,11 +325,11 @@ create index IF not exists idx_reservations_status on public.reservations using 
 
 create index IF not exists idx_reservations_status_date on public.reservations using btree (status, check_in_date) TABLESPACE pg_default;
 
-create trigger auto_manage_cleaning_task
-after INSERT
-or
-update OF room_unit_id,
-check_out_date on reservations for EACH row
+-- Single comprehensive trigger for managing cleaning tasks
+CREATE TRIGGER manage_cleaning_task_trigger
+  AFTER INSERT OR UPDATE OF room_unit_id, check_out_date, property_id
+  ON reservations 
+  FOR EACH ROW
 execute FUNCTION manage_cleaning_task ();
 
 create trigger manage_cleaning_task_trigger
