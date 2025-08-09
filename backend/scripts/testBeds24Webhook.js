@@ -25,7 +25,7 @@ const sampleWebhookPayload = {
     "numAdult": 2,
     "numChild": 0,
     "price": 300.00,
-    "currency": "USD",
+    "currency": "JPY",
     "status": "confirmed",
     "referer": "Booking.com",
     "channel": "Booking.com",

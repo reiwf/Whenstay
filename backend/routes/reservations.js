@@ -119,7 +119,7 @@ router.post('/test', async (req, res) => {
       roomNumber: req.body.roomNumber || '101',
       numGuests: req.body.numGuests || 1,
       totalAmount: req.body.totalAmount || 100,
-      currency: req.body.currency || 'USD'
+      currency: req.body.currency || 'JPY'
     };
     
     // Create reservation

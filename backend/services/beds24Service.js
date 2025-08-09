@@ -86,22 +86,21 @@ class Beds24Service {
   // Map Beds24 booking status to our internal status
   mapBeds24Status(beds24Status) {
     const statusMap = {
-      'new': 'pending',
+      'new': 'new',
       'confirmed': 'confirmed',
       'cancelled': 'cancelled',
       'modified': 'confirmed'
     };
     
-    return statusMap[beds24Status] || 'pending';
+    return statusMap[beds24Status] || 'new';
   }
 
   // Detect currency from price context or country
   detectCurrency(booking) {
-    // Default to JPY for Japanese properties, USD otherwise
     if (booking.country === 'jp' || booking.country === 'JP') {
       return 'JPY';
     }
-    return booking.currency || 'USD';
+    return booking.currency || 'JPY';
   }
 
   // Find or create property by Beds24 property ID
@@ -148,7 +147,7 @@ class Beds24Service {
         description: 'Room type imported from Beds24 - requires setup',
         maxGuests: 2,
         basePrice: 0,
-        currency: 'USD',
+        currency: 'JPY',
         beds24RoomTypeId: beds24RoomTypeId
       };
 

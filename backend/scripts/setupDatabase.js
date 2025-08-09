@@ -36,7 +36,7 @@ async function setupDatabase() {
         room_number: '101',
         num_guests: 2,
         total_amount: 250.00,
-        currency: 'USD',
+        currency: 'JPY',
         status: 'invited',
         check_in_token: uuidv4()
       },
@@ -49,7 +49,7 @@ async function setupDatabase() {
         room_number: '102',
         num_guests: 1,
         total_amount: 180.00,
-        currency: 'USD',
+        currency: 'JPY',
         status: 'invited',
         check_in_token: uuidv4()
       },
@@ -62,7 +62,7 @@ async function setupDatabase() {
         room_number: '201',
         num_guests: 3,
         total_amount: 320.00,
-        currency: 'USD',
+        currency: 'JPY',
         status: 'invited',
         check_in_token: uuidv4()
       },
@@ -75,7 +75,7 @@ async function setupDatabase() {
         room_number: '103',
         num_guests: 2,
         total_amount: 200.00,
-        currency: 'USD',
+        currency: 'JPY',
         status: 'completed',
         check_in_token: uuidv4()
       },
@@ -88,7 +88,7 @@ async function setupDatabase() {
         room_number: '202',
         num_guests: 1,
         total_amount: 150.00,
-        currency: 'USD',
+        currency: 'JPY',
         status: 'completed',
         check_in_token: uuidv4()
       }

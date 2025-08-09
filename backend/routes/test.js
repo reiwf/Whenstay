@@ -14,7 +14,7 @@ const testReservations = [
     room_number: '101',
     num_guests: 2,
     total_amount: 250.00,
-    currency: 'USD',
+    currency: 'JPY',
     status: 'invited',
     check_in_token: '851fd7de-0e34-44f7-afcd-78b3c5fed99d',
     created_at: new Date().toISOString()
@@ -29,7 +29,7 @@ const testReservations = [
     room_number: '102',
     num_guests: 1,
     total_amount: 180.00,
-    currency: 'USD',
+    currency: 'JPY',
     status: 'invited',
     check_in_token: '2e71d017-b6b8-496d-846a-ab10cc0be4ec',
     created_at: new Date().toISOString()
@@ -44,7 +44,7 @@ const testReservations = [
     room_number: '201',
     num_guests: 3,
     total_amount: 320.00,
-    currency: 'USD',
+    currency: 'JPY',
     status: 'invited',
     check_in_token: 'b32469c5-fed6-4d98-ae09-f847e63e708d',
     created_at: new Date().toISOString()

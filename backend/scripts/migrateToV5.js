@@ -60,7 +60,7 @@ async function migrateToV5() {
             description: `Migrated from existing room data`,
             max_guests: sampleRoom.max_guests || 2,
             base_price: 100.00, // Default base price - should be updated manually
-            currency: 'USD',
+            currency: 'JPY',
             room_amenities: sampleRoom.room_amenities,
             bed_configuration: sampleRoom.bed_configuration,
             room_size_sqm: sampleRoom.room_size_sqm,

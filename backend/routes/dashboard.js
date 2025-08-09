@@ -466,7 +466,7 @@ router.post('/reservations', adminAuth, async (req, res) => {
       roomNumber: roomNumber || 'TBD',
       numGuests: numGuests || 1,
       totalAmount: totalAmount || 0,
-      currency: currency || 'USD',
+      currency: currency || 'JPY',
       beds24BookingId: beds24BookingId || `MANUAL-${Date.now()}`
     };
     
@@ -858,7 +858,7 @@ router.post('/properties/:propertyId/room-types', adminAuth, async (req, res) =>
       description,
       maxGuests,
       basePrice,
-      currency: currency || 'USD',
+      currency: currency || 'JPY',
       roomAmenities,
       bedConfiguration,
       roomSizeSqm,

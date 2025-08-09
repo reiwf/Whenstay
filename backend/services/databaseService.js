@@ -16,7 +16,7 @@ class DatabaseService {
         num_adults: reservationData.numAdults || 1,
         num_children: reservationData.numChildren || 0,
         total_amount: reservationData.totalAmount || null,
-        currency: reservationData.currency || 'USD',
+        currency: reservationData.currency || 'JPY',
         status: reservationData.status || 'pending',
         booking_source: reservationData.bookingSource || null,
         special_requests: reservationData.specialRequests || null,
@@ -24,7 +24,17 @@ class DatabaseService {
         // V5 Room assignment
         property_id: reservationData.propertyId || null,
         room_type_id: reservationData.roomTypeId || null,
-        room_unit_id: reservationData.roomUnitId || null
+        room_unit_id: reservationData.roomUnitId || null,
+        
+        // Additional Beds24 webhook fields
+        lang: reservationData.lang || null,
+        apiReference: reservationData.apiReference || null,
+        commission: reservationData.commission || null,
+        rateDescription: reservationData.rateDescription || null,
+        booking_lastname: reservationData.bookingLastname || null,
+        bookingTime: reservationData.bookingTime || null,
+        timeStamp: reservationData.timeStamp || null,
+        comments: reservationData.comments || null
       };
 
       // Remove undefined values
@@ -142,15 +152,15 @@ class DatabaseService {
       if (reservationData.roomUnitId !== undefined) updateData.room_unit_id = reservationData.roomUnitId;
       
       // Additional Beds24 specific fields
+      if (reservationData.lang !== undefined) updateData.lang = reservationData.lang;
       if (reservationData.apiReference !== undefined) updateData.apiReference = reservationData.apiReference;
-      if (reservationData.bookingLastname !== undefined) updateData.booking_lastname = reservationData.bookingLastname;
-      if (reservationData.rateDescription !== undefined) updateData.rateDescription = reservationData.rateDescription;
       if (reservationData.commission !== undefined) updateData.commission = reservationData.commission;
-      if (reservationData.apiMessage !== undefined) updateData.apiMessage = reservationData.apiMessage;
+      if (reservationData.rateDescription !== undefined) updateData.rateDescription = reservationData.rateDescription;
+      if (reservationData.bookingLastname !== undefined) updateData.booking_lastname = reservationData.bookingLastname;
       if (reservationData.bookingTime !== undefined) updateData.bookingTime = reservationData.bookingTime;
       if (reservationData.timeStamp !== undefined) updateData.timeStamp = reservationData.timeStamp;
-      if (reservationData.lang !== undefined) updateData.lang = reservationData.lang;
       if (reservationData.comments !== undefined) updateData.comments = reservationData.comments;
+      if (reservationData.apiMessage !== undefined) updateData.apiMessage = reservationData.apiMessage;
       if (reservationData.price !== undefined) updateData.price = reservationData.price;
 
       // Remove undefined values
@@ -1725,7 +1735,7 @@ class DatabaseService {
           description: roomTypeData.description,
           max_guests: roomTypeData.maxGuests,
           base_price: roomTypeData.basePrice,
-          currency: roomTypeData.currency || 'USD',
+          currency: roomTypeData.currency || 'JPY',
           room_amenities: roomTypeData.roomAmenities,
           bed_configuration: roomTypeData.bedConfiguration,
           room_size_sqm: roomTypeData.roomSizeSqm,

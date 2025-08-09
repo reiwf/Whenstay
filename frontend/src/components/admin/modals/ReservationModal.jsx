@@ -46,7 +46,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     numAdults: reservation?.num_adults || 1,
     numChildren: reservation?.num_children || 0,
     totalAmount: reservation?.total_amount || '',
-    currency: reservation?.currency || 'USD',
+    currency: reservation?.currency || 'JPY',
     status: reservation?.status || 'pending',
     specialRequests: reservation?.special_requests || '',
     bookingSource: reservation?.booking_source || '',
@@ -687,7 +687,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="USD">USD</option>
+                          <option value="JPY">JPY</option>
                           <option value="EUR">EUR</option>
                           <option value="GBP">GBP</option>
                           <option value="CAD">CAD</option>

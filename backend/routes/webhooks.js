@@ -225,7 +225,7 @@ router.post('/test', async (req, res) => {
       roomNumber: '101',
       numGuests: 1,
       totalAmount: 100,
-      currency: 'USD'
+      currency: 'JPY'
     };
     
     await handleNewBooking({ booking: testBooking });
