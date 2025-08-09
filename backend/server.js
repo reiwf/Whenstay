@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -31,7 +32,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    service: 'Whenstay Check-in API'
+    service: 'StayLabel API'
   });
 });
 
@@ -51,9 +52,22 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/guest', guestRoutes);
 app.use('/api/test', testRoutes);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// Serve static files from frontend build
+const frontendPath = path.join(__dirname, 'frontend/dist');
+app.use(express.static(frontendPath, {
+  maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
+  etag: true,
+  lastModified: true
+}));
+
+// SPA fallback - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
+
+// API 404 handler (for /api routes only)
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
 });
 
 // Global error handler
@@ -66,9 +80,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Whenstay Check-in API running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 StayLabel API running on port ${PORT}`);
+  console.log(`📊 Health check: http://0.0.0.0:${PORT}/health`);
 });
 
 module.exports = app;
