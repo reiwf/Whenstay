@@ -4,19 +4,8 @@ const beds24Service = require('../services/beds24Service');
 const databaseService = require('../services/databaseService');
 const emailService = require('../services/emailService');
 
-// Middleware to capture raw body for webhook signature verification
-const captureRawBody = (req, res, next) => {
-  req.rawBody = '';
-  req.on('data', chunk => {
-    req.rawBody += chunk;
-  });
-  req.on('end', () => {
-    next();
-  });
-};
-
 // Beds24 webhook endpoint
-router.post('/beds24', captureRawBody, async (req, res) => {
+router.post('/beds24', async (req, res) => {
   try {
     console.log('Received Beds24 webhook:', req.body);
     
@@ -51,9 +40,13 @@ router.post('/beds24', captureRawBody, async (req, res) => {
       // Process the webhook based on event type
       await processWebhookEvent(eventType, webhookData);
       
-      // Mark event as processed
+      // Mark event as processed (handle gracefully if column doesn't exist)
       if (loggedEvent) {
-        await databaseService.markWebhookEventProcessed(loggedEvent.id);
+        try {
+          await databaseService.markWebhookEventProcessed(loggedEvent.id);
+        } catch (error) {
+          console.log('Note: Webhook event processed successfully, but logging update failed (non-critical):', error.message);
+        }
       }
       
       res.status(200).json({ message: 'Webhook processed successfully' });
