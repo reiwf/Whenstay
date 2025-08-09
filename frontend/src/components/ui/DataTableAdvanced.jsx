@@ -55,13 +55,15 @@ export function DataTableAdvanced({
   loading = false,
   searchableFields = [],
   customSearchFunction = null,
+  onDateRangeChange = null,
+  defaultDateRange = undefined,
 }) {
   const [sorting, setSorting] = useState([])
   const [columnFilters, setColumnFilters] = useState([])
   const [columnVisibility, setColumnVisibility] = useState({})
   const [rowSelection, setRowSelection] = useState({})
   const [globalFilter, setGlobalFilter] = useState('')
-  const [dateRange, setDateRange] = useState(undefined)
+  const [dateRange, setDateRange] = useState(defaultDateRange || undefined)
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: pageSize,
@@ -287,7 +289,12 @@ export function DataTableAdvanced({
           {dateColumns.length > 0 && (
             <DateRangePicker
               dateRange={dateRange}
-              onDateRangeChange={setDateRange}
+              onDateRangeChange={(newDateRange) => {
+                // If date range is cleared and we have a default, reset to default
+                const finalDateRange = newDateRange || defaultDateRange
+                setDateRange(finalDateRange)
+                onDateRangeChange?.(finalDateRange)
+              }}
               placeholder="Filter by date range"
               className="w-80"
             />

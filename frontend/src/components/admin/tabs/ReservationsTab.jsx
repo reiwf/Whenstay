@@ -50,6 +50,9 @@ export default function ReservationsTab() {
     propertyId: '',
     roomTypeId: ''
   })
+  const [dateFilters, setDateFilters] = useState({
+    checkInDate: new Date().toISOString().split('T')[0] // Default to today's date
+  })
   const [showReservationModal, setShowReservationModal] = useState(false)
   const [editingReservation, setEditingReservation] = useState(null)
   const [copiedTokens, setCopiedTokens] = useState({})
@@ -453,11 +456,11 @@ export default function ReservationsTab() {
           <div className="space-y-1">
             <div className="text-sm text-gray-900 flex items-center">
               <PlaneLanding className="w-4 h-4 mr-1" />
-              {new Date(reservation.check_in_date).toLocaleDateString()}
+              {new Date(reservation.check_in_date).toISOString().split('T')[0]}
             </div>
             <div className="text-sm text-gray-500 flex items-center">
               <PlaneTakeoff className="w-4 h-4 mr-1" />
-              {new Date(reservation.check_out_date).toLocaleDateString()}
+              {new Date(reservation.check_out_date).toISOString().split('T')[0]}
             </div>
             <div className="text-sm text-gray-500 flex items-center">  
               <MoonStar className="w-4 h-4 mr-1" />            
@@ -553,6 +556,27 @@ export default function ReservationsTab() {
       return true;
     });
   }, [reservations, filters]);
+
+  // Create default date range for today's check-in date
+  const defaultDateRange = useMemo(() => {
+    const today = new Date()
+    return {
+      from: today,
+      to: today
+    }
+  }, [])
+
+  // Handle date range changes from DataTableAdvanced
+  const handleDateRangeChange = (newDateRange) => {
+    // If date range is cleared (null/undefined), reset to today's date
+    if (!newDateRange) {
+      // The DataTableAdvanced component will handle resetting to defaultDateRange automatically
+      // when newDateRange is null/undefined, but we can add any additional logic here if needed
+      console.log('Date range cleared, will reset to today')
+    } else {
+      console.log('Date range changed:', newDateRange)
+    }
+  }
 
   // Define searchable fields for enhanced search
   const searchableFields = useMemo(() => [
@@ -708,6 +732,8 @@ export default function ReservationsTab() {
         emptyIcon={Calendar}
         className="w-full"
         searchableFields={searchableFields}
+        defaultDateRange={defaultDateRange}
+        onDateRangeChange={handleDateRangeChange}
       />
 
       {/* Reservation Modal */}

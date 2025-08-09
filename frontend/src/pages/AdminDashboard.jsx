@@ -346,7 +346,7 @@ export default function AdminDashboard() {
                         title: 'Checked In',
                         render: (value) => (
                           <span className="text-sm text-gray-900">
-                            {new Date(value).toLocaleDateString()}
+                            {new Date(value).toISOString().split('T')[0]}
                           </span>
                         )
                       },
@@ -355,7 +355,7 @@ export default function AdminDashboard() {
                         title: 'Check Out',
                         render: (value) => (
                           <span className="text-sm text-gray-900">
-                            {new Date(value).toLocaleDateString()}
+                            {new Date(value).toISOString().split('T')[0]}
                           </span>
                         )
                       },

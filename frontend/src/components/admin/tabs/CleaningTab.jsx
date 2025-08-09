@@ -35,6 +35,9 @@ export default function CleaningTab() {
     propertyId: '',
     taskType: 'all'
   });
+  const [dateFilters, setDateFilters] = useState({
+    taskDate: new Date().toISOString().split('T')[0] // Default to today's date
+  })
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
@@ -264,7 +267,7 @@ export default function CleaningTab() {
       cell: ({ getValue }) => (
         <div className="flex items-center">
           <Calendar className="w-4 h-4 mr-1 text-gray-500" />
-          {new Date(getValue()).toLocaleDateString()}
+          {new Date(getValue()).toISOString().split('T')[0]}
         </div>
       ),
     },
@@ -378,6 +381,27 @@ export default function CleaningTab() {
       return true;
     });
   }, [tasks, filters]);
+
+  // Create default date range for today's task date
+  const defaultDateRange = useMemo(() => {
+    const today = new Date()
+    return {
+      from: today,
+      to: today
+    }
+  }, [])
+
+  // Handle date range changes from DataTableAdvanced
+  const handleDateRangeChange = (newDateRange) => {
+    // If date range is cleared (null/undefined), reset to today's date
+    if (!newDateRange) {
+      // The DataTableAdvanced component will handle resetting to defaultDateRange automatically
+      // when newDateRange is null/undefined, but we can add any additional logic here if needed
+      console.log('Date range cleared, will reset to today')
+    } else {
+      console.log('Date range changed:', newDateRange)
+    }
+  }
 
   // Define searchable fields for enhanced search
   const searchableFields = useMemo(() => [
@@ -535,6 +559,8 @@ export default function CleaningTab() {
         emptyIcon={Calendar}
         className="w-full"
         searchableFields={searchableFields}
+        defaultDateRange={defaultDateRange}
+        onDateRangeChange={handleDateRangeChange}
       />
 
       {/* Task Modal */}
