@@ -256,7 +256,7 @@ export default function CleaningTab() {
       cell: ({ getValue, row }) => (
         <div className="flex items-center space-x-2">
           <span>{getTaskTypeDisplay(getValue())}</span>
-          {row.original.priority === 'high' && (
+          {(row.original.priority === 'high' || getValue() === 'request-high') && (
             <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
               <Zap className="w-3 h-3"/>
             </span>
@@ -474,7 +474,7 @@ export default function CleaningTab() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
              <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Task Date</label>
             <input
@@ -503,6 +503,21 @@ export default function CleaningTab() {
               onChange={(e) => handleFilterChange('taskDateTo', e.target.value)}
               className="input-field"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
+            <select
+              value={filters.taskType}
+              onChange={(e) => handleFilterChange('taskType', e.target.value)}
+              className="input-field"
+            >
+              <option value="all">All Types</option>
+              <option value="checkout">Checkout</option>
+              <option value="eco">Eco</option>
+              <option value="request-high">Request High</option>
+              <option value="deep-clean">Deep Clean</option>
+            </select>
           </div>
         </div>
       </div>

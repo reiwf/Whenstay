@@ -14,7 +14,6 @@ export default function CleaningTaskModal({
     room_unit_id: '',
     task_type: 'checkout',
     task_date: '',
-    priority: 'normal',
     cleaner_id: '',
     special_notes: ''
   });
@@ -31,7 +30,6 @@ export default function CleaningTaskModal({
           room_unit_id: task.room_unit_id || '',
           task_type: task.task_type || 'checkout',
           task_date: task.task_date ? task.task_date.split('T')[0] : '',
-          priority: task.priority || 'normal',
           cleaner_id: task.cleaner_id || '',
           special_notes: task.special_notes || ''
         });
@@ -53,7 +51,6 @@ export default function CleaningTaskModal({
       room_unit_id: '',
       task_type: 'checkout',
       task_date: '',
-      priority: 'normal',
       cleaner_id: '',
       special_notes: ''
     });
@@ -143,7 +140,6 @@ export default function CleaningTaskModal({
         roomUnitId: taskFormData.room_unit_id,
         taskType: taskFormData.task_type,
         taskDate: taskFormData.task_date,
-        priority: taskFormData.priority,
         cleanerId: taskFormData.cleaner_id || null,
         specialNotes: taskFormData.special_notes || null,
         reservationId: null // Make reservation ID nullable
@@ -254,9 +250,10 @@ export default function CleaningTaskModal({
                   className="input-field"
                   required
                 >
-                  <option value="checkout">Checkout Cleaning</option>
-                  <option value="checkin_preparation">Check-in Preparation</option>
-                  <option value="maintenance">Maintenance</option>
+                  <option value="checkout">Checkout</option>
+                  <option value="eco">Eco</option>
+                  <option value="request-high">Request High</option>
+                  <option value="deep-clean">Deep Clean</option>
                 </select>
               </div>
 
@@ -272,21 +269,6 @@ export default function CleaningTaskModal({
                   required
                 />
               </div>
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Priority
-              </label>
-              <select
-                value={taskFormData.priority}
-                onChange={(e) => handleFormChange('priority', e.target.value)}
-                className="input-field"
-              >
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-              </select>
             </div>
 
             {/* Cleaner Assignment */}
