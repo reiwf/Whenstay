@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { DateRangePicker } from '@/components/ui/date-range-picker'
 import {
   ChevronDown,
   ChevronUp,
@@ -35,7 +36,9 @@ import {
   ChevronsRight,
   Settings2,
   Download,
+  Calendar,
 } from 'lucide-react'
+import { isDateValue, formatDateValue, isDateInRange, getDateColumns } from '@/lib/utils'
 
 export function DataTableAdvanced({
   data = [],
@@ -56,14 +59,59 @@ export function DataTableAdvanced({
   const [columnVisibility, setColumnVisibility] = useState({})
   const [rowSelection, setRowSelection] = useState({})
   const [globalFilter, setGlobalFilter] = useState('')
+  const [dateRange, setDateRange] = useState(undefined)
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: pageSize,
   })
 
+  // Enhanced columns with automatic date formatting
+  const enhancedColumns = useMemo(() => {
+    return columns.map(column => ({
+      ...column,
+      cell: column.cell || (({ getValue }) => {
+        const value = getValue()
+        if (isDateValue(value)) {
+          return formatDateValue(value)
+        }
+        return value
+      })
+    }))
+  }, [columns])
+
+  // Date columns for filtering
+  const dateColumns = useMemo(() => {
+    return getDateColumns(enhancedColumns)
+  }, [enhancedColumns])
+
+  // Custom filter function for date range
+  const dateRangeFilterFn = (row, columnId, value) => {
+    if (!value || (!value.from && !value.to)) return true
+    
+    // Check all date columns
+    return dateColumns.some(col => {
+      const colId = col.accessorKey || col.id
+      const cellValue = row.getValue(colId)
+      return isDateInRange(cellValue, value)
+    })
+  }
+
+  // Enhanced data with date range filtering applied manually
+  const filteredData = useMemo(() => {
+    if (!dateRange) return data
+    
+    return data.filter(row => {
+      return dateColumns.some(col => {
+        const colId = col.accessorKey || col.id
+        const cellValue = row[colId]
+        return isDateInRange(cellValue, dateRange)
+      })
+    })
+  }, [data, dateRange, dateColumns])
+
   const table = useReactTable({
-    data,
-    columns,
+    data: filteredData,
+    columns: enhancedColumns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
@@ -139,20 +187,7 @@ export function DataTableAdvanced({
     <div className={`space-y-4 ${className}`}>
       {/* Toolbar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          {/* Global Search */}
-          {searchable && (
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-8 w-64"
-              />
-            </div>
-          )}
-
+        <div className="flex items-center space-x-2">          
           {/* Column Filters */}
           {filterable && (
             <DropdownMenu>
@@ -188,7 +223,31 @@ export function DataTableAdvanced({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          
+          {/* Global Search */}
+          {searchable && (
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                className="pl-8 w-64"
+              />
+            </div>
+          )}
+
+          {/* Date Range Filter */}
+          {dateColumns.length > 0 && (
+            <DateRangePicker
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              placeholder="Filter by date range"
+              className="w-80"
+            />
+          )}
         </div>
+        
 
         <div className="flex items-center space-x-2">
           {/* Selected rows indicator */}
@@ -381,8 +440,8 @@ export function DataTableAdvanced({
       {/* Status bar */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div>
-          {table.getFilteredRowModel().rows.length} of {data.length} entries
-          {globalFilter && ` (filtered from ${data.length} total entries)`}
+          {table.getFilteredRowModel().rows.length} of {filteredData.length} entries
+          {(globalFilter || dateRange) && ` (filtered from ${data.length} total entries)`}
         </div>
         {selectedRows.length > 0 && (
           <div>
