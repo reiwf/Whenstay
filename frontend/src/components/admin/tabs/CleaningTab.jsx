@@ -33,9 +33,6 @@ export default function CleaningTab() {
     status: 'all',
     cleanerId: '',
     propertyId: '',
-    taskDate: '',
-    taskDateFrom: '',
-    taskDateTo: '',
     taskType: 'all'
   });
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -131,9 +128,6 @@ export default function CleaningTab() {
       status: 'all',
       cleanerId: '',
       propertyId: '',
-      taskDate: '',
-      taskDateFrom: '',
-      taskDateTo: '',
       taskType: 'all'
     });
   };
@@ -374,16 +368,13 @@ export default function CleaningTab() {
     },
   ], [profile?.role, cleaners, handleUpdateTaskStatus, handleAssignCleaner, handleOpenTaskModal, handleDeleteTask]);
 
-  // Filter tasks based on current filters
+  // Filter tasks based on current filters (date filtering is now handled by DataTableAdvanced)
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       if (filters.status !== 'all' && task.status !== filters.status) return false;
       if (filters.propertyId && task.property_id !== filters.propertyId) return false;
       if (filters.cleanerId && task.cleaner_id !== filters.cleanerId) return false;
       if (filters.taskType !== 'all' && task.task_type !== filters.taskType) return false;
-      if (filters.taskDate && new Date(task.task_date).toDateString() !== new Date(filters.taskDate).toDateString()) return false;
-      if (filters.taskDateFrom && new Date(task.task_date) < new Date(filters.taskDateFrom)) return false;
-      if (filters.taskDateTo && new Date(task.task_date) > new Date(filters.taskDateTo)) return false;
       return true;
     });
   }, [tasks, filters]);
@@ -474,37 +465,7 @@ export default function CleaningTab() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-             <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Task Date</label>
-            <input
-              type="date"
-              value={filters.taskDate}
-              onChange={(e) => handleFilterChange('taskDate', e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
-            <input
-              type="date"
-              value={filters.taskDateFrom}
-              onChange={(e) => handleFilterChange('taskDateFrom', e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date To</label>
-            <input
-              type="date"
-              value={filters.taskDateTo}
-              onChange={(e) => handleFilterChange('taskDateTo', e.target.value)}
-              className="input-field"
-            />
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
             <select

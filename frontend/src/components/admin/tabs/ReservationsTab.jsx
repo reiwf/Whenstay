@@ -48,10 +48,7 @@ export default function ReservationsTab() {
   const [filters, setFilters] = useState({
     status: '',
     propertyId: '',
-    roomTypeId: '',
-    checkInDateFrom: '',
-    checkInDateTo: '',
-    checkInDate: ''
+    roomTypeId: ''
   })
   const [showReservationModal, setShowReservationModal] = useState(false)
   const [editingReservation, setEditingReservation] = useState(null)
@@ -108,10 +105,7 @@ export default function ReservationsTab() {
     setFilters({
       status: '',
       propertyId: '',
-      roomTypeId: '',
-      checkInDateFrom: '',
-      checkInDateTo: '',
-      checkInDate: ''
+      roomTypeId: ''
     })
     setCurrentPage(1)
   }
@@ -550,15 +544,12 @@ export default function ReservationsTab() {
     },
   ], [copiedTokens, handleEditReservation, handleSendInvitation, handleCopyCheckinUrl, openCheckinPage]);
 
-  // Filter reservations based on current filters
+  // Filter reservations based on current filters (date filtering is now handled by DataTableAdvanced)
   const filteredReservations = useMemo(() => {
     return reservations.filter(reservation => {
       if (filters.status && reservation.status !== filters.status) return false;
       if (filters.propertyId && reservation.property_id !== filters.propertyId) return false;
       if (filters.roomTypeId && reservation.room_type_id !== filters.roomTypeId) return false;
-      if (filters.checkInDate && new Date(reservation.check_in_date).toDateString() !== new Date(filters.checkInDate).toDateString()) return false;
-      if (filters.checkInDateFrom && new Date(reservation.check_in_date) < new Date(filters.checkInDateFrom)) return false;
-      if (filters.checkInDateTo && new Date(reservation.check_in_date) > new Date(filters.checkInDateTo)) return false;
       return true;
     });
   }, [reservations, filters]);
@@ -605,7 +596,7 @@ export default function ReservationsTab() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -652,36 +643,6 @@ export default function ReservationsTab() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
-            <input
-              type="date"
-              value={filters.checkInDate}
-              onChange={(e) => handleFilterChange('checkInDate', e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-            <input
-              type="date"
-              value={filters.checkInDateFrom}
-              onChange={(e) => handleFilterChange('checkInDateFrom', e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-            <input
-              type="date"
-              value={filters.checkInDateTo}
-              onChange={(e) => handleFilterChange('checkInDateTo', e.target.value)}
-              className="input-field"
-            />
           </div>
         </div>
       </div>
