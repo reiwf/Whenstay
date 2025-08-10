@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const reservationService = require('../services/reservationService');
+const propertyService = require('../services/propertyService');
+const roomService = require('../services/roomService');
+const userService = require('../services/userService');
 const beds24Service = require('../services/beds24Service');
 
 // Real authentication middleware with JWT verification
@@ -15,7 +18,7 @@ const adminAuth = async (req, res, next) => {
     const token = authHeader.substring(7);
     
     // Verify JWT token and get user profile
-    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    const { user, profile } = await userService.verifyTokenAndGetProfile(token);
     
     // Check if user has admin access (admin, owner, or cleaner roles)
     if (!['admin', 'owner', 'cleaner'].includes(profile.role)) {
@@ -45,7 +48,7 @@ const adminOnlyAuth = async (req, res, next) => {
     const token = authHeader.substring(7);
     
     // Verify JWT token and get user profile
-    const { user, profile } = await databaseService.verifyTokenAndGetProfile(token);
+    const { user, profile } = await userService.verifyTokenAndGetProfile(token);
     
     // Check if user has admin access (admin or owner roles only)
     if (!['admin', 'owner'].includes(profile.role)) {
@@ -66,7 +69,7 @@ const adminOnlyAuth = async (req, res, next) => {
 // Get dashboard statistics
 router.get('/dashboard/stats', adminOnlyAuth, async (req, res) => {
   try {
-    const stats = await databaseService.getDashboardStats();
+    const stats = await reservationService.getDashboardStats();
     res.status(200).json(stats);
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
@@ -78,7 +81,7 @@ router.get('/dashboard/stats', adminOnlyAuth, async (req, res) => {
 router.get('/dashboard/today-stats', adminAuth, async (req, res) => {
   try {
     const userProfile = req.userProfile; // Available from adminAuth middleware
-    const stats = await databaseService.getTodayDashboardStats(userProfile);
+    const stats = await reservationService.getTodayDashboardStats(userProfile);
     res.status(200).json(stats);
   } catch (error) {
     console.error('Error fetching today dashboard stats:', error);
@@ -90,7 +93,7 @@ router.get('/dashboard/today-stats', adminAuth, async (req, res) => {
 router.get('/dashboard/today-arrivals', adminAuth, async (req, res) => {
   try {
     const userProfile = req.userProfile; // Available from adminAuth middleware
-    const arrivals = await databaseService.getTodayArrivals(userProfile);
+    const arrivals = await reservationService.getTodayArrivals(userProfile);
     res.status(200).json({
       message: 'Today arrivals retrieved successfully',
       arrivals,
@@ -106,7 +109,7 @@ router.get('/dashboard/today-arrivals', adminAuth, async (req, res) => {
 router.get('/dashboard/today-departures', adminAuth, async (req, res) => {
   try {
     const userProfile = req.userProfile; // Available from adminAuth middleware
-    const departures = await databaseService.getTodayDepartures(userProfile);
+    const departures = await reservationService.getTodayDepartures(userProfile);
     res.status(200).json({
       message: 'Today departures retrieved successfully',
       departures,
@@ -122,7 +125,7 @@ router.get('/dashboard/today-departures', adminAuth, async (req, res) => {
 router.get('/dashboard/in-house-guests', adminAuth, async (req, res) => {
   try {
     const userProfile = req.userProfile; // Available from adminAuth middleware
-    const inHouseGuests = await databaseService.getInHouseGuests(userProfile);
+    const inHouseGuests = await reservationService.getInHouseGuests(userProfile);
     res.status(200).json({
       message: 'In-house guests retrieved successfully',
       inHouseGuests,
@@ -140,7 +143,7 @@ router.get('/checkins', adminAuth, async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
     
-    const checkins = await databaseService.getCompletedCheckins(
+    const checkins = await reservationService.getCompletedCheckins(
       parseInt(limit), 
       parseInt(offset)
     );
@@ -165,13 +168,13 @@ router.get('/checkins/:reservationId', adminAuth, async (req, res) => {
     const { reservationId } = req.params;
     
     // Get reservation details
-    const reservation = await databaseService.getReservationByToken(reservationId);
+    const reservation = await reservationService.getReservationByToken(reservationId);
     if (!reservation) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
     
     // Get check-in details
-    const checkin = await databaseService.getGuestCheckinByReservationId(reservation.id);
+    const checkin = await reservationService.getGuestCheckinByReservationId(reservation.id);
     if (!checkin) {
       return res.status(404).json({ error: 'Check-in not found' });
     }
@@ -215,7 +218,7 @@ router.patch('/checkins/:checkinId/verify', adminAuth, async (req, res) => {
       return res.status(400).json({ error: 'Verified status must be a boolean' });
     }
     
-    const updatedCheckin = await databaseService.updateAdminVerification(
+    const updatedCheckin = await reservationService.updateAdminVerification(
       checkinId, 
       verified
     );
@@ -245,12 +248,12 @@ router.post('/sync/beds24', adminAuth, async (req, res) => {
     for (const booking of bookings) {
       try {
         // Check if reservation already exists
-        const existingReservation = await databaseService.getReservationByBeds24Id(
+        const existingReservation = await reservationService.getReservationByBeds24Id(
           booking.beds24BookingId
         );
         
         if (!existingReservation) {
-          await databaseService.createReservation(booking);
+          await reservationService.createReservation(booking);
           processedCount++;
         }
       } catch (error) {
@@ -304,7 +307,7 @@ router.get('/reservations', adminAuth, async (req, res) => {
     };
 
     // Use reservations_details view for comprehensive data
-    const reservations = await databaseService.getReservationsWithFullDetails(filters);
+    const reservations = await reservationService.getReservationsWithFullDetails(filters);
     
     res.status(200).json({
       message: 'Reservations retrieved successfully',
@@ -339,7 +342,7 @@ router.get('/reservations/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     
     // Get reservation with full details from the view
-    const reservation = await databaseService.getReservationFullDetails(id);
+    const reservation = await reservationService.getReservationFullDetails(id);
     
     if (!reservation) {
       return res.status(404).json({ error: 'Reservation not found' });
@@ -513,7 +516,7 @@ router.post('/reservations', adminAuth, async (req, res) => {
       beds24BookingId: beds24BookingId || `MANUAL-${Date.now()}`
     };
     
-    const reservation = await databaseService.createReservation(reservationData);
+    const reservation = await reservationService.createReservation(reservationData);
     
     res.status(201).json({
       message: 'Reservation created successfully',
@@ -531,7 +534,7 @@ router.post('/reservations/:reservationId/send-invitation', adminAuth, async (re
     const { reservationId } = req.params;
     
     // Get reservation details
-    const reservation = await databaseService.getReservationByToken(reservationId);
+    const reservation = await reservationService.getReservationByToken(reservationId);
     if (!reservation) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
@@ -547,7 +550,7 @@ router.post('/reservations/:reservationId/send-invitation', adminAuth, async (re
     
     // Update status to invited if it was pending
     if (reservation.status === 'pending') {
-      await databaseService.updateReservationStatus(reservation.id, 'invited');
+      await reservationService.updateReservationStatus(reservation.id, 'invited');
     }
     
     res.status(200).json({ message: 'Check-in invitation sent successfully' });
@@ -600,7 +603,7 @@ router.post('/auth/login', async (req, res) => {
     }
     
     // Authenticate user
-    const { user, profile, session } = await databaseService.authenticateUser(email, password);
+    const { user, profile, session } = await userService.authenticateUser(email, password);
     
     res.status(200).json({
       message: 'Login successful',
@@ -692,7 +695,7 @@ router.post('/auth/create-test-admin', async (req, res) => {
       return res.status(403).json({ error: 'Not available in production' });
     }
     
-    const profile = await databaseService.createTestAdminUser();
+    const profile = await userService.createTestAdminUser();
     
     res.status(201).json({
       message: 'Test admin user created successfully',
@@ -724,9 +727,9 @@ router.get('/properties', adminAuth, async (req, res) => {
     
     let properties;
     if (withStats === 'true') {
-      properties = await databaseService.getPropertiesWithStats(userProfile);
+      properties = await propertyService.getPropertiesWithStats(userProfile);
     } else {
-      properties = await databaseService.getAllProperties(userProfile);
+      properties = await propertyService.getAllProperties(userProfile);
     }
     
     res.status(200).json({
@@ -743,7 +746,7 @@ router.get('/properties', adminAuth, async (req, res) => {
 router.get('/properties/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await databaseService.getPropertyById(id);
+    const property = await propertyService.getPropertyById(id);
     
     if (!property) {
       return res.status(404).json({ error: 'Property not found' });
@@ -801,7 +804,7 @@ router.post('/properties', adminAuth, async (req, res) => {
       defaultCleanerId
     };
     
-    const property = await databaseService.createProperty(propertyData);
+    const property = await propertyService.createProperty(propertyData);
     
     res.status(201).json({
       message: 'Property created successfully',
@@ -819,7 +822,7 @@ router.put('/properties/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    const property = await databaseService.updateProperty(id, updateData);
+    const property = await propertyService.updateProperty(id, updateData);
     
     res.status(200).json({
       message: 'Property updated successfully',
@@ -836,7 +839,7 @@ router.delete('/properties/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const property = await databaseService.deleteProperty(id);
+    const property = await propertyService.deleteProperty(id);
     
     res.status(200).json({
       message: 'Property deleted successfully',
@@ -858,9 +861,9 @@ router.get('/properties/:propertyId/room-types', adminAuth, async (req, res) => 
     
     let roomTypes;
     if (withUnits === 'true') {
-      roomTypes = await databaseService.getRoomTypesWithUnits(propertyId);
+      roomTypes = await roomService.getRoomTypesWithUnits(propertyId);
     } else {
-      roomTypes = await databaseService.getRoomTypesByProperty(propertyId);
+      roomTypes = await roomService.getRoomTypesByProperty(propertyId);
     }
     
     res.status(200).json({
@@ -910,7 +913,7 @@ router.post('/properties/:propertyId/room-types', adminAuth, async (req, res) =>
       isAccessible
     };
     
-    const roomType = await databaseService.createRoomType(propertyId, roomTypeData);
+    const roomType = await roomService.createRoomType(propertyId, roomTypeData);
     
     res.status(201).json({
       message: 'Room type created successfully',
@@ -928,7 +931,7 @@ router.put('/room-types/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    const roomType = await databaseService.updateRoomType(id, updateData);
+    const roomType = await roomService.updateRoomType(id, updateData);
     
     res.status(200).json({
       message: 'Room type updated successfully',
@@ -945,7 +948,7 @@ router.delete('/room-types/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const roomType = await databaseService.deleteRoomType(id);
+    const roomType = await roomService.deleteRoomType(id);
     
     res.status(200).json({
       message: 'Room type deleted successfully',
@@ -964,7 +967,7 @@ router.get('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) => 
   try {
     const { roomTypeId } = req.params;
     
-    const roomUnits = await databaseService.getRoomUnitsByRoomType(roomTypeId);
+    const roomUnits = await roomService.getRoomUnitsByRoomType(roomTypeId);
     
     res.status(200).json({
       message: 'Room units retrieved successfully',
@@ -1007,7 +1010,7 @@ router.post('/room-types/:roomTypeId/room-units', adminAuth, async (req, res) =>
       maintenanceNotes
     };
     
-    const roomUnit = await databaseService.createRoomUnit(roomTypeId, roomUnitData);
+    const roomUnit = await roomService.createRoomUnit(roomTypeId, roomUnitData);
     
     res.status(201).json({
       message: 'Room unit created successfully',
@@ -1025,7 +1028,7 @@ router.put('/room-units/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    const roomUnit = await databaseService.updateRoomUnit(id, updateData);
+    const roomUnit = await roomService.updateRoomUnit(id, updateData);
     
     res.status(200).json({
       message: 'Room unit updated successfully',
@@ -1042,7 +1045,7 @@ router.delete('/room-units/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const roomUnit = await databaseService.deleteRoomUnit(id);
+    const roomUnit = await roomService.deleteRoomUnit(id);
     
     res.status(200).json({
       message: 'Room unit deleted successfully',
@@ -1101,7 +1104,7 @@ router.post('/properties/:propertyId/rooms', adminAuth, async (req, res) => {
       isAccessible
     };
     
-    const room = await databaseService.createRoom(propertyId, roomData);
+    const room = await roomService.createRoom(propertyId, roomData);
     
     res.status(201).json({
       message: 'Room created successfully',
@@ -1119,7 +1122,7 @@ router.put('/rooms/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    const room = await databaseService.updateRoom(id, updateData);
+    const room = await roomService.updateRoom(id, updateData);
     
     res.status(200).json({
       message: 'Room updated successfully',
@@ -1136,7 +1139,7 @@ router.delete('/rooms/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const room = await databaseService.deleteRoom(id);
+    const room = await roomService.deleteRoom(id);
     
     res.status(200).json({
       message: 'Room deleted successfully',
@@ -1158,13 +1161,13 @@ router.get('/users', adminOnlyAuth, async (req, res) => {
     
     let users;
     if (withDetails === 'true') {
-      users = await databaseService.getUsersWithDetails(
+      users = await userService.getUsersWithDetails(
         parseInt(limit), 
         parseInt(offset), 
         role
       );
     } else {
-      users = await databaseService.getAllUsers(
+      users = await userService.getAllUsers(
         parseInt(limit), 
         parseInt(offset), 
         role
@@ -1189,7 +1192,7 @@ router.get('/users', adminOnlyAuth, async (req, res) => {
 // Get user statistics
 router.get('/users/stats', adminAuth, async (req, res) => {
   try {
-    const stats = await databaseService.getUserStats();
+    const stats = await userService.getUserStats();
     
     res.status(200).json({
       message: 'User statistics retrieved successfully',
@@ -1205,7 +1208,7 @@ router.get('/users/stats', adminAuth, async (req, res) => {
 router.get('/users/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await databaseService.getUserById(id);
+    const user = await userService.getUserById(id);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -1263,7 +1266,7 @@ router.post('/users', adminAuth, async (req, res) => {
       isActive: isActive !== undefined ? isActive : true
     };
     
-    const user = await databaseService.createUser(userData);
+    const user = await userService.createUser(userData);
     
     res.status(201).json({
       message: 'User created successfully',
@@ -1310,7 +1313,7 @@ router.put('/users/:id', adminAuth, async (req, res) => {
       }
     }
     
-    const user = await databaseService.updateUser(id, updateData);
+    const user = await userService.updateUser(id, updateData);
     
     res.status(200).json({
       message: 'User updated successfully',
@@ -1327,7 +1330,7 @@ router.delete('/users/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const user = await databaseService.deleteUser(id);
+    const user = await userService.deleteUser(id);
     
     res.status(200).json({
       message: 'User deleted successfully',
@@ -1351,7 +1354,7 @@ router.patch('/users/:id/role', adminAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid role. Must be one of: admin, owner, guest, cleaner' });
     }
     
-    const user = await databaseService.updateUser(id, { role });
+    const user = await userService.updateUser(id, { role });
     
     res.status(200).json({
       message: 'User role updated successfully',
@@ -1373,7 +1376,7 @@ router.patch('/users/:id/status', adminAuth, async (req, res) => {
       return res.status(400).json({ error: 'isActive must be a boolean value' });
     }
     
-    const user = await databaseService.updateUser(id, { isActive });
+    const user = await userService.updateUser(id, { isActive });
     
     res.status(200).json({
       message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
@@ -1423,7 +1426,7 @@ router.get('/cleaning-tasks', adminAuth, async (req, res) => {
     };
 
     const userProfile = req.userProfile; // Available from adminAuth middleware
-    const tasks = await databaseService.getCleaningTasks(filters, userProfile);
+    const tasks = await roomService.getCleaningTasks(filters, userProfile);
     
     res.status(200).json({
       message: 'Cleaning tasks retrieved successfully',
@@ -1490,7 +1493,7 @@ router.post('/cleaning-tasks', adminAuth, async (req, res) => {
       specialNotes
     };
     
-    const task = await databaseService.createCleaningTask(taskData);
+    const task = await roomService.createCleaningTask(taskData);
     
     res.status(201).json({
       message: 'Cleaning task created successfully',
@@ -1508,7 +1511,7 @@ router.put('/cleaning-tasks/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    const task = await databaseService.updateCleaningTask(id, updateData);
+    const task = await roomService.updateCleaningTask(id, updateData);
     
     res.status(200).json({
       message: 'Cleaning task updated successfully',
@@ -1525,7 +1528,7 @@ router.delete('/cleaning-tasks/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const task = await databaseService.deleteCleaningTask(id);
+    const task = await roomService.deleteCleaningTask(id);
     
     res.status(200).json({
       message: 'Cleaning task deleted successfully',
@@ -1547,7 +1550,7 @@ router.patch('/cleaning-tasks/:id/assign', adminAuth, async (req, res) => {
       return res.status(400).json({ error: 'Cleaner ID is required' });
     }
     
-    const task = await databaseService.assignCleanerToTask(id, cleanerId);
+    const task = await roomService.assignCleanerToTask(id, cleanerId);
     
     res.status(200).json({
       message: 'Cleaner assigned to task successfully',
@@ -1562,7 +1565,7 @@ router.patch('/cleaning-tasks/:id/assign', adminAuth, async (req, res) => {
 // Get available cleaners
 router.get('/cleaners', adminAuth, async (req, res) => {
   try {
-    const cleaners = await databaseService.getAvailableCleaners();
+    const cleaners = await roomService.getAvailableCleaners();
     
     res.status(200).json({
       message: 'Available cleaners retrieved successfully',
@@ -1593,7 +1596,7 @@ router.get('/cleaning-tasks/stats', adminAuth, async (req, res) => {
       taskDateTo
     };
 
-    const stats = await databaseService.getCleaningTaskStats(filters);
+    const stats = await roomService.getCleaningTaskStats(filters);
     
     res.status(200).json({
       message: 'Cleaning task statistics retrieved successfully',
