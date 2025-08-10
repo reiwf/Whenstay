@@ -16,7 +16,7 @@ export function useReservations() {
       const params = {
         ...filters,
         page,
-        limit: 20
+        limit: 15
       }
 
       // Remove empty filters
@@ -28,11 +28,20 @@ export function useReservations() {
 
       const reservationsResponse = await adminAPI.getReservations(params)
 
-      setReservations(reservationsResponse.data.reservations)
-      setHasMore(reservationsResponse.data.pagination.hasMore)
+      // Handle the updated API response structure
+      // Backend returns: { data: { reservations: [], pagination: {} } }
+      const responseData = reservationsResponse.data || {}
+      const reservationsData = responseData.data?.reservations || responseData.reservations || []
+      const paginationData = responseData.data?.pagination || responseData.pagination || {}
+
+      setReservations(reservationsData)
+      setHasMore(paginationData.hasMore || false)
       setCurrentPage(page)
       
-      return reservationsResponse.data
+      return {
+        reservations: reservationsData,
+        pagination: paginationData
+      }
     } catch (error) {
       console.error('Error loading reservations:', error)
       toast.error('Failed to load reservations')
@@ -55,6 +64,7 @@ export function useReservations() {
         guestName: reservationData.bookingName || reservationData.guestName,
         guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
         phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        bookingLastname: reservationData.bookingLastname,
         
         // Stay details
         checkInDate: reservationData.checkInDate,
@@ -135,6 +145,7 @@ export function useReservations() {
         guestName: reservationData.bookingName || reservationData.guestName,
         guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
         phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        bookingLastname: reservationData.bookingLastname,
         
         // Stay details
         checkInDate: reservationData.checkInDate,

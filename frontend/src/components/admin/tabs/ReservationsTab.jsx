@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { 
   RefreshCw, 
   Filter, 
@@ -57,15 +57,12 @@ export default function ReservationsTab() {
   const [editingReservation, setEditingReservation] = useState(null)
   const [copiedTokens, setCopiedTokens] = useState({})
   const [expandedRows, setExpandedRows] = useState({})
+  const filterTimeoutRef = useRef(null)
 
   useEffect(() => {
     loadReservations(filters)
     loadProperties()
   }, [])
-
-  useEffect(() => {
-    loadReservations(filters, currentPage)
-  }, [filters, currentPage])
 
   useEffect(() => {
     if (filters.propertyId) {
@@ -95,22 +92,40 @@ export default function ReservationsTab() {
   }
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ 
-      ...prev, 
+    const updatedFilters = {
+      ...filters,
       [key]: value,
-      // Clear room type filter when property changes
       ...(key === 'propertyId' && { roomTypeId: '' })
-    }))
-    setCurrentPage(1) // Reset to first page when filters change
+    }
+    
+    setFilters(updatedFilters);       // immediate UI update
+    setCurrentPage(1);
+
+    if (filterTimeoutRef.current) clearTimeout(filterTimeoutRef.current)
+
+    filterTimeoutRef.current = setTimeout(() => {
+      setFilters(updatedFilters)
+      setCurrentPage(1)
+      loadReservations(updatedFilters, 1)
+    }, 500)
+  }
+
+  const applyFilters = () => {
+    if (filterTimeoutRef.current) clearTimeout(filterTimeoutRef.current)
+    setCurrentPage(1)
+    loadReservations(filters, 1)
   }
 
   const clearFilters = () => {
-    setFilters({
+    if (filterTimeoutRef.current) clearTimeout(filterTimeoutRef.current)
+    const resetFilters = {
       status: '',
       propertyId: '',
       roomTypeId: ''
-    })
+    }
+    setFilters(resetFilters)
     setCurrentPage(1)
+    loadReservations(resetFilters, 1)
   }
 
   const handleSendInvitation = async (reservationId) => {
@@ -659,13 +674,22 @@ export default function ReservationsTab() {
             <Filter className="w-5 h-5 inline mr-2" />
             Filters
           </h3>
-          <button
-            onClick={clearFilters}
-            className="text-sm text-gray-600 hover:text-gray-800"
-          >
-            <RefreshCw className="w-4 h-4 inline mr-1" />
-            Clear Filters
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={applyFilters}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+            >
+              <Check className="w-4 h-4 mr-1" />
+              Apply Filters
+            </button>
+            <button
+              onClick={clearFilters}
+              className="text-sm text-gray-600 hover:text-gray-800 flex items-center"
+            >
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Clear Filters
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

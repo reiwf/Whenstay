@@ -272,7 +272,7 @@ router.post('/sync/beds24', adminAuth, async (req, res) => {
   }
 });
 
-// Get all reservations (with filters) - V5 Enhanced
+// Get all reservations (with filters) - V5 Enhanced with full details
 router.get('/reservations', adminAuth, async (req, res) => {
   try {
     const {
@@ -282,8 +282,9 @@ router.get('/reservations', adminAuth, async (req, res) => {
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
+      includeCancelled,
       page = 1,
-      limit = 20,
+      limit = 15,
       sortBy = 'check_in_date',
       sortOrder = 'desc'
     } = req.query;
@@ -295,21 +296,25 @@ router.get('/reservations', adminAuth, async (req, res) => {
       checkInDate,
       checkInDateFrom,
       checkInDateTo,
+      includeCancelled: includeCancelled === 'true',
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
       sortBy,
       sortOrder
     };
 
-    const reservations = await databaseService.getReservationsWithFilters(filters);
+    // Use reservations_details view for comprehensive data
+    const reservations = await databaseService.getReservationsWithFullDetails(filters);
     
     res.status(200).json({
       message: 'Reservations retrieved successfully',
-      reservations,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        hasMore: reservations.length === parseInt(limit)
+      data: {
+        reservations,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          hasMore: reservations.length === parseInt(limit)
+        }
       },
       filters: {
         status,
@@ -325,6 +330,30 @@ router.get('/reservations', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching reservations:', error);
     res.status(500).json({ error: 'Failed to fetch reservations' });
+  }
+});
+
+// Get specific reservation details with full hierarchy
+router.get('/reservations/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get reservation with full details from the view
+    const reservation = await databaseService.getReservationFullDetails(id);
+    
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+    
+    res.status(200).json({
+      message: 'Reservation details retrieved successfully',
+      data: {
+        reservation
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching reservation details:', error);
+    res.status(500).json({ error: 'Failed to fetch reservation details' });
   }
 });
 
@@ -364,6 +393,7 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     if (updateData.bookingName !== undefined) reservationUpdateData.booking_name = updateData.bookingName;
     if (updateData.bookingEmail !== undefined) reservationUpdateData.booking_email = updateData.bookingEmail;
     if (updateData.bookingPhone !== undefined) reservationUpdateData.booking_phone = updateData.bookingPhone;
+    if (updateData.bookingLastname !== undefined) reservationUpdateData.booking_lastname = updateData.bookingLastname;
     
     // Legacy field mappings for backward compatibility
     if (updateData.guestName !== undefined) reservationUpdateData.booking_name = updateData.guestName;
@@ -377,11 +407,22 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     if (updateData.numAdults !== undefined) reservationUpdateData.num_adults = updateData.numAdults;
     if (updateData.numChildren !== undefined) reservationUpdateData.num_children = updateData.numChildren;
     if (updateData.totalAmount !== undefined) reservationUpdateData.total_amount = updateData.totalAmount;
+    if (updateData.price !== undefined) reservationUpdateData.price = updateData.price;
+    if (updateData.commission !== undefined) reservationUpdateData.commission = updateData.commission;
     if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
     if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
     if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24_booking_id = updateData.beds24BookingId;
     if (updateData.specialRequests !== undefined) reservationUpdateData.special_requests = updateData.specialRequests;
     if (updateData.bookingSource !== undefined) reservationUpdateData.booking_source = updateData.bookingSource;
+    if (updateData.comments !== undefined) reservationUpdateData.comments = updateData.comments;
+    
+    // Beds24 webhook specific fields
+    if (updateData.apiReference !== undefined) reservationUpdateData.apiReference = updateData.apiReference;
+    if (updateData.rateDescription !== undefined) reservationUpdateData.rateDescription = updateData.rateDescription;
+    if (updateData.apiMessage !== undefined) reservationUpdateData.apiMessage = updateData.apiMessage;
+    if (updateData.bookingTime !== undefined) reservationUpdateData.bookingTime = updateData.bookingTime;
+    if (updateData.timeStamp !== undefined) reservationUpdateData.timeStamp = updateData.timeStamp;
+    if (updateData.lang !== undefined) reservationUpdateData.lang = updateData.lang;
     
     // V5 Room assignment
     if (updateData.propertyId !== undefined) reservationUpdateData.property_id = updateData.propertyId;
@@ -392,6 +433,7 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     // Guest personal information fields (guest_* fields)
     if (updateData.guestFirstname !== undefined) reservationUpdateData.guest_firstname = updateData.guestFirstname;
     if (updateData.guestLastname !== undefined) reservationUpdateData.guest_lastname = updateData.guestLastname;
+    if (updateData.guestMail !== undefined) reservationUpdateData.guest_mail = updateData.guestMail;
     if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_mail = updateData.guestPersonalEmail;
     if (updateData.guestContact !== undefined) reservationUpdateData.guest_contact = updateData.guestContact;
     if (updateData.guestAddress !== undefined) reservationUpdateData.guest_address = updateData.guestAddress;
@@ -402,6 +444,7 @@ router.put('/reservations/:id', adminAuth, async (req, res) => {
     if (updateData.passportUrl !== undefined) reservationUpdateData.passport_url = updateData.passportUrl;
     if (updateData.agreementAccepted !== undefined) reservationUpdateData.agreement_accepted = updateData.agreementAccepted;
     if (updateData.adminVerified !== undefined) reservationUpdateData.admin_verified = updateData.adminVerified;
+    if (updateData.accessRead !== undefined) reservationUpdateData.access_read = updateData.accessRead;
     
     console.log('Mapped update data:', reservationUpdateData);
     

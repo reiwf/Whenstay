@@ -20,57 +20,176 @@ import {
   Building2,
   CreditCard,
   BookImage,
-  UserPlus
+  UserPlus,
+  Globe,
+  MessageSquare,
+  Hash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../../LoadingSpinner'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
   const [formData, setFormData] = useState({
-    // Basic booking info (maps to booking_* fields in DB)
-    bookingName: reservation?.booking_name || reservation?.guest_name || '',
-    bookingEmail: reservation?.booking_email || reservation?.guest_email || '',
-    bookingPhone: reservation?.booking_phone || reservation?.guest_phone || '',
-    
-    // Guest personal info (maps to guest_* fields in DB)
-    guestFirstname: reservation?.guest_firstname || '',
-    guestLastname: reservation?.guest_lastname || '',
-    guestPersonalEmail: reservation?.guest_mail || reservation?.guest_personal_email || '',
-    guestContact: reservation?.guest_contact || '',
-    guestAddress: reservation?.guest_address || '',
+    // Basic booking information - maps directly to database columns
+    beds24BookingId: '',
+    bookingName: '',
+    bookingEmail: '',
+    bookingPhone: '',
+    bookingLastname: '',
     
     // Booking details
-    checkInDate: reservation?.check_in_date || '',
-    checkOutDate: reservation?.check_out_date || '',
-    numGuests: reservation?.num_guests || 1,
-    numAdults: reservation?.num_adults || 1,
-    numChildren: reservation?.num_children || 0,
-    totalAmount: reservation?.total_amount || '',
-    currency: reservation?.currency || 'JPY',
-    status: reservation?.status || 'pending',
-    specialRequests: reservation?.special_requests || '',
-    bookingSource: reservation?.booking_source || '',
-    beds24BookingId: reservation?.beds24_booking_id || '',
+    checkInDate: '',
+    checkOutDate: '',
+    numGuests: 1,
+    numAdults: 1,
+    numChildren: 0,
+    totalAmount: '',
+    price: '',
+    commission: '',
+    status: 'pending',
+    specialRequests: '',
+    bookingSource: '',
+    comments: '',
     
-    // V5 Room assignment
-    propertyId: reservation?.property_id || '',
-    roomTypeId: reservation?.room_type_id || '',
-    roomUnitId: reservation?.room_unit_id || '',
-    roomId: reservation?.room_id || '', // Legacy support
+    // Beds24 webhook specific fields
+    apiReference: '',
+    rateDescription: '',
+    apiMessage: '',
+    bookingTime: '',
+    timeStamp: '',
+    lang: '',
     
-    // Check-in information
-    estimatedCheckinTime: reservation?.estimated_checkin_time || '',
-    travelPurpose: reservation?.travel_purpose || '',
-    passportUrl: reservation?.passport_url || '',
+    // Room assignment (V5 structure)
+    propertyId: '',
+    roomTypeId: '',
+    roomUnitId: '',
+    
+    // Guest personal information (from check-in process)
+    guestFirstname: '',
+    guestLastname: '',
+    guestMail: '', 
+    guestContact: '',
+    guestAddress: '',
+    
+    // Check-in specific information
+    estimatedCheckinTime: '',
+    travelPurpose: '',
+    passportUrl: '',
     
     // Emergency contact
-    emergencyContactName: reservation?.emergency_contact_name || '',
-    emergencyContactPhone: reservation?.emergency_contact_phone || '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
     
-    // Administrative
-    agreementAccepted: reservation?.agreement_accepted || false,
-    adminVerified: reservation?.admin_verified || false
+    // Administrative fields
+    agreementAccepted: false,
+    adminVerified: false,
+    accessRead: false
   })
+
+  // Update formData when reservation changes (proper data fetching from database)
+  useEffect(() => {
+    if (reservation) {
+      setFormData({
+        // Basic booking information - maps directly to database columns
+        beds24BookingId: reservation.beds24_booking_id || '',
+        bookingName: reservation.booking_name || '',
+        bookingEmail: reservation.booking_email || '',
+        bookingPhone: reservation.booking_phone || '',
+        bookingLastname: reservation.booking_lastname || '',
+        
+        // Booking details
+        checkInDate: reservation.check_in_date || '',
+        checkOutDate: reservation.check_out_date || '',
+        numGuests: reservation.num_guests || 1,
+        numAdults: reservation.num_adults || 1,
+        numChildren: reservation.num_children || 0,
+        totalAmount: reservation.total_amount || '',
+        price: reservation.price || '',
+        commission: reservation.commission || '',
+        status: reservation.status || 'pending',
+        specialRequests: reservation.special_requests || '',
+        bookingSource: reservation.booking_source || '',
+        comments: reservation.comments || '',
+        
+        // Beds24 webhook specific fields
+        apiReference: reservation.apiReference || '',
+        rateDescription: reservation.rateDescription || '',
+        apiMessage: reservation.apiMessage || '',
+        bookingTime: reservation.bookingTime || '',
+        timeStamp: reservation.timeStamp || '',
+        lang: reservation.lang || '',
+        
+        // Room assignment (V5 structure)
+        propertyId: reservation.property_id || '',
+        roomTypeId: reservation.room_type_id || '',
+        roomUnitId: reservation.room_unit_id || '',
+        
+        // Guest personal information (from check-in process)
+        guestFirstname: reservation.guest_firstname || '',
+        guestLastname: reservation.guest_lastname || '',
+        guestMail: reservation.guest_mail || '', 
+        guestContact: reservation.guest_contact || '',
+        guestAddress: reservation.guest_address || '',
+        
+        // Check-in specific information
+        estimatedCheckinTime: reservation.estimated_checkin_time || '',
+        travelPurpose: reservation.travel_purpose || '',
+        passportUrl: reservation.passport_url || '',
+        
+        // Emergency contact
+        emergencyContactName: reservation.emergency_contact_name || '',
+        emergencyContactPhone: reservation.emergency_contact_phone || '',
+        
+        // Administrative fields
+        agreementAccepted: reservation.agreement_accepted || false,
+        adminVerified: reservation.admin_verified || false,
+        accessRead: reservation.access_read || false
+      })
+    } else {
+      // Reset form for new reservation
+      setFormData({
+        beds24BookingId: '',
+        bookingName: '',
+        bookingEmail: '',
+        bookingPhone: '',
+        bookingLastname: '',
+        checkInDate: '',
+        checkOutDate: '',
+        numGuests: 1,
+        numAdults: 1,
+        numChildren: 0,
+        totalAmount: '',
+        price: '',
+        commission: '',
+        status: 'pending',
+        specialRequests: '',
+        bookingSource: '',
+        comments: '',
+        apiReference: '',
+        rateDescription: '',
+        apiMessage: '',
+        bookingTime: '',
+        timeStamp: '',
+        lang: '',
+        propertyId: '',
+        roomTypeId: '',
+        roomUnitId: '',
+        guestFirstname: '',
+        guestLastname: '',
+        guestMail: '',
+        guestContact: '',
+        guestAddress: '',
+        estimatedCheckinTime: '',
+        travelPurpose: '',
+        passportUrl: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        agreementAccepted: false,
+        adminVerified: false,
+        accessRead: false
+      })
+    }
+  }, [reservation])
   
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -78,60 +197,60 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const [collapsedSections, setCollapsedSections] = useState({
     booking: false,
     checkin: false,
+    system: false,
     admin: false
   })
 
-  // Get available rooms from properties (V5 schema: room_types -> room_units)
+  // Available status options based on database enum
+  const statusOptions = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'checked_in', label: 'Checked In' },
+    { value: 'checked_out', label: 'Checked Out' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'no_show', label: 'No Show' }
+  ]
+
+
+  // Get available rooms from properties (V5 structure)
   const availableRooms = properties.reduce((rooms, property) => {
-    // V5 structure: room_types -> room_units
     if (property.room_types) {
       property.room_types.forEach(roomType => {
         if (roomType.room_units) {
           roomType.room_units.forEach(roomUnit => {
             rooms.push({
               id: roomUnit.id,
-              roomUnitId: roomUnit.id,
-              roomTypeId: roomType.id,
               propertyId: property.id,
-              label: `${property.name} - ${roomType.name} - Unit ${roomUnit.unit_number}${roomUnit.floor_number ? ` (Floor ${roomUnit.floor_number})` : ''}`,
+              roomTypeId: roomType.id,
+              roomUnitId: roomUnit.id,
+              label: `${property.name} → ${roomType.name} → Unit ${roomUnit.unit_number}${roomUnit.floor_number ? ` (Floor ${roomUnit.floor_number})` : ''}`,
               propertyName: property.name,
               roomTypeName: roomType.name,
               unitNumber: roomUnit.unit_number,
-              floorNumber: roomUnit.floor_number
+              floorNumber: roomUnit.floor_number,
+              maxGuests: roomType.max_guests,
+              basePrice: roomType.base_price
             })
           })
         }
       })
     }
-    
-    // Legacy support: direct rooms
-    if (property.rooms) {
-      property.rooms.forEach(room => {
-        rooms.push({
-          id: room.id,
-          roomId: room.id, // Legacy room ID
-          propertyId: property.id,
-          label: `${property.name} - Room ${room.room_number}${room.room_name ? ` (${room.room_name})` : ''}`,
-          propertyName: property.name,
-          roomNumber: room.room_number,
-          roomName: room.room_name,
-          isLegacy: true
-        })
-      })
-    }
-    
     return rooms
   }, [])
 
   const validateForm = () => {
     const newErrors = {}
 
-    // Required fields - using correct field names
+    // Required fields based on database schema
+    if (!formData.beds24BookingId.trim()) {
+      newErrors.beds24BookingId = 'Beds24 Booking ID is required'
+    }
     if (!formData.bookingName.trim()) {
-      newErrors.bookingName = 'Guest name is required'
+      newErrors.bookingName = 'Booking name is required'
     }
     if (!formData.bookingEmail.trim()) {
-      newErrors.bookingEmail = 'Guest email is required'
+      newErrors.bookingEmail = 'Booking email is required'
     } else if (!/\S+@\S+\.\S+/.test(formData.bookingEmail)) {
       newErrors.bookingEmail = 'Please enter a valid email address'
     }
@@ -142,9 +261,9 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       newErrors.checkOutDate = 'Check-out date is required'
     }
     
-    // Room assignment validation - check for either V5 or legacy room assignment
-    if (!formData.roomUnitId && !formData.roomId) {
-      newErrors.roomAssignment = 'Room selection is required'
+    // Room assignment validation (V5 structure)
+    if (!formData.roomUnitId) {
+      newErrors.roomUnitId = 'Room unit selection is required'
     }
 
     // Date validation
@@ -172,6 +291,17 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     if (formData.totalAmount && isNaN(parseFloat(formData.totalAmount))) {
       newErrors.totalAmount = 'Please enter a valid amount'
     }
+    if (formData.price && isNaN(parseFloat(formData.price))) {
+      newErrors.price = 'Please enter a valid price'
+    }
+    if (formData.commission && isNaN(parseFloat(formData.commission))) {
+      newErrors.commission = 'Please enter a valid commission'
+    }
+
+    // Email validation for guest personal email
+    if (formData.guestMail && !/\S+@\S+\.\S+/.test(formData.guestMail)) {
+      newErrors.guestMail = 'Please enter a valid email address'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -188,18 +318,14 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     setLoading(true)
     
     try {
+      // Map form data to database fields exactly
       const submitData = {
-        // Basic booking info (maps to booking_* fields in DB)
+        // Core booking information
+        beds24BookingId: formData.beds24BookingId,
         bookingName: formData.bookingName,
         bookingEmail: formData.bookingEmail,
         bookingPhone: formData.bookingPhone || null,
-        
-        // Guest personal info (maps to guest_* fields in DB)
-        guestFirstname: formData.guestFirstname || null,
-        guestLastname: formData.guestLastname || null,
-        guestPersonalEmail: formData.guestPersonalEmail || null,
-        guestContact: formData.guestContact || null,
-        guestAddress: formData.guestAddress || null,
+        bookingLastname: formData.bookingLastname || null,
         
         // Booking details
         checkInDate: formData.checkInDate,
@@ -208,17 +334,32 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         numAdults: parseInt(formData.numAdults),
         numChildren: parseInt(formData.numChildren),
         totalAmount: formData.totalAmount ? parseFloat(formData.totalAmount) : null,
-        currency: formData.currency,
+        price: formData.price ? parseFloat(formData.price) : null,
+        commission: formData.commission ? parseFloat(formData.commission) : null,
         status: formData.status,
         specialRequests: formData.specialRequests || null,
         bookingSource: formData.bookingSource || null,
-        beds24BookingId: formData.beds24BookingId || null,
+        comments: formData.comments || null,
+        
+        // Beds24 webhook fields
+        apiReference: formData.apiReference || null,
+        rateDescription: formData.rateDescription || null,
+        apiMessage: formData.apiMessage || null,
+        bookingTime: formData.bookingTime || null,
+        timeStamp: formData.timeStamp || null,
+        lang: formData.lang || null,
         
         // V5 Room assignment
         propertyId: formData.propertyId || null,
         roomTypeId: formData.roomTypeId || null,
         roomUnitId: formData.roomUnitId || null,
-        // Note: roomId field removed in V5 schema
+        
+        // Guest personal information
+        guestFirstname: formData.guestFirstname || null,
+        guestLastname: formData.guestLastname || null,
+        guestMail: formData.guestMail || null, // Fixed field name
+        guestContact: formData.guestContact || null,
+        guestAddress: formData.guestAddress || null,
         
         // Check-in information
         estimatedCheckinTime: formData.estimatedCheckinTime || null,
@@ -231,7 +372,8 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         
         // Administrative
         agreementAccepted: formData.agreementAccepted,
-        adminVerified: formData.adminVerified
+        adminVerified: formData.adminVerified,
+        accessRead: formData.accessRead
       }
 
       await onSave(submitData, reservation?.id)
@@ -240,6 +382,18 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       toast.error('Failed to save reservation')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRoomSelection = (roomUnitId) => {
+    const selectedRoom = availableRooms.find(room => room.roomUnitId === roomUnitId)
+    if (selectedRoom) {
+      setFormData({
+        ...formData,
+        roomUnitId: selectedRoom.roomUnitId,
+        roomTypeId: selectedRoom.roomTypeId,
+        propertyId: selectedRoom.propertyId
+      })
     }
   }
 
@@ -268,9 +422,12 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const getStatusBadgeColor = (status) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'invited': return 'bg-blue-100 text-blue-800'
+      case 'confirmed': return 'bg-blue-100 text-blue-800'
+      case 'checked_in': return 'bg-green-100 text-green-800'
+      case 'checked_out': return 'bg-purple-100 text-purple-800'
       case 'completed': return 'bg-green-100 text-green-800'
       case 'cancelled': return 'bg-red-100 text-red-800'
+      case 'no_show': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -292,13 +449,13 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const hasCheckinData = reservation?.checkin_submitted_at || 
     reservation?.guest_firstname || 
     reservation?.guest_lastname || 
-    reservation?.guest_personal_email ||
+    reservation?.guest_mail ||
     reservation?.passport_url ||
     reservation?.guest_address
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-start mb-6">
@@ -317,6 +474,11 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                   {reservation.checkin_submitted_at && (
                     <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                       Check-in Submitted
+                    </span>
+                  )}
+                  {reservation.admin_verified && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                      Admin Verified
                     </span>
                   )}
                 </div>
@@ -347,7 +509,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* 1. BOOKING DETAILS SECTION */}
+            {/* 1. BOOKING INFORMATION SECTION */}
             <div className="border border-blue-200 rounded-lg overflow-hidden">
               <div 
                 className="bg-blue-50 p-4 cursor-pointer"
@@ -356,9 +518,9 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                 <div className="flex items-center justify-between">
                   <h4 className="text-md font-medium text-blue-900 flex items-center">
                     <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                    Booking Details
+                    Booking Information
                     <span className="ml-2 text-sm text-blue-600 font-normal">
-                      (System/Admin Managed Data)
+                      (Core reservation data)
                     </span>
                   </h4>
                   {collapsedSections.booking ? 
@@ -370,38 +532,53 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
               
               {!collapsedSections.booking && (
                 <div className="p-4 bg-white">
-                  {/* Booking System Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    {reservation?.beds24_booking_id && (
+                  {/* Booking System Information */}
+                  <div className="mb-6">
+                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
+                      <Hash className="w-4 h-4 mr-2" />
+                      System Information
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Beds24 Booking ID
+                          Beds24 Booking ID *
                         </label>
                         <input
                           type="text"
+                          required
                           value={formData.beds24BookingId}
-                          readOnly
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 text-gray-600"
+                          readOnly={!!reservation}
+                          onChange={(e) => !reservation && setFormData({ ...formData, beds24BookingId: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none ${reservation ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500'} ${
+                            errors.beds24BookingId ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="Beds24 booking reference"
                         />
+                        {errors.beds24BookingId && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            {errors.beds24BookingId}
+                          </p>
+                        )}
                       </div>
-                    )}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Booking Source
-                      </label>
-                      <select
-                        value={formData.bookingSource}
-                        onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select source</option>
-                        <option value="Airbnb">Airbnb</option>
-                        <option value="Booking.com">Booking.com</option>
-                        <option value="Expedia">Expedia</option>
-                        <option value="Direct">Direct Booking</option>
-                        <option value="Other">Other</option>
-                      </select>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Booking Source
+                        </label>
+                        <select
+                          value={formData.bookingSource}
+                          onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select source</option>
+                          <option value="Airbnb">Airbnb</option>
+                          <option value="Booking.com">Booking.com</option>
+                          <option value="Expedia">Expedia</option>
+                          <option value="Direct">Direct Booking</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -414,7 +591,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Guest Name *
+                          Booking Name *
                         </label>
                         <input
                           type="text"
@@ -436,7 +613,20 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email Address *
+                          Booking Last Name
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.bookingLastname}
+                          onChange={(e) => setFormData({ ...formData, bookingLastname: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Smith"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Booking Email *
                         </label>
                         <input
                           type="email"
@@ -458,7 +648,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Phone Number
+                          Booking Phone
                         </label>
                         <input
                           type="tel"
@@ -595,54 +785,31 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                   <div className="mb-6">
                     <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
                       <MapPin className="w-4 h-4 mr-2" />
-                      Room Assignment
+                      Room Assignment (V5 Structure)
                     </h5>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Room *
+                        Room Unit *
                       </label>
                       <select
                         required
-                        value={formData.roomUnitId || formData.roomId || ''}
-                        onChange={(e) => {
-                          const selectedRoom = availableRooms.find(room => room.id === e.target.value)
-                          if (selectedRoom) {
-                            if (selectedRoom.isLegacy) {
-                              // Legacy room selection
-                              setFormData({ 
-                                ...formData, 
-                                roomId: selectedRoom.id,
-                                roomUnitId: '',
-                                roomTypeId: '',
-                                propertyId: selectedRoom.propertyId
-                              })
-                            } else {
-                              // V5 room unit selection
-                              setFormData({ 
-                                ...formData, 
-                                roomUnitId: selectedRoom.roomUnitId,
-                                roomTypeId: selectedRoom.roomTypeId,
-                                propertyId: selectedRoom.propertyId,
-                                roomId: '' // Clear legacy room ID
-                              })
-                            }
-                          }
-                        }}
+                        value={formData.roomUnitId}
+                        onChange={(e) => handleRoomSelection(e.target.value)}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          errors.roomAssignment ? 'border-red-300' : 'border-gray-300'
+                          errors.roomUnitId ? 'border-red-300' : 'border-gray-300'
                         }`}
                       >
-                        <option value="">Select a room</option>
+                        <option value="">Select a room unit</option>
                         {availableRooms.map((room) => (
-                          <option key={room.id} value={room.id}>
-                            {room.label}
+                          <option key={room.roomUnitId} value={room.roomUnitId}>
+                            {room.label} (Max: {room.maxGuests} guests)
                           </option>
                         ))}
                       </select>
-                      {errors.roomAssignment && (
+                      {errors.roomUnitId && (
                         <p className="text-red-500 text-xs mt-1 flex items-center">
                           <AlertCircle className="w-3 h-3 mr-1" />
-                          {errors.roomAssignment}
+                          {errors.roomUnitId}
                         </p>
                       )}
                     </div>
@@ -654,7 +821,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                       <CreditCard className="w-4 h-4 mr-2" />
                       Financial Details
                     </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Total Amount
@@ -680,21 +847,59 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Currency
+                          Price
                         </label>
-                        <select
-                          value={formData.currency}
-                          onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="JPY">JPY</option>
-                          <option value="EUR">EUR</option>
-                          <option value="GBP">GBP</option>
-                          <option value="CAD">CAD</option>
-                          <option value="AUD">AUD</option>
-                        </select>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.price}
+                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            errors.price ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="0.00"
+                        />
+                        {errors.price && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            {errors.price}
+                          </p>
+                        )}
                       </div>
 
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Commission
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.commission}
+                          onChange={(e) => setFormData({ ...formData, commission: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            errors.commission ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="0.00"
+                        />
+                        {errors.commission && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            {errors.commission}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status and Comments */}
+                  <div className="mb-6">
+                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Status & Notes
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Status
@@ -704,27 +909,42 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="pending">Pending</option>
-                          <option value="invited">Invited</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
+                          {statusOptions.map(option => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
-                  </div>
+                    
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Special Requests
+                        </label>
+                        <textarea
+                          value={formData.specialRequests}
+                          onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Any special requests or notes..."
+                        />
+                      </div>
 
-                  {/* Special Requests */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Special Requests
-                    </label>
-                    <textarea
-                      value={formData.specialRequests}
-                      onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Any special requests or notes..."
-                    />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Comments
+                        </label>
+                        <textarea
+                          value={formData.comments}
+                          onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Internal comments..."
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -758,19 +978,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
               
               {!collapsedSections.checkin && (
                 <div className="p-4 bg-white">
-                  {/* Check-in Token */}
-                  {reservation?.check_in_token && (
-                    <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-md">
-                      <h5 className="text-sm font-medium text-gray-800 mb-2 flex items-center">
-                        <FileText className="w-4 h-4 mr-2" />
-                        Check-in Token
-                      </h5>
-                      <div className="text-sm text-gray-600">
-                        Token: <span className="font-mono bg-white px-2 py-1 rounded border">{reservation.check_in_token}</span>
-                      </div>
-                    </div>
-                  )}
-
                   {!hasCheckinData && (
                     <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                       <div className="flex items-center">
@@ -799,7 +1006,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, guestFirstname: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="John"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
 
@@ -813,7 +1019,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, guestLastname: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="Smith"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
 
@@ -823,12 +1028,19 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         </label>
                         <input
                           type="email"
-                          value={formData.guestPersonalEmail}
-                          onChange={(e) => setFormData({ ...formData, guestPersonalEmail: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          value={formData.guestMail}
+                          onChange={(e) => setFormData({ ...formData, guestMail: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                            errors.guestMail ? 'border-red-300' : 'border-gray-300'
+                          }`}
                           placeholder="personal@example.com"
-                          readOnly={!reservation || hasCheckinData}
                         />
+                        {errors.guestMail && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            {errors.guestMail}
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -841,7 +1053,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, guestContact: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="+1 (555) 123-4567"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
 
@@ -855,7 +1066,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           rows={2}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="123 Main St, City, State, Country"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
                     </div>
@@ -877,7 +1087,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.estimatedCheckinTime}
                           onChange={(e) => setFormData({ ...formData, estimatedCheckinTime: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
 
@@ -889,7 +1098,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.travelPurpose}
                           onChange={(e) => setFormData({ ...formData, travelPurpose: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                          disabled={!reservation || hasCheckinData}
                         >
                           <option value="">Select purpose</option>
                           <option value="Business">Business</option>
@@ -941,7 +1149,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="Emergency contact person"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
 
@@ -955,7 +1162,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                           placeholder="+1 (555) 123-4567"
-                          readOnly={!reservation || hasCheckinData}
                         />
                       </div>
                     </div>
@@ -974,7 +1180,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         checked={formData.agreementAccepted}
                         onChange={(e) => setFormData({ ...formData, agreementAccepted: e.target.checked })}
                         className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                        disabled={!reservation || hasCheckinData}
                       />
                       <label htmlFor="agreementAccepted" className="text-sm font-medium text-gray-700">
                         Guest Agreement Accepted
@@ -996,23 +1201,116 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
               )}
             </div>
 
-            {/* 3. ADMINISTRATIVE SECTION */}
+            {/* 3. SYSTEM INFORMATION SECTION */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <div 
                 className="bg-gray-50 p-4 cursor-pointer"
-                onClick={() => toggleSection('admin')}
+                onClick={() => toggleSection('system')}
               >
                 <div className="flex items-center justify-between">
                   <h4 className="text-md font-medium text-gray-900 flex items-center">
-                    <Shield className="w-5 h-5 mr-2 text-gray-600" />
-                    Administrative
+                    <Globe className="w-5 h-5 mr-2 text-gray-600" />
+                    System Information
                     <span className="ml-2 text-sm text-gray-600 font-normal">
+                      (Beds24 Webhook Data)
+                    </span>
+                  </h4>
+                  {collapsedSections.system ? 
+                    <ChevronDown className="w-5 h-5 text-gray-600" /> : 
+                    <ChevronUp className="w-5 h-5 text-gray-600" />
+                  }
+                </div>
+              </div>
+              
+              {!collapsedSections.system && (
+                <div className="p-4 bg-white">
+                  {/* Beds24 Webhook Fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        API Reference
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.apiReference}
+                        onChange={(e) => setFormData({ ...formData, apiReference: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        placeholder="API reference"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Rate Description
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.rateDescription}
+                        onChange={(e) => setFormData({ ...formData, rateDescription: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        placeholder="Rate description"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Language
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.lang}
+                        onChange={(e) => setFormData({ ...formData, lang: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        placeholder="en"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Booking Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={formData.bookingTime}
+                        onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        API Message
+                      </label>
+                      <textarea
+                        value={formData.apiMessage}
+                        onChange={(e) => setFormData({ ...formData, apiMessage: e.target.value })}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        placeholder="API message"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4. ADMINISTRATIVE SECTION */}
+            <div className="border border-red-200 rounded-lg overflow-hidden">
+              <div 
+                className="bg-red-50 p-4 cursor-pointer"
+                onClick={() => toggleSection('admin')}
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-md font-medium text-red-900 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-red-600" />
+                    Administrative
+                    <span className="ml-2 text-sm text-red-600 font-normal">
                       (Admin Controls & Verification)
                     </span>
                   </h4>
                   {collapsedSections.admin ? 
-                    <ChevronDown className="w-5 h-5 text-gray-600" /> : 
-                    <ChevronUp className="w-5 h-5 text-gray-600" />
+                    <ChevronDown className="w-5 h-5 text-red-600" /> : 
+                    <ChevronUp className="w-5 h-5 text-red-600" />
                   }
                 </div>
               </div>
@@ -1032,12 +1330,28 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           id="adminVerified"
                           checked={formData.adminVerified}
                           onChange={(e) => setFormData({ ...formData, adminVerified: e.target.checked })}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                         />
                         <label htmlFor="adminVerified" className="text-sm font-medium text-gray-700">
                           Admin Verified
                         </label>
                         {formData.adminVerified && (
+                          <Check className="w-4 h-4 text-green-600" />
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          id="accessRead"
+                          checked={formData.accessRead}
+                          onChange={(e) => setFormData({ ...formData, accessRead: e.target.checked })}
+                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <label htmlFor="accessRead" className="text-sm font-medium text-gray-700">
+                          Access Read
+                        </label>
+                        {formData.accessRead && (
                           <Check className="w-4 h-4 text-green-600" />
                         )}
                       </div>
