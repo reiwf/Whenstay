@@ -131,7 +131,8 @@ export default {
   		animation: {
   			'slide-in': 'slideIn 0.2s ease-out',
   			'slide-out': 'slideOut 0.2s ease-in',
-  			'fade-in': 'fadeIn 0.3s ease-in-out'
+  			'fade-in': 'fadeIn 0.3s ease-in-out',
+  			'shake': 'shake 2s ease-in-out'
   		},
   		keyframes: {
   			slideIn: {
@@ -159,6 +160,18 @@ export default {
   					opacity: '1',
   					transform: 'translateY(0)'
   				}
+  			},
+  			shake: {
+  				'0%, 100%': { transform: 'translateX(0)' },
+				'10%': { transform: 'translateX(-5px)' },
+				'20%': { transform: 'translateX(5px)' },
+				'30%': { transform: 'translateX(-4px)' },
+				'40%': { transform: 'translateX(4px)' },
+				'50%': { transform: 'translateX(-3px)' },
+				'60%': { transform: 'translateX(3px)' },
+				'70%': { transform: 'translateX(-2px)' },
+				'80%': { transform: 'translateX(2px)' },
+				'90%': { transform: 'translateX(-1px)' }
   			}
   		},
   		screens: {

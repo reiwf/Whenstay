@@ -244,6 +244,11 @@ export const webhookAPI = {
   test: (data) => api.post('/webhooks/test', data),
 }
 
+export const guestAPI = {
+  // Validate guest token
+  validateToken: (token) => api.get(`/guest/${token}`),
+}
+
 // Utility functions
 export const setAuthToken = (token) => {
   if (token) {
