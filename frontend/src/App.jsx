@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import CheckinPage from './pages/CheckinPage'
 import Login from './pages/Login'
 import AdminDashboard from './pages/AdminDashboard'
+import ReservationPage from './pages/ReservationPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestDashboard from './pages/GuestDashboard'
@@ -25,6 +26,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner', 'cleaner']}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/reservation" 
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <ReservationPage />
               </ProtectedRoute>
             } 
           />

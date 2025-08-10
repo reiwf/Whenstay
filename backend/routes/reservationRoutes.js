@@ -150,13 +150,23 @@ router.get('/', adminAuth, async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
+    // Smart date defaulting: if no date filters provided, default to today's check-ins for performance
+    let dateFilters = {};
+    if (checkInDate) {
+      dateFilters.checkInDate = checkInDate;
+    } else if (checkInDateFrom || checkInDateTo) {
+      if (checkInDateFrom) dateFilters.checkInDateFrom = checkInDateFrom;
+      if (checkInDateTo) dateFilters.checkInDateTo = checkInDateTo;
+    } else {
+      // No date filters provided - default to today for performance
+      dateFilters.checkInDate = new Date().toISOString().split('T')[0];
+    }
+
     const filters = {
       status,
       propertyId,
       roomTypeId,
-      checkInDate,
-      checkInDateFrom,
-      checkInDateTo,
+      ...dateFilters,
       includeCancelled: includeCancelled === 'true',
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
@@ -180,11 +190,12 @@ router.get('/', adminAuth, async (req, res) => {
         status,
         propertyId,
         roomTypeId,
-        checkInDate,
-        checkInDateFrom,
-        checkInDateTo,
+        checkInDate: dateFilters.checkInDate,
+        checkInDateFrom: dateFilters.checkInDateFrom,
+        checkInDateTo: dateFilters.checkInDateTo,
         sortBy,
-        sortOrder
+        sortOrder,
+        appliedDefaultToday: !checkInDate && !checkInDateFrom && !checkInDateTo
       }
     });
   } catch (error) {

@@ -328,11 +328,17 @@ class ReservationService {
       if (checkInDate) {
         query = query.eq('check_in_date', checkInDate);
       } else {
-        if (checkInDateFrom) {
-          query = query.gte('check_in_date', checkInDateFrom);
-        }
-        if (checkInDateTo) {
-          query = query.lte('check_in_date', checkInDateTo);
+        // Handle single date range (same start and end date) as exact match
+        if (checkInDateFrom && checkInDateTo && checkInDateFrom === checkInDateTo) {
+          query = query.eq('check_in_date', checkInDateFrom);
+        } else {
+          // Handle different start/end dates as range
+          if (checkInDateFrom) {
+            query = query.gte('check_in_date', checkInDateFrom);
+          }
+          if (checkInDateTo) {
+            query = query.lte('check_in_date', checkInDateTo);
+          }
         }
       }
 
@@ -516,11 +522,15 @@ class ReservationService {
         checkInDateTo,
         checkInDate,
         includeCancelled = false,
-        limit = 50,
+        limit: requestedLimit,
         offset = 0,
         sortBy = 'check_in_date',
         sortOrder = 'desc'
       } = filters;
+
+      // Increase limit significantly when date range is specified
+      const hasDateRange = checkInDateFrom && checkInDateTo;
+      const limit = requestedLimit || (hasDateRange ? 1000 : 100);
 
       // Optimized field selection - only load what's needed for the UI
       const selectFields = [

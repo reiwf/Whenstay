@@ -14,7 +14,6 @@ import { useUsers } from '../hooks/useUsers'
 
 // Import tab components
 import PropertiesTab from '../components/admin/tabs/PropertiesTab'
-import ReservationsTab from '../components/admin/tabs/ReservationsTab'
 import UsersTab from '../components/admin/tabs/UsersTab'
 import CleaningTab from '../components/admin/tabs/CleaningTab'
 

@@ -57,13 +57,17 @@ export function DataTableAdvanced({
   customSearchFunction = null,
   onDateRangeChange = null,
   defaultDateRange = undefined,
+  dateRangeColumn = null, // Column to filter by date range
+  dateRange: externalDateRange = undefined, // External date range state
 }) {
   const [sorting, setSorting] = useState([])
   const [columnFilters, setColumnFilters] = useState([])
   const [columnVisibility, setColumnVisibility] = useState({})
   const [rowSelection, setRowSelection] = useState({})
   const [globalFilter, setGlobalFilter] = useState('')
-  const [dateRange, setDateRange] = useState(defaultDateRange || undefined)
+  
+  // Always use external date range when provided (no internal state conflicts)
+  const currentDateRange = externalDateRange
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: pageSize,
@@ -146,16 +150,23 @@ export function DataTableAdvanced({
 
   // Enhanced data with date range filtering applied manually
   const filteredData = useMemo(() => {
-    if (!dateRange) return data
+    if (!currentDateRange) return data
     
     return data.filter(row => {
+      // If dateRangeColumn is specified, use that column
+      if (dateRangeColumn) {
+        const cellValue = row[dateRangeColumn]
+        return isDateInRange(cellValue, currentDateRange)
+      }
+      
+      // Otherwise check all detected date columns
       return dateColumns.some(col => {
         const colId = col.accessorKey || col.id
         const cellValue = row[colId]
-        return isDateInRange(cellValue, dateRange)
+        return isDateInRange(cellValue, currentDateRange)
       })
     })
-  }, [data, dateRange, dateColumns])
+  }, [data, currentDateRange, dateColumns, dateRangeColumn])
 
   const table = useReactTable({
     data: filteredData,
@@ -286,17 +297,16 @@ export function DataTableAdvanced({
           )}
 
           {/* Date Range Filter */}
-          {dateColumns.length > 0 && (
+          {(dateRangeColumn || dateColumns.length > 0) && (
             <DateRangePicker
-              dateRange={dateRange}
+              dateRange={currentDateRange}
               onDateRangeChange={(newDateRange) => {
-                // If date range is cleared and we have a default, reset to default
-                const finalDateRange = newDateRange || defaultDateRange
-                setDateRange(finalDateRange)
-                onDateRangeChange?.(finalDateRange)
+                // Simply pass the date range to external handler without interference
+                onDateRangeChange?.(newDateRange)
               }}
               placeholder="Filter by date range"
               className="w-80"
+              showClear={true}
             />
           )}
         </div>
@@ -494,7 +504,7 @@ export function DataTableAdvanced({
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div>
           {table.getFilteredRowModel().rows.length} of {filteredData.length} entries
-          {(globalFilter || dateRange) && ` (filtered from ${data.length} total entries)`}
+          {(globalFilter || currentDateRange) && ` (filtered from ${data.length} total entries)`}
         </div>
         {selectedRows.length > 0 && (
           <div>

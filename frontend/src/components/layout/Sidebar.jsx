@@ -10,6 +10,7 @@ import {
   Settings,
   X
 } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import SidebarItem from './SidebarItem'
 import ProfileDropdown from '../ProfileDropdown'
@@ -24,6 +25,8 @@ const Sidebar = ({
   userRole 
 }) => {
   const { profile } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   // Navigation items based on user role
   const getNavigationItems = () => {
@@ -33,7 +36,7 @@ const Sidebar = ({
       items.push(
         { id: 'dashboard', label: 'Dashboard', icon: Home },
         { id: 'properties', label: 'Properties', icon: Building },
-        { id: 'reservations', label: 'Reservations', icon: CheckCircle },
+        { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
         { id: 'cleaning', label: 'Cleaning', icon: Sparkles },
         { id: 'users', label: 'Users', icon: Users }
       )
@@ -59,6 +62,27 @@ const Sidebar = ({
   }
 
   const navigationItems = getNavigationItems()
+
+  // Handle navigation clicks
+  const handleNavigationClick = (itemId) => {
+    if (itemId === 'reservation-management') {
+      // Navigate to the dedicated reservation page
+      navigate('/reservation')
+    } else if (itemId === 'dashboard' || itemId === 'properties' || itemId === 'cleaning' || itemId === 'users') {
+      // For dashboard items, navigate to dashboard and let onSectionChange handle the section
+      if (location.pathname !== '/dashboard') {
+        navigate('/dashboard')
+      }
+      if (onSectionChange) {
+        onSectionChange(itemId)
+      }
+    } else {
+      // Default behavior for other items
+      if (onSectionChange) {
+        onSectionChange(itemId)
+      }
+    }
+  }
 
   return (
     <div className="flex flex-col w-full h-full bg-white border-r border-gray-200 shadow-sm">
@@ -116,7 +140,7 @@ const Sidebar = ({
             active={activeSection === item.id}
             collapsed={collapsed && !mobile}
             onClick={() => {
-              onSectionChange(item.id)
+              handleNavigationClick(item.id)
               if (mobile && onClose) {
                 onClose()
               }

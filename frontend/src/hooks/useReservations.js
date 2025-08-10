@@ -13,10 +13,14 @@ export function useReservations() {
     try {
       setLoading(true)
       
+      // Increase limit significantly when date range is specified
+      const hasDateRange = filters.checkInDateFrom && filters.checkInDateTo;
+      const limit = hasDateRange ? 500 : 50; // Much higher limit for date ranges
+      
       const params = {
         ...filters,
         page,
-        limit: 15
+        limit
       }
 
       // Remove empty filters

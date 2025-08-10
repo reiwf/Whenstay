@@ -19,21 +19,21 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
           </button>
 
           {/* Desktop Sidebar Toggle (when collapsed) */}
-          <button
+          {/* <button
             onClick={onToggleSidebar}
             className="hidden lg:block p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             <ChevronLeft className={`w-5 h-5 transition-transform ${
               sidebarCollapsed ? 'rotate-180' : ''
             }`} />
-          </button>
+          </button> */}
 
           {/* Mobile Logo (only show when sidebar is closed) */}
           <div className="lg:hidden flex items-center">
             <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
-              <span className="text-white font-bold text-sm">W</span>
+              <span className="text-white font-bold text-sm">S</span>
             </div>
-            <h1 className="text-lg font-bold text-gray-900">Whenstay</h1>
+            <h1 className="text-lg font-bold text-gray-900">Staylabel</h1>
           </div>
         </div>
 
