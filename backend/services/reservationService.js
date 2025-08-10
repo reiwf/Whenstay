@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require('../config/supabase');
 const { cleanObject } = require('./utils/dbHelpers');
+const { getTokyoToday } = require('./utils/dateUtils');
 
 class ReservationService {
   // Create a new reservation record
@@ -1042,7 +1043,8 @@ class ReservationService {
   // Get today's dashboard statistics
   async getTodayDashboardStats(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
+      console.log('Today:', getTokyoToday);
 
       // Function to create properly filtered count queries
       const getFilteredCount = async (dateField, dateValue, additionalFilters = {}) => {
@@ -1113,7 +1115,7 @@ class ReservationService {
   // Get today's arrivals
   async getTodayArrivals(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       // Try to use the detailed view first
       let query = supabaseAdmin
@@ -1147,7 +1149,7 @@ class ReservationService {
   // Fallback method for today's arrivals
   async getTodayArrivalsBasic(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       let query = supabaseAdmin
         .from('reservations')
@@ -1201,7 +1203,7 @@ class ReservationService {
   // Get today's departures
   async getTodayDepartures(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       // Try to use the detailed view first
       let query = supabaseAdmin
@@ -1234,7 +1236,7 @@ class ReservationService {
   // Fallback method for today's departures
   async getTodayDeparturesBasic(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       let query = supabaseAdmin
         .from('reservations')
@@ -1287,7 +1289,7 @@ class ReservationService {
   // Get currently in-house guests
   async getInHouseGuests(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       // Try to use the detailed view first
       let query = supabaseAdmin
@@ -1322,7 +1324,7 @@ class ReservationService {
   // Fallback method for in-house guests
   async getInHouseGuestsBasic(userProfile = null) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
 
       let query = supabaseAdmin
         .from('reservations')

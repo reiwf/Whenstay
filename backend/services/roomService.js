@@ -1,5 +1,6 @@
-    const { supabaseAdmin } = require('../config/supabase');
+const { supabaseAdmin } = require('../config/supabase');
 const { cleanObject } = require('./utils/dbHelpers');
+const { getTokyoToday } = require('./utils/dateUtils');
 
 class RoomService {
   // Create room (deprecated - use createRoomType and createRoomUnit instead)
@@ -773,7 +774,7 @@ class RoomService {
       ]);
 
       // Get overdue tasks (pending tasks past their date)
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTokyoToday();
       const { count: overdueCount } = await createBaseQuery()
         .eq('status', 'pending')
         .lt('task_date', today)

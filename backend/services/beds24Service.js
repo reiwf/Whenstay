@@ -1,5 +1,6 @@
 const axios = require('axios');
 const databaseService = require('./databaseService');
+const { getTokyoToday } = require('./utils/dateUtils');
 
 class Beds24Service {
   constructor() {
@@ -27,7 +28,7 @@ class Beds24Service {
       const defaultParams = {
         includeInvoice: false,
         includeInfoItems: true,
-        checkIn: new Date().toISOString().split('T')[0], // Today's date
+        checkIn: getTokyoToday(),
         ...params
       };
 
@@ -347,8 +348,8 @@ class Beds24Service {
       endDate.setDate(endDate.getDate() + 30); // Next 30 days
       
       const bookings = await this.getBookings({
-        checkIn: startDate.toISOString().split('T')[0],
-        checkOut: endDate.toISOString().split('T')[0]
+        checkIn: startDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' }),
+        checkOut: endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
       });
 
       return bookings.map(booking => this.processWebhookData({ booking }));

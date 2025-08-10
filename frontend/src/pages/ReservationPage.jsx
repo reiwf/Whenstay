@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   RefreshCw, 
-  Filter, 
   Calendar, 
   PlaneLanding,
   PlaneTakeoff,
@@ -15,19 +14,18 @@ import {
   Building,
   Home,
   Bed,
-  User,
-  Mail,
-  X
+  Mail
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import LoadingSpinner from '../components/LoadingSpinner'
 import DashboardLayout from '../components/layout/DashboardLayout'
-import { DataTableAdvanced, EmptyState } from '../components/ui'
+import { DataTableAdvanced } from '../components/ui'
 import { DateRangePicker } from '../components/ui/date-range-picker'
-import { adminAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import ReservationModal from '../components/admin/modals/ReservationModal'
 import useReservations from '../hooks/useReservations'
+
+const tokyoTodayYMD = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
 
 export default function ReservationPage() {
   const { hasAdminAccess, profile } = useAuth()
@@ -37,7 +35,6 @@ export default function ReservationPage() {
     loading,
     reservations,
     currentPage,
-    hasMore,
     loadReservations,
     updateReservation,
     createReservation,
@@ -82,34 +79,49 @@ export default function ReservationPage() {
   // Load initial data
   useEffect(() => {
     if (hasAdminAccess()) {
-      // Load all reservations without date filter initially
-      loadReservations({})
+      loadReservationsWithFilters(undefined, 1, { defaultToToday: true });
     }
-  }, [hasAdminAccess, loadReservations])
+  }, [hasAdminAccess, loadReservations]);
+
 
   // Clean helper function to load reservations with date filters
-  const loadReservationsWithFilters = (dateRangeToUse = dateRange, page = currentPage) => {
-    const apiParams = {
-      // Apply date filters if date range is selected
-      ...(dateRangeToUse?.from && { 
-        checkInDateFrom: dateRangeToUse.from.toISOString().split('T')[0],
-        checkInDateTo: (dateRangeToUse.to || dateRangeToUse.from).toISOString().split('T')[0]
-      })
-    }
-    
-    loadReservations(apiParams, page)
+  const loadReservationsWithFilters = (
+      dateRangeToUse = dateRange,
+      page = currentPage,
+      opts = { defaultToToday: true } // 👈 default Tokyo today when empty
+    ) => {
+      let from, to;
+
+      if (dateRangeToUse?.from) {
+        from = dateRangeToUse.from.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+        to   = (dateRangeToUse.to || dateRangeToUse.from).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+      } else if (opts.defaultToToday) {
+        const t = tokyoTodayYMD();
+        from = t; to = t;
+      }
+
+      const apiParams = {
+        ...(from && { checkInDateFrom: from, checkInDateTo: to }),
+      };
+
+      // Debug (remove later)
+      console.log('Filtering with (Tokyo):', apiParams);
+
+      loadReservations(apiParams, page);
+    };
+
+    const applyDateFilter = () => {
+    setCurrentPage(1);
+    // user picked explicit dates → don't override with today
+    loadReservationsWithFilters(dateRange, 1, { defaultToToday: false })
   }
 
-  const applyDateFilter = () => {
-    setCurrentPage(1)
-    loadReservationsWithFilters(dateRange, 1)
-  }
-
-  const clearDateFilter = () => {
-    const clearedDateRange = { from: null, to: null }
-    setDateRange(clearedDateRange)
-    setCurrentPage(1)
-    loadReservationsWithFilters(clearedDateRange, 1)
+    const clearDateFilter = () => {
+    const cleared = { from: null, to: null };
+    setDateRange(cleared);
+    setCurrentPage(1);
+    // cleared → go back to Tokyo today
+    loadReservationsWithFilters(cleared, 1, { defaultToToday: true })
   }
 
   const handleSendInvitation = async (reservationId) => {
@@ -287,12 +299,13 @@ export default function ReservationPage() {
         {/* First row: Check-in → Check-out */}
         <div className="text-sm text-gray-900 flex items-center">
           <PlaneLanding className="w-4 h-4 mr-1" />
-          {new Date(reservation.check_in_date).toISOString().split('T')[0]}
+          {new Date(reservation.check_in_date).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
           <span className="mx-2 text-gray-500">→</span>
           <PlaneTakeoff className="w-4 h-4 mr-1" />
-          {new Date(reservation.check_out_date).toISOString().split('T')[0]}
+          {new Date(reservation.check_out_date).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
+          
         </div>
-
+      
         {/* Second row: Nights */}
         <div className="text-sm text-gray-500 flex items-center">
           <MoonStar className="w-4 h-4 mr-1" />

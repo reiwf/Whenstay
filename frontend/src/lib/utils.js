@@ -6,7 +6,10 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-// Date utilities
+export function getTokyoToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
+}
+
 export function isDateValue(value) {
   if (!value) return false
   

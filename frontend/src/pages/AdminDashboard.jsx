@@ -345,7 +345,7 @@ export default function AdminDashboard() {
                         title: 'Checked In',
                         render: (value) => (
                           <span className="text-sm text-gray-900">
-                            {new Date(value).toISOString().split('T')[0]}
+                             {new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
                           </span>
                         )
                       },
@@ -354,7 +354,7 @@ export default function AdminDashboard() {
                         title: 'Check Out',
                         render: (value) => (
                           <span className="text-sm text-gray-900">
-                            {new Date(value).toISOString().split('T')[0]}
+                             {new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
                           </span>
                         )
                       },
