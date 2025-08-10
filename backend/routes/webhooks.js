@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
+const { adminAuth } = require('../middleware/auth');
 
 // Beds24 webhook endpoint
 router.post('/beds24', async (req, res) => {
@@ -23,14 +24,14 @@ router.post('/beds24', async (req, res) => {
     const eventId = webhookData.eventId || webhookData.id || `${Date.now()}-${Math.random()}`;
     
     // Check if we've already processed this event
-    const eventExists = await databaseService.webhookEventExists(eventId);
+    const eventExists = await reservationService.webhookEventExists(eventId);
     if (eventExists) {
       console.log('Webhook event already processed:', eventId);
       return res.status(200).json({ message: 'Event already processed' });
     }
 
     // Log the webhook event to reservation_webhook_logs table
-    const loggedEvent = await databaseService.logReservationWebhook(
+    const loggedEvent = await reservationService.logReservationWebhook(
       webhookData.booking?.id || webhookData.beds24BookingId,
       webhookData,
       false
@@ -43,7 +44,7 @@ router.post('/beds24', async (req, res) => {
       // Mark event as processed (handle gracefully if column doesn't exist)
       if (loggedEvent) {
         try {
-          await databaseService.markWebhookEventProcessed(loggedEvent.id);
+          await reservationService.markWebhookEventProcessed(loggedEvent.id);
         } catch (error) {
           console.log('Note: Webhook event processed successfully, but logging update failed (non-critical):', error.message);
         }
@@ -58,6 +59,35 @@ router.post('/beds24', async (req, res) => {
   } catch (error) {
     console.error('Webhook error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events', adminAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const { data: events, error } = await require('../config/supabase').supabaseAdmin
+      .from('webhook_events')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    res.status(200).json({
+      events,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        hasMore: events.length === parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching webhook events:', error);
+    res.status(500).json({ error: 'Failed to fetch webhook events' });
   }
 });
 
@@ -104,7 +134,7 @@ async function handleNewBooking(webhookData) {
     });
     
     // Check if reservation already exists
-    const existingReservation = await databaseService.getReservationByBeds24Id(
+    const existingReservation = await reservationService.getReservationByBeds24Id(
       bookingInfo.beds24BookingId
     );
     
@@ -112,7 +142,7 @@ async function handleNewBooking(webhookData) {
       console.log('Reservation already exists, updating with new data:', bookingInfo.beds24BookingId);
       
       // Update existing reservation with new data (handles extensions, modifications, etc.)
-      const updatedReservation = await databaseService.updateReservation(
+      const updatedReservation = await reservationService.updateReservation(
         existingReservation.id, 
         bookingInfo
       );
@@ -133,7 +163,7 @@ async function handleNewBooking(webhookData) {
     }
 
     // Create new reservation in database with complete field mapping
-    const reservation = await databaseService.createReservation(bookingInfo);
+    const reservation = await reservationService.createReservation(bookingInfo);
     
     console.log(`Created new reservation: ${reservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
@@ -157,7 +187,7 @@ async function handleBookingUpdate(webhookData) {
     });
     
     // Find existing reservation
-    const existingReservation = await databaseService.getReservationByBeds24Id(
+    const existingReservation = await reservationService.getReservationByBeds24Id(
       bookingInfo.beds24BookingId
     );
     
@@ -168,7 +198,7 @@ async function handleBookingUpdate(webhookData) {
     }
 
     // Update reservation with new data
-    const updatedReservation = await databaseService.updateReservation(
+    const updatedReservation = await reservationService.updateReservation(
       existingReservation.id, 
       bookingInfo
     );
@@ -192,13 +222,13 @@ async function handleBookingCancellation(webhookData) {
     });
     
     // Find existing reservation
-    const existingReservation = await databaseService.getReservationByBeds24Id(
+    const existingReservation = await reservationService.getReservationByBeds24Id(
       bookingInfo.beds24BookingId
     );
     
     if (existingReservation) {
       // Update status to cancelled
-      await databaseService.updateReservationStatus(existingReservation.id, 'cancelled');
+      await reservationService.updateReservationStatus(existingReservation.id, 'cancelled');
       console.log(`Cancelled reservation: ${existingReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     } else {
       console.log(`Reservation not found for cancellation: ${bookingInfo.beds24BookingId}`);

@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
 const { supabaseAdmin } = require('../config/supabase');
 
@@ -32,7 +32,7 @@ router.get('/:token', async (req, res) => {
     }
 
     // Get comprehensive reservation details using guest dashboard data method
-    const dashboardData = await databaseService.getGuestDashboardData(token);
+    const dashboardData = await reservationService.getGuestDashboardData(token);
     
     if (!dashboardData) {
       return res.status(404).json({ error: 'Invalid or expired check-in link' });

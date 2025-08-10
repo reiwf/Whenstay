@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
-const databaseService = require('../services/databaseService');
+const reservationService = require('../services/reservationService');
 
 // Get reservations from Beds24 (for testing/debugging)
 router.get('/beds24', async (req, res) => {
@@ -62,15 +62,15 @@ router.post('/sync', async (req, res) => {
     for (const booking of bookings) {
       try {
         // Check if reservation already exists
-        const existingReservation = await databaseService.getReservationByBeds24Id(
+        const existingReservation = await reservationService.getReservationByBeds24Id(
           booking.beds24BookingId
         );
         
         if (!existingReservation) {
-          const reservation = await databaseService.createReservation(booking);
+          const reservation = await reservationService.createReservation(booking);
           
           // Update status to invited and send email
-          await databaseService.updateReservationStatus(reservation.id, 'invited');
+          await reservationService.updateReservationStatus(reservation.id, 'invited');
           
           // Send check-in invitation
           const emailService = require('../services/emailService');
@@ -123,10 +123,10 @@ router.post('/test', async (req, res) => {
     };
     
     // Create reservation
-    const reservation = await databaseService.createReservation(testReservation);
+    const reservation = await reservationService.createReservation(testReservation);
     
     // Update status to invited
-    await databaseService.updateReservationStatus(reservation.id, 'invited');
+    await reservationService.updateReservationStatus(reservation.id, 'invited');
     
     // Send check-in invitation
     const emailService = require('../services/emailService');

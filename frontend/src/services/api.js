@@ -83,149 +83,149 @@ export const checkinAPI = {
 
 export const adminAPI = {
   // Admin login
-  login: (credentials) => api.post('/dashboard/login', credentials),
+  login: (credentials) => api.post('/auth/login', credentials),
   
   // Get dashboard stats
-  getDashboardStats: () => api.get('/dashboard/dashboard/stats'),
+  getDashboardStats: () => api.get('/dashboard/stats'),
   
   // Get today's dashboard stats
-  getTodayStats: () => api.get('/dashboard/dashboard/today-stats'),
+  getTodayStats: () => api.get('/dashboard/today-stats'),
   
   // Get today's arrivals
-  getTodayArrivals: () => api.get('/dashboard/dashboard/today-arrivals'),
+  getTodayArrivals: () => api.get('/dashboard/today-arrivals'),
   
   // Get today's departures
-  getTodayDepartures: () => api.get('/dashboard/dashboard/today-departures'),
+  getTodayDepartures: () => api.get('/dashboard/today-departures'),
   
   // Get in-house guests
-  getInHouseGuests: () => api.get('/dashboard/dashboard/in-house-guests'),
+  getInHouseGuests: () => api.get('/dashboard/in-house-guests'),
   
   // Get all check-ins
-  getCheckins: (params = {}) => api.get('/dashboard/checkins', { params }),
+  getCheckins: (params = {}) => api.get('/checkins', { params }),
   
   // Get specific check-in details
-  getCheckinDetails: (reservationId) => api.get(`/dashboard/checkins/${reservationId}`),
+  getCheckinDetails: (reservationId) => api.get(`/checkins/${reservationId}`),
   
   // Update verification status
   updateVerification: (checkinId, verified) => 
-    api.patch(`/dashboard/checkins/${checkinId}/verify`, { verified }),
+    api.patch(`/checkins/${checkinId}/verify`, { verified }),
   
   // Get all reservations with filtering
-  getReservations: (params = {}) => api.get('/dashboard/reservations', { params }),
+  getReservations: (params = {}) => api.get('/reservations', { params }),
   
   
   // Send invitation manually
   sendInvitation: (reservationId) => 
-    api.post(`/dashboard/reservations/${reservationId}/send-invitation`),
+    api.post(`/reservations/${reservationId}/send-invitation`),
   
   // Get specific reservation details
   getReservationDetails: (reservationId) => 
-    api.get(`/dashboard/reservations/${reservationId}`),
+    api.get(`/reservations/${reservationId}`),
   
   // Create new reservation
   createReservation: (reservationData) => 
-    api.post('/dashboard/reservations', reservationData),
+    api.post('/reservations', reservationData),
   
   // Update reservation
   updateReservation: (reservationId, reservationData) => 
-    api.put(`/dashboard/reservations/${reservationId}`, reservationData),
+    api.put(`/reservations/${reservationId}`, reservationData),
   
   // Delete reservation
   deleteReservation: (reservationId) => 
-    api.delete(`/dashboard/reservations/${reservationId}`),
+    api.delete(`/reservations/${reservationId}`),
   
   // Sync from Beds24
-  syncBeds24: (daysBack = 7) => api.post('/dashboard/sync/beds24', { daysBack }),
+  syncBeds24: (daysBack = 7) => api.post('/sync/beds24', { daysBack }),
   
   // Get webhook events
-  getWebhookEvents: (params = {}) => api.get('/dashboard/webhooks/events', { params }),
+  getWebhookEvents: (params = {}) => api.get('/webhooks/events', { params }),
   
   // Property Management
-  getProperties: (withStats = false) => api.get('/dashboard/properties', { 
+  getProperties: (withStats = false) => api.get('/properties', { 
     params: { withStats: withStats.toString() } 
   }),
   
-  getProperty: (id) => api.get(`/dashboard/properties/${id}`),
+  getProperty: (id) => api.get(`/properties/${id}`),
   
-  createProperty: (propertyData) => api.post('/dashboard/properties', propertyData),
+  createProperty: (propertyData) => api.post('/properties', propertyData),
   
-  updateProperty: (id, propertyData) => api.put(`/dashboard/properties/${id}`, propertyData),
+  updateProperty: (id, propertyData) => api.put(`/properties/${id}`, propertyData),
   
-  deleteProperty: (id) => api.delete(`/dashboard/properties/${id}`),
+  deleteProperty: (id) => api.delete(`/properties/${id}`),
   
   // Room Type Management
   getRoomTypes: (propertyId, withUnits = false) => 
-    api.get(`/dashboard/properties/${propertyId}/room-types`, { 
+    api.get(`/properties/${propertyId}/room-types`, { 
       params: { withUnits: withUnits.toString() } 
     }),
   
   getRoomTypesByProperty: (propertyId, withUnits = false) => 
-    api.get(`/dashboard/properties/${propertyId}/room-types`, { 
+    api.get(`/properties/${propertyId}/room-types`, { 
       params: { withUnits: withUnits.toString() } 
     }),
   
   createRoomType: (propertyId, roomTypeData) => 
-    api.post(`/dashboard/properties/${propertyId}/room-types`, roomTypeData),
+    api.post(`/properties/${propertyId}/room-types`, roomTypeData),
   
   updateRoomType: (roomTypeId, roomTypeData) => 
-    api.put(`/dashboard/room-types/${roomTypeId}`, roomTypeData),
+    api.put(`/room-types/${roomTypeId}`, roomTypeData),
   
-  deleteRoomType: (roomTypeId) => api.delete(`/dashboard/room-types/${roomTypeId}`),
+  deleteRoomType: (roomTypeId) => api.delete(`/room-types/${roomTypeId}`),
   
   // Room Unit Management
   getRoomUnits: (roomTypeId) => 
-    api.get(`/dashboard/room-types/${roomTypeId}/room-units`),
+    api.get(`/room-types/${roomTypeId}/room-units`),
   
   createRoomUnit: (roomTypeId, roomUnitData) => 
-    api.post(`/dashboard/room-types/${roomTypeId}/room-units`, roomUnitData),
+    api.post(`/room-types/${roomTypeId}/room-units`, roomUnitData),
   
   updateRoomUnit: (roomUnitId, roomUnitData) => 
-    api.put(`/dashboard/room-units/${roomUnitId}`, roomUnitData),
+    api.put(`/room-units/${roomUnitId}`, roomUnitData),
   
-  deleteRoomUnit: (roomUnitId) => api.delete(`/dashboard/room-units/${roomUnitId}`),
+  deleteRoomUnit: (roomUnitId) => api.delete(`/room-units/${roomUnitId}`),
   
   // Legacy Room Management (for backward compatibility)
   createRoom: (propertyId, roomData) => 
-    api.post(`/dashboard/properties/${propertyId}/rooms`, roomData),
+    api.post(`/properties/${propertyId}/rooms`, roomData),
   
-  updateRoom: (roomId, roomData) => api.put(`/dashboard/rooms/${roomId}`, roomData),
+  updateRoom: (roomId, roomData) => api.put(`/rooms/${roomId}`, roomData),
   
-  deleteRoom: (roomId) => api.delete(`/dashboard/rooms/${roomId}`),
+  deleteRoom: (roomId) => api.delete(`/rooms/${roomId}`),
   
   // User Management
-  getUsers: (params = {}) => api.get('/dashboard/users', { params }),
+  getUsers: (params = {}) => api.get('/users', { params }),
   
-  getUserStats: () => api.get('/dashboard/users/stats'),
+  getUserStats: () => api.get('/users/stats'),
   
-  getUser: (id) => api.get(`/dashboard/users/${id}`),
+  getUser: (id) => api.get(`/users/${id}`),
   
-  createUser: (userData) => api.post('/dashboard/users', userData),
+  createUser: (userData) => api.post('/users', userData),
   
-  updateUser: (id, userData) => api.put(`/dashboard/users/${id}`, userData),
+  updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   
-  deleteUser: (id) => api.delete(`/dashboard/users/${id}`),
+  deleteUser: (id) => api.delete(`/users/${id}`),
   
-  updateUserRole: (id, role) => api.patch(`/dashboard/users/${id}/role`, { role }),
+  updateUserRole: (id, role) => api.patch(`/users/${id}/role`, { role }),
   
-  updateUserStatus: (id, isActive) => api.patch(`/dashboard/users/${id}/status`, { isActive }),
+  updateUserStatus: (id, isActive) => api.patch(`/users/${id}/status`, { isActive }),
   
   // Cleaning Task Management
-  getCleaningTasks: (params = {}) => api.get('/dashboard/cleaning-tasks', { params }),
+  getCleaningTasks: (params = {}) => api.get('/cleaning-tasks', { params }),
   
-  createCleaningTask: (taskData) => api.post('/dashboard/cleaning-tasks', taskData),
+  createCleaningTask: (taskData) => api.post('/cleaning-tasks', taskData),
   
-  updateCleaningTask: (id, taskData) => api.put(`/dashboard/cleaning-tasks/${id}`, taskData),
+  updateCleaningTask: (id, taskData) => api.put(`/cleaning-tasks/${id}`, taskData),
   
-  deleteCleaningTask: (id) => api.delete(`/dashboard/cleaning-tasks/${id}`),
+  deleteCleaningTask: (id) => api.delete(`/cleaning-tasks/${id}`),
   
   assignCleanerToTask: (id, cleanerId) => 
-    api.patch(`/dashboard/cleaning-tasks/${id}/assign`, { cleanerId }),
+    api.patch(`/cleaning-tasks/${id}/assign`, { cleanerId }),
   
   // Get available cleaners
-  getAvailableCleaners: () => api.get('/dashboard/cleaners'),
+  getAvailableCleaners: () => api.get('/cleaners'),
   
   // Get cleaning task statistics
-  getCleaningTaskStats: (params = {}) => api.get('/dashboard/cleaning-tasks/stats', { params }),
+  getCleaningTaskStats: (params = {}) => api.get('/cleaning-tasks/stats', { params }),
 }
 
 export const reservationAPI = {

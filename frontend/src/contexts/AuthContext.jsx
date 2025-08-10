@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
       // Check if user is already authenticated
       if (isAuthenticated()) {
         // Try to fetch current user profile
-        const response = await fetch('/api/dashboard/auth/profile', {
+        const response = await fetch('/api/auth/profile', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true)
       
-      const response = await fetch('/api/dashboard/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -106,7 +106,7 @@ export const AuthProvider = ({ children }) => {
       // Call logout endpoint if authenticated
       if (isAuthenticated()) {
         try {
-          await fetch('/api/dashboard/auth/logout', {
+          await fetch('/api/auth/logout', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`
@@ -142,7 +142,7 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'Not authenticated' }
       }
       
-      const response = await fetch('/api/dashboard/auth/profile', {
+      const response = await fetch('/api/auth/profile', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }

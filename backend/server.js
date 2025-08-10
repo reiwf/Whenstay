@@ -38,9 +38,15 @@ app.get('/health', (req, res) => {
 
 // Import routes
 const webhookRoutes = require('./routes/webhooks');
-const reservationRoutes = require('./routes/reservations');
+const reservationRoutes = require('./routes/reservationRoutes');
 const checkinRoutes = require('./routes/checkin');
-const dashboardRoutes = require('./routes/dashboard');
+const adminCheckinRoutes = require('./routes/checkinRoutes');
+const authRoutes = require('./routes/authRoutes');
+const propertyRoutes = require('./routes/propertyRoutes');
+const roomRoutes = require('./routes/roomRoutes');
+const userRoutes = require('./routes/userRoutes');
+const cleaningRoutes = require('./routes/cleaningRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 const guestRoutes = require('./routes/guest');
 const testRoutes = require('./routes/test');
 
@@ -48,12 +54,18 @@ const testRoutes = require('./routes/test');
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/checkin', checkinRoutes);
+app.use('/api/checkins', adminCheckinRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/properties', propertyRoutes);
+app.use('/api', roomRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/cleaning', cleaningRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/guest', guestRoutes);
 app.use('/api/test', testRoutes);
 
 // Serve static files from frontend build
-const frontendPath = path.join(__dirname, 'frontend/dist');
+const frontendPath = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendPath, {
   maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
   etag: true,

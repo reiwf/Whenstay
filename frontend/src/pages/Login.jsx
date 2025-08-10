@@ -80,7 +80,7 @@ const Login = () => {
       setIsLoading(true)
       setError('')
       
-      const response = await fetch('/api/dashboard/auth/create-test-admin', {
+      const response = await fetch('/api/auth/create-test-admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
