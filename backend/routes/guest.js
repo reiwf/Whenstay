@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const databaseService = require('../services/databaseService');
+const reservationService = require('../services/reservationService');
 
 // Get guest dashboard data by check-in token
 router.get('/:token', async (req, res) => {
@@ -12,7 +12,7 @@ router.get('/:token', async (req, res) => {
     }
 
     // Get guest dashboard data
-    const dashboardData = await databaseService.getGuestDashboardData(token);
+    const dashboardData = await reservationService.getGuestDashboardData(token);
 
     if (!dashboardData) {
       return res.status(404).json({ error: 'Reservation not found or invalid token' });
@@ -35,7 +35,7 @@ router.post('/:token/access-read', async (req, res) => {
     }
 
     // Update access_read to true
-    const result = await databaseService.updateAccessRead(token);
+    const result = await reservationService.updateAccessRead(token);
 
     if (!result) {
       return res.status(404).json({ error: 'Reservation not found or invalid token' });
