@@ -38,7 +38,7 @@ const DashboardLayout = ({
   }, [])
 
   return (
-    <div className="h-screen bg-gray-50 flex overflow-hidden">
+    <div className="h-screen bg-primary-50 flex overflow-hidden">
       {/* Desktop Sidebar */}
       <div className={`hidden lg:flex lg:flex-shrink-0 transition-all duration-300 ${
         sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
@@ -59,7 +59,7 @@ const DashboardLayout = ({
         <div className="lg:hidden fixed inset-0 z-50 flex">
           {/* Overlay */}
           <div
-            className="fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity"
+            className="fixed inset-0 bg-primary -600 bg-opacity-75 transition-opacity"
             onClick={() => setSidebarOpen(false)}
           />
           

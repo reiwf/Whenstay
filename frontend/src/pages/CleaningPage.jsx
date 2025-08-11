@@ -15,15 +15,14 @@ import {
   Pause,
   CheckCircle,
   AlertCircle,
-  Zap,
-  Clock
+  Zap
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import { DateRangePicker } from '../components/ui/date-range-picker'
 import toast from 'react-hot-toast'
-import CleaningTaskModal from '../components/admin/modals/CleaningTaskModal'
+import CleaningTaskModal from '../components/modals/CleaningTaskModal'
 import { adminAPI } from '../services/api'
 
 const tokyoTodayYMD = () =>

@@ -93,7 +93,7 @@ const Sidebar = ({
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-white border-r border-gray-200 shadow-sm">
+    <div className="flex flex-col w-full h-full bg-primary-50 border-r border-gray-200 shadow-sm">
       {/* Header */}
       <div className={`flex items-center justify-between p-4 border-b border-gray-200 ${
         collapsed && !mobile ? 'px-2' : 'px-4'

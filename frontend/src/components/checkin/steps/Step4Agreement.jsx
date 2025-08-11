@@ -80,24 +80,24 @@ export default function Step4Agreement({
   return (
     <div>
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-primary-900 mb-2">
           Guest Agreement
         </h2>
-        <p className="text-gray-600">
+        <p className="text-primary-600">
           Please review and accept our terms and conditions
         </p>
       </div>
 
       {/* Agreement Text */}
       <div className="bg-white border border-gray-300 rounded-lg mb-6">
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
+        <div className="p-4 border-b border-primary-200 bg-primary-50">
           <div className="flex items-center">
-            <FileText className="w-5 h-5 text-gray-600 mr-2" />
-            <h3 className="text-lg font-semibold text-gray-900">
+            <FileText className="w-5 h-5 text-primary-600 mr-2" />
+            <h3 className="text-lg font-semibold text-primary-900">
               Terms and Conditions
             </h3>
           </div>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm text-primary-600 mt-1">
             Please scroll through the entire document before accepting
           </p>
         </div>
@@ -112,10 +112,10 @@ export default function Step4Agreement({
         </div>
         
         {!hasReadAgreement && (
-          <div className="p-4 border-t border-gray-200 bg-yellow-50">
+            <div className="p-4 border-t border-primary-200 bg-primary-100">
             <div className="flex items-center">
               <AlertCircle className="w-4 h-4 text-yellow-600 mr-2" />
-              <p className="text-sm text-yellow-800">
+              <p className="text-sm text-primary-800">
                 Please scroll to the bottom of the agreement to continue
               </p>
             </div>
@@ -124,7 +124,7 @@ export default function Step4Agreement({
       </div>
 
       {/* Agreement Acceptance */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
         <div className="flex items-start">
           <input
             type="checkbox"
@@ -156,7 +156,7 @@ export default function Step4Agreement({
 
       {/* Success Indicator */}
       {hasReadAgreement && agreementAccepted && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6">
           <div className="flex items-center">
             <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
             <p className="text-green-800">

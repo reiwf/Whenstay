@@ -12,14 +12,13 @@ import {
   Plus,
   Trash2,
   Shield,
-  CheckCircle,
   XCircle
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
-import UserModal from '../components/admin/modals/UserModal'
+import UserModal from '../components/modals/UserModal'
 import { adminAPI } from '../services/api'
 
 export default function UserPage() {
@@ -149,25 +148,6 @@ export default function UserPage() {
     }
   }
 
-  const getRoleBadgeColor = (role) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800'
-      case 'owner': return 'bg-blue-100 text-blue-800'
-      case 'cleaner': return 'bg-green-100 text-green-800'
-      case 'guest': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case 'admin': return Shield
-      case 'owner': return UserCheck
-      case 'cleaner': return Users
-      case 'guest': return User
-      default: return User
-    }
-  }
 
   const renderUserInfo = (user) => {
     return (
@@ -206,11 +186,9 @@ export default function UserPage() {
   }
 
   const renderRole = (user) => {
-    const RoleIcon = getRoleIcon(user.role)
     return (
       <div className="flex items-center space-x-2">
-        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
-          <RoleIcon className="w-3 h-3 mr-1" />
+        <span className="text-sm text-gray-900">
           {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
         </span>
         {!user.is_active && (

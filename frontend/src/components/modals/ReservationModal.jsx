@@ -26,7 +26,7 @@ import {
   Hash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import LoadingSpinner from '../../LoadingSpinner'
+import LoadingSpinner from '../LoadingSpinner'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
   const [formData, setFormData] = useState({

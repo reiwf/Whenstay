@@ -47,22 +47,22 @@ export default function Step3DocumentUpload({
   return (
     <div>
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-primary-900 mb-2">
           Document Upload
         </h2>
-        <p className="text-gray-600">
+        <p className="text-primary-600">
           Please upload a clear photo of your passport or government-issued ID
         </p>
       </div>
 
       {/* Upload Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
+        <h3 className="text-lg font-semibold text-primary-900 mb-4">
           Document Requirements
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <ul className="text-blue-700 space-y-1">
+            <ul className="text-primary-700 space-y-1">
               <li>• Passport (preferred)</li>
               <li>• Driver's License</li>
             </ul>
@@ -95,11 +95,11 @@ export default function Step3DocumentUpload({
       )}
 
       {/* Security Notice */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
-        <div className="flex items-start">
-          <FileText className="w-5 h-5 text-gray-500 mr-3 mt-0.5" />
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-8">
+          <div className="flex items-start">
+            <FileText className="w-5 h-5 text-primary-500 mr-3 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-semibold text-primary-900 mb-2">
               Privacy & Security
             </h4>
             <p className="text-gray-700 text-sm mb-2">

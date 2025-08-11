@@ -32,19 +32,19 @@ export default function Step1ReservationOverview({
     <div>
       {/* Header - changes based on state */}
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-primary-900 mb-2">
           Welcome, {reservation.guestName}!
         </h2>
         {checkinCompleted && !isModificationMode ? (
-          <p className="text-green-600 font-medium">
+          <p className="text-primary-600 font-medium">
             Your check-in has been completed
           </p>
         ) : isModificationMode ? (
-          <p className="text-orange-600 font-medium">
+          <p className="text-primary-600 font-medium">
             You are modifying your check-in information
           </p>
         ) : (
-          <p className="text-gray-600">
+          <p className="text-primary-600">
             Let's get you checked in for your upcoming stay
           </p>
         )}
@@ -93,7 +93,7 @@ export default function Step1ReservationOverview({
               <div className="mt-4 flex gap-3">
                 <button
                   onClick={onEnterModificationMode}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Resubmit Check-in Info
@@ -118,7 +118,7 @@ export default function Step1ReservationOverview({
               </p>
               <button
                 onClick={onExitModificationMode}
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Cancel Modification
               </button>
@@ -218,29 +218,29 @@ export default function Step1ReservationOverview({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {reservation.roomTypeDescription && (
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Description</p>
-                  <p className="text-sm text-gray-700">{reservation.roomTypeDescription}</p>
+                  <p className="text-sm font-medium text-primary-900">Description</p>
+                  <p className="text-sm text-primary-700">{reservation.roomTypeDescription}</p>
                 </div>
               )}
               
               {reservation.bedConfiguration && (
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Bed Configuration</p>
-                  <p className="text-sm text-gray-700">{reservation.bedConfiguration}</p>
+                  <p className="text-sm font-medium text-primary-900">Bed Configuration</p>
+                  <p className="text-sm text-primary-700">{reservation.bedConfiguration}</p>
                 </div>
               )}
               
               {reservation.roomSizeSqm && (
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Room Size</p>
-                  <p className="text-sm text-gray-700">{reservation.roomSizeSqm} sq m</p>
+                  <p className="text-sm font-medium text-primary-900">Room Size</p>
+                  <p className="text-sm text-primary-700">{reservation.roomSizeSqm} sq m</p>
                 </div>
               )}
               
               {reservation.maxGuests && (
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Maximum Guests</p>
-                  <p className="text-sm text-gray-700">{reservation.maxGuests} guests</p>
+                  <p className="text-sm font-medium text-primary-900">Maximum Guests</p>
+                  <p className="text-sm text-primary-700">{reservation.maxGuests} guests</p>
                 </div>
               )}
             </div>
@@ -269,8 +269,8 @@ export default function Step1ReservationOverview({
 
       {/* What's Next - only show for fresh check-ins or modification mode */}
 {(!checkinCompleted || isModificationMode) && (
-  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
-    <h4 className="text-lg font-semibold text-yellow-900 mb-2">
+  <div className="bg-primary-100 border border-primary-300 rounded-lg p-6 mb-8">
+    <h4 className="text-l font-semibold text-primary-900 mb-2">
       {isModificationMode ? "Modify Your Information" : "What's Next?"}
     </h4>
     <p className="text-yellow-800 mb-4">
@@ -288,8 +288,8 @@ export default function Step1ReservationOverview({
 )}
 
 {/* Important Information */}
-<div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
-  <h4 className="text-m font-semibold text-red-900 mb-2">
+<div className="bg-primary-200 border border-primary-300 rounded-lg p-4 mt-4">
+  <h4 className="text-lg font-semibold text-red-900 mb-2">
     Important Information
   </h4>
   <p className="text-red-800 text-m">

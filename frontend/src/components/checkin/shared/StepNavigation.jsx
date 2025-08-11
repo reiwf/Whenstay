@@ -16,14 +16,14 @@ export default function StepNavigation({
   const isLastStep = currentStep === totalSteps
 
   return (
-    <div className="flex justify-between items-center pt-6 border-t border-gray-200">
+    <div className="flex justify-between items-center pt-6 border-t border-primary-200">
       {/* Previous Button */}
       {showPrevious && !isFirstStep ? (
         <button
           type="button"
           onClick={onPrevious}
           disabled={isLoading}
-          className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+          className="flex items-center px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-md hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Previous

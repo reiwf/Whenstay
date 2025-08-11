@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { adminAPI } from '../../../services/api';
+import { adminAPI } from '../../services/api';
 
 export default function CleaningTaskModal({ 
   isOpen, 

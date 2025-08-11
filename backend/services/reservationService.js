@@ -1377,7 +1377,7 @@ class ReservationService {
   }
 
 
-  async getGuestDashboardData(checkinToken) {
+  async getGuestAppData(checkinToken) {
     try {
       // First, get the reservation using the reservations_details view for comprehensive data
       const { data, error } = await supabaseAdmin

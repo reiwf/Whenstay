@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { 
-  Calendar, 
   MapPin, 
   Wifi, 
   Phone, 
@@ -28,7 +27,7 @@ import {
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 
-export default function GuestDashboard() {
+export default function GuestApp() {
   const { token } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -326,15 +325,15 @@ export default function GuestDashboard() {
         {/* Reservation Overview */}
         <div className="card">
           <div className="flex justify-between items-start mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Your Reservation</h2>
+            <h2 className="text-lg font-semibold text-primary-900">Your Reservation</h2>
             {checkinStatus?.completed ? (
               <span className="status-badge status-completed">
-                <CheckCircle className="w-4 h-4 mr-1" />
+                <CheckCircle className="w-4 h-4 mr-1 " />
                 Check-in Complete
               </span>
             ) : (
               <span className="status-badge status-pending">
-                <Clock className="w-4 h-4 mr-1" />
+                <Clock className="w-4 h-4 mr-1 " />
                 Check-in Pending
               </span>
             )}
@@ -343,36 +342,36 @@ export default function GuestDashboard() {
           <div className="grid grid-cols-1 grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="flex items-center">
-                <PlaneLanding className="w-5 h-5 text-gray-400 mr-3" />
+                <PlaneLanding className="w-5 h-5 text-primary-400 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Check-in Date</p>
-                  <p className="font-medium">{new Date(reservation.check_in_date).toLocaleDateString()}</p>
+                  <p className="text-sm text-primary-600">Check-in Date</p>
+                  <p className="font-medium text-primary-900">{new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}</p>
                 </div>
               </div>
               
               
               
               <div className="flex items-center">
-                <Users className="w-5 h-5 text-gray-400 mr-3" />
+                <Users className="w-5 h-5 text-primary-400 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Guests</p>
-                  <p className="font-medium">{reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}</p>
+                  <p className="text-sm text-primary-600">Guests</p>
+                  <p className="font-medium text-primary-900">{reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}</p>
                 </div>
               </div>
             </div>
             <div className="space-y-4">
               <div className="flex items-center">
-                <PlaneTakeoff className="w-5 h-5 text-gray-400 mr-3" />
+                <PlaneTakeoff className="w-5 h-5 text-primary-400 mr-3" />
                 <div>
-                  <p className="text-sm  text-gray-600">Check-out Date</p>
-                  <p className="font-medium">{new Date(reservation.check_out_date).toLocaleDateString()}</p>
+                  <p className="text-sm  text-primary-600">Check-out Date</p>
+                  <p className="font-medium text-primary-900">{new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {!checkinStatus?.completed && (
-            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
               <div className="flex items-center">
                 <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
                 <p className="text-yellow-800">
@@ -391,21 +390,21 @@ export default function GuestDashboard() {
 
         {/* Time-based Room Access Section */}
         {canAccessRoomDetails() && (
-          <div className="card border-green-200 bg-green-50">
+          <div className="card border-primary-200 bg-primary-50">
             <div className="flex items-center mb-4">
-              <Unlock className="w-6 h-6 text-green-600 mr-2" />
-              <h2 className="text-lg font-semibold text-green-900">Enter Room Details</h2>
-              <span className="ml-auto text-xs text-green-700 bg-green-200 px-2 py-1 rounded-full">
+              <Unlock className="w-6 h-6 text-primary-600 mr-2" />
+              <h2 className="text-lg font-semibold text-primary-900">Enter Room Details</h2>
+              <span className="ml-auto text-xs text-primary-50 bg-primary-500 px-2 py-1 rounded-full">
                 Available Now
               </span>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="bg-green-100 border border-green-300 rounded-lg p-4">
+                <div className="bg-primary-100 border border-primary-300 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-green-800">Room Access Code</span>
-                    <Key className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-primary-800">Room Access Code</span>
+                    <Key className="w-4 h-4 text-primary-600" />
                   </div>
                   
                   {/* Show button to reveal code if access_read is false, otherwise show the code */}
@@ -413,32 +412,32 @@ export default function GuestDashboard() {
                     <div className="text-center py-4">
                       <button
                         onClick={handleRevealAccessCode}
-                        className="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+                        className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
                       >
                         Get Code
                       </button>
                     </div>
                   ) : (
-                    <p className="text-3xl font-mono font-bold text-green-900">{room.access_code}</p>
+                    <p className="text-3xl font-mono font-bold text-primary-900">{room.access_code}</p>
                   )}
                 </div>
                 
                 {room.unit_number && (
                   <div className="flex items-center">
-                    <Home className="w-5 h-5 text-green-600 mr-3" />
+                    <Home className="w-5 h-5 text-primary-600 mr-3" />
                     <div>
-                      <p className="text-sm text-green-700">Room Number</p>
-                      <p className="font-medium text-green-900">{room.unit_number}</p>
+                      <p className="text-sm text-primary-700">Room Number</p>
+                      <p className="font-medium text-primary-900">{room.unit_number}</p>
                     </div>
                   </div>
                 )}
                 
                 {room.floor_number && (
                   <div className="flex items-center">
-                    <Building className="w-5 h-5 text-green-600 mr-3" />
+                    <Building className="w-5 h-5 text-primary-600 mr-3" />
                     <div>
-                      <p className="text-sm text-green-700">Floor</p>
-                      <p className="font-medium text-green-900">Floor {room.floor_number}</p>
+                      <p className="text-sm text-primary-700">Floor</p>
+                      <p className="font-medium text-primary-900">Floor {room.floor_number}</p>
                     </div>
                   </div>
                 )}
@@ -447,20 +446,20 @@ export default function GuestDashboard() {
               <div className="space-y-4">
                 {room.access_instructions && (
                   <div>
-                    <h3 className="text-sm font-medium text-green-900 mb-2">Detailed Access Instructions</h3>
-                    <div className="bg-white border border-green-200 rounded-lg p-3">
-                      <p className="text-sm text-green-800 whitespace-pre-line">{room.access_instructions}</p>
+                    <h3 className="text-sm font-medium text-primary-900 mb-2">Detailed Access Instructions</h3>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
+                      <p className="text-sm text-primary-800 whitespace-pre-line">{room.access_instructions}</p>
                     </div>
                   </div>
                 )}
                 
                 {property.emergency_contact && (
                   <div>
-                    <h3 className="text-sm font-medium text-green-900 mb-2">Emergency Contact</h3>
-                    <div className="bg-white border border-green-200 rounded-lg p-3">
+                    <h3 className="text-sm font-medium text-primary-900 mb-2">Emergency Contact</h3>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
                       <div className="flex items-center">
-                        <Phone className="w-4 h-4 text-green-600 mr-2" />
-                        <p className="text-sm font-medium text-green-800">{property.emergency_contact}</p>
+                        <Phone className="w-4 h-4 text-primary-600 mr-2" />
+                        <p className="text-sm font-medium text-primary-800">{property.emergency_contact}</p>
                       </div>
                     </div>
                   </div>
@@ -472,49 +471,49 @@ export default function GuestDashboard() {
 
         {/* Access Time Information with Countdown */}
         {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
-          <div className="card border-yellow-200 bg-yellow-50">
+          <div className="card border-primary-200 bg-primary-50">
             <div className="flex items-center mb-4">
-              <Clock className="w-6 h-6 text-yellow-600 mr-2" />
-              <h2 className="text-lg font-semibold text-yellow-900">Room Access Countdown</h2>
+              <Clock className="w-6 h-6 text-primary-600 mr-2" />
+              <h2 className="text-lg font-semibold text-primary-900">Room Access Countdown</h2>
             </div>
             
             <div className="space-y-4">
               {/* Countdown Display */}
               {countdown && typeof countdown === 'object' && !countdown.expired && (
-                <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-6 text-center">
+                <div className="bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 border border-primary-300 rounded-lg p-6 text-center">
                   <div className="mb-4">
-                    <p className="text-sm text-yellow-700 mb-2">Room access available in:</p>
+                    <p className="text-sm text-primary-950 mb-2">Room access available in:</p>
                   </div>
                   
                   {/* Time breakdown - always show when countdown exists */}
                   <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-yellow-900">{countdown.days || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Days</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-primary-900">{countdown.days || 0}</div>
+                      <div className="text-xs text-primary-700 font-medium">Days</div>
                     </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-yellow-900">{countdown.hours || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Hours</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-primary-900">{countdown.hours || 0}</div>
+                      <div className="text-xs text-primary-700 font-medium">Hours</div>
                     </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-yellow-900">{countdown.minutes || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Minutes</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-primary-900">{countdown.minutes || 0}</div>
+                      <div className="text-xs text-primary-700 font-medium">Minutes</div>
                     </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-yellow-900">{countdown.seconds || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Seconds</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-3">
+                      <div className="text-xl font-bold text-primary-900">{countdown.seconds || 0}</div>
+                      <div className="text-xs text-primary-700 font-medium">Seconds</div>
                     </div>
                   </div>
-                  <p className="text-sm text-yellow-700 mt-2">Comeback later</p>
+                  <p className="text-sm text-primary-950 mt-2">Comeback later</p>
                 </div>
               )}
               
               {/* Access Time Information */}
-              <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-4">
-                <p className="text-yellow-800">
+              <div className="bg-primary-100 border border-primary-300 rounded-lg p-4">
+                <p className="text-primary-800">
                   <strong>Room access details will be available at {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()}.</strong>
                 </p>
-                <p className="text-sm text-yellow-700 mt-2">
+                <p className="text-sm text-primary-700 mt-2">
                   Your room access code and detailed instructions will automatically appear when the access time arrives.
                 </p>
               </div>
@@ -553,15 +552,15 @@ export default function GuestDashboard() {
         {property.check_in_instructions && (
           <div className="card">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800">{property.check_in_instructions}</p>
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <p className="text-primary-800">{property.check_in_instructions}</p>
             </div>
           </div>
         )} 
 
         <div className="card">
           <div className="flex items-center mb-3">
-            <Wifi className="w-5 h-5 text-blue-600 mr-2" />
+            <Wifi className="w-5 h-5 text-primary-600 mr-2" />
             <h3 className="text-lg font-semibold text-gray-900">WiFi Information</h3>
           </div>
           <div className="space-y-2">
@@ -594,7 +593,7 @@ export default function GuestDashboard() {
       {property.house_rules && (
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">House Rules</h2>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
             <p className="text-gray-800 whitespace-pre-line">{property.house_rules}</p>
           </div>
         </div>
@@ -607,7 +606,7 @@ export default function GuestDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {Object.entries(property.amenities).map(([amenity, available]) => (
               available && (
-                <div key={amenity} className="flex items-center p-2 bg-gray-50 rounded-lg">
+                <div key={amenity} className="flex items-center p-2 bg-primary-50 rounded-lg">
                   <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
                   <span className="text-sm text-gray-700 capitalize">{amenity.replace('_', ' ')}</span>
                 </div>
@@ -625,7 +624,7 @@ export default function GuestDashboard() {
       {property.location_info && (
         <div className="card">
             <div className="flex items-center mb-4">
-              <MapPin className="w-6 h-6 text-blue-600 mr-2" />
+              <MapPin className="w-6 h-6 text-primary-600 mr-2" />
               <h2 className="text-lg font-semibold text-gray-900">Local Recommendations</h2>
             </div>
             
@@ -643,7 +642,7 @@ export default function GuestDashboard() {
                     {Array.isArray(items) ? (
                       <div className="space-y-2">
                         {items.map((item, index) => (
-                          <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <div key={index} className="bg-primary-50 border border-primary-200 rounded-lg p-3">
                             {typeof item === 'object' ? (
                               <div>
                                 <p className="font-medium text-gray-900">{item.name}</p>
@@ -654,7 +653,7 @@ export default function GuestDashboard() {
                                   <p className="text-xs text-gray-500 mt-1">{item.address}</p>
                                 )}
                                 {item.distance && (
-                                  <p className="text-xs text-blue-600 mt-1">{item.distance}</p>
+                                  <p className="text-xs text-primary-600 mt-1">{item.distance}</p>
                                 )}
                               </div>
                             ) : (
@@ -664,7 +663,7 @@ export default function GuestDashboard() {
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
                         <p className="text-sm text-gray-700">{items}</p>
                       </div>
                     )}
@@ -672,8 +671,8 @@ export default function GuestDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800">{property.location_info}</p>
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                <p className="text-primary-800">{property.location_info}</p>
               </div>
             )}
           </div>
@@ -743,24 +742,18 @@ export default function GuestDashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-primary-50 flex flex-col">
       {/* Mobile Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white shadow-sm border-b border-primary-200 sticky top-0 z-10">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => navigate('/')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
+            <div className="flex items-center ml-2 space-x-3">
               <div>
-                <h1 className="text-lg font-semibold text-gray-900 truncate">
+                <h1 className="text-lg font-semibold text-primary-900 truncate">
                   Hello, {reservation?.guest_name}!
                 </h1>
-                <p className="text-sm text-gray-600 truncate">
-                  {property?.name}
+                <p className="text-sm text-primary-600 truncate">
+                  Label ID : {token}
                 </p>
               </div>
             </div>
@@ -776,7 +769,7 @@ export default function GuestDashboard() {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-10">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-primary-200 z-10">
         <div className="grid grid-cols-4 gap-1">
           {navigationItems.map((item) => {
             const IconComponent = item.icon
@@ -788,12 +781,12 @@ export default function GuestDashboard() {
                 onClick={() => setActiveSection(item.id)}
                 className={`flex flex-col items-center py-3 px-2 transition-colors ${
                   isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-primary-50'
                 }`}
               >
                 <IconComponent className={`w-5 h-5 mb-1 ${
-                  isActive ? 'text-blue-600' : 'text-gray-400'
+                  isActive ? 'text-primary-600' : 'text-gray-400'
                 }`} />
                 <span className="text-xs font-medium truncate">
                   {item.label}

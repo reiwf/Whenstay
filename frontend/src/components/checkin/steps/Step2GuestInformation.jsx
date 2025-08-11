@@ -70,18 +70,18 @@ export default function Step2GuestInformation({
   return (
     <div>
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-primary-900 mb-2">
           Guest Information
         </h2>
-        <p className="text-gray-600">
+        <p className="text-primary-600">
           Please provide your personal information for check-in
         </p>
       </div>
 
       <form className="space-y-6">
         {/* Personal Information Section */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-primary-900 mb-4 flex items-center">
             <User className="w-5 h-5 mr-2" />
             Who will stay with us?
           </h3>
@@ -97,7 +97,7 @@ export default function Step2GuestInformation({
                 required
                 value={formData.firstName || ''}
                 onChange={(e) => handleInputChange('firstName', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                   errors.firstName ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter your first name"
@@ -120,7 +120,7 @@ export default function Step2GuestInformation({
                 required
                 value={formData.lastName || ''}
                 onChange={(e) => handleInputChange('lastName', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                   errors.lastName ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter your last name"
@@ -143,7 +143,7 @@ export default function Step2GuestInformation({
                 required
                 value={formData.personalEmail || ''}
                 onChange={(e) => handleInputChange('personalEmail', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                   errors.personalEmail ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="your.personal@email.com"
@@ -166,7 +166,7 @@ export default function Step2GuestInformation({
                 required
                 value={formData.contactNumber || ''}
                 onChange={(e) => handleInputChange('contactNumber', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                   errors.contactNumber ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="+1 (555) 123-4567"
@@ -184,8 +184,8 @@ export default function Step2GuestInformation({
         </div>
 
         {/* Check-in Preferences Section */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+        <div className="bg-primary-100 border border-primary-300 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-primary-900 mb-4 flex items-center">
             <Clock className="w-5 h-5 mr-2" />
             Check-in Preferences
           </h3>
@@ -200,7 +200,7 @@ export default function Step2GuestInformation({
                 type="time"
                 value={formData.estimatedCheckinTime || ''}
                 onChange={(e) => handleInputChange('estimatedCheckinTime', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <p className="mt-1 text-sm text-gray-500">
                 What time do you expect to arrive for check-in?
@@ -216,7 +216,7 @@ export default function Step2GuestInformation({
               <select
                 value={formData.travelPurpose || ''}
                 onChange={(e) => handleInputChange('travelPurpose', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Select purpose</option>
                 <option value="Business">Business</option>
@@ -245,7 +245,3 @@ export default function Step2GuestInformation({
     </div>
   )
 }
-
-
-
-

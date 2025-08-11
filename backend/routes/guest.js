@@ -12,7 +12,7 @@ router.get('/:token', async (req, res) => {
     }
 
     // Get guest dashboard data
-    const dashboardData = await reservationService.getGuestDashboardData(token);
+    const dashboardData = await reservationService.getGuestAppData(token);
 
     if (!dashboardData) {
       return res.status(404).json({ error: 'Reservation not found or invalid token' });

@@ -6,7 +6,7 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
   const { profile } = useAuth()
 
   return (
-    <header className="bg-white border-b border-gray-200 shadow-sm">
+    <header className="bg-primary-50 border-b border-primary-200 shadow-sm">
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left Side - Menu/Logo */}
         <div className="flex items-center space-x-4">
@@ -17,16 +17,6 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
           >
             <Menu className="w-6 h-6" />
           </button>
-
-          {/* Desktop Sidebar Toggle (when collapsed) */}
-          {/* <button
-            onClick={onToggleSidebar}
-            className="hidden lg:block p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <ChevronLeft className={`w-5 h-5 transition-transform ${
-              sidebarCollapsed ? 'rotate-180' : ''
-            }`} />
-          </button> */}
 
           {/* Mobile Logo (only show when sidebar is closed) */}
           <div className="lg:hidden flex items-center">

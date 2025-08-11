@@ -14,7 +14,7 @@ import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
-import PropertyModal from '../components/admin/modals/PropertyModal'
+import PropertyModal from '../components/modals/PropertyModal'
 import { adminAPI } from '../services/api'
 
 export default function PropertyPage() {

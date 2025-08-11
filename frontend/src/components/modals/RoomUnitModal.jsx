@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import LoadingSpinner from '../../LoadingSpinner'
+import LoadingSpinner from '../LoadingSpinner'
 
 export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
   const [formData, setFormData] = useState({

@@ -9,7 +9,7 @@ import PropertyPage from './pages/PropertyPage'
 import UserPage from './pages/UserPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
-import GuestDashboard from './pages/GuestDashboard'
+import GuestApp from './pages/GuestApp'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -20,7 +20,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/checkin/:token" element={<CheckinPage />} />
-          <Route path="/guest/:token" element={<GuestDashboard />} />
+          <Route path="/guest/:token" element={<GuestApp />} />
           <Route path="/login" element={<Login />} />
           
           {/* Protected Admin Routes - Allow admin, owner, and cleaner roles */}

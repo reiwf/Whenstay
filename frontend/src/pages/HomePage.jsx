@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { Search, ArrowRight } from 'lucide-react'
 import GuestSearch from '../components/GuestSearch'
 
 export default function HomePage() {

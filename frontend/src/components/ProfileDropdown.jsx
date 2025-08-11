@@ -10,7 +10,6 @@ const ProfileDropdown = () => {
     profile, 
     logout, 
     getDisplayName, 
-    getRoleBadgeColor, 
     getRoleDisplayName 
   } = useAuth()
   const navigate = useNavigate()
@@ -38,23 +37,6 @@ const ProfileDropdown = () => {
     }
   }
 
-  const getRoleBadgeClasses = () => {
-    const color = getRoleBadgeColor()
-    const baseClasses = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium'
-    
-    switch (color) {
-      case 'red':
-        return `${baseClasses} bg-red-100 text-red-800`
-      case 'blue':
-        return `${baseClasses} bg-blue-100 text-blue-800`
-      case 'green':
-        return `${baseClasses} bg-green-100 text-green-800`
-      case 'yellow':
-        return `${baseClasses} bg-yellow-100 text-yellow-800`
-      default:
-        return `${baseClasses} bg-gray-100 text-gray-800`
-    }
-  }
 
   const getInitials = () => {
     const displayName = getDisplayName()
@@ -73,13 +55,13 @@ const ProfileDropdown = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        className="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 p-2 hover:bg-gray-50"
+        className="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 p-2 hover:bg-gray-50"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
         {/* Avatar */}
-        <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+        <div className="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-medium">
           {getInitials()}
         </div>
         
@@ -113,7 +95,7 @@ const ProfileDropdown = () => {
             {/* Profile header */}
             <div className="px-4 py-3 border-b border-gray-100">
               <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
+                <div className="h-10 w-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-medium">
                   {getInitials()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -124,38 +106,10 @@ const ProfileDropdown = () => {
                     {user.email}
                   </p>
                   <div className="mt-1">
-                    <span className={getRoleBadgeClasses()}>
+                    <span className="text-xs text-gray-500">
                       {getRoleDisplayName()}
                     </span>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Profile details */}
-            <div className="px-4 py-3 border-b border-gray-100">
-              <div className="space-y-2 text-sm">
-                {profile.company_name && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Company:</span>
-                    <span className="text-gray-900">{profile.company_name}</span>
-                  </div>
-                )}
-                {profile.phone && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Phone:</span>
-                    <span className="text-gray-900">{profile.phone}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Status:</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    profile.is_active 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {profile.is_active ? 'Active' : 'Inactive'}
-                  </span>
                 </div>
               </div>
             </div>

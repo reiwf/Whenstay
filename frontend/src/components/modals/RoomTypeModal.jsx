@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Home, Box, Settings, Bed, Wifi, Plus, X, Edit, Trash2, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
-import LoadingSpinner from '../../LoadingSpinner'
-import { adminAPI } from '../../../services/api'
+import LoadingSpinner from '../LoadingSpinner'
+import { adminAPI } from '../../services/api'
 
 const ROOM_AMENITIES = [
   { value: 'air_conditioning', label: 'Air Conditioning', icon: '❄️' },

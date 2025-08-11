@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { MapPin, Building, Users, Wifi, Settings, Bed, Plus, X, Check, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import LoadingSpinner from '../../LoadingSpinner'
-import { adminAPI } from '../../../services/api'
-import { useAuth } from '../../../contexts/AuthContext'
+import LoadingSpinner from '../LoadingSpinner'
+import { adminAPI } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const PROPERTY_TYPES = [
   { value: 'apartment', label: 'Apartment' },

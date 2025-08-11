@@ -21,7 +21,7 @@ import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import { DateRangePicker } from '../components/ui/date-range-picker'
 import toast from 'react-hot-toast'
-import ReservationModal from '../components/admin/modals/ReservationModal'
+import ReservationModal from '../components/modals/ReservationModal'
 import useReservations from '../hooks/useReservations'
 
 const tokyoTodayYMD = () =>
