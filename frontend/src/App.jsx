@@ -6,6 +6,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import ReservationPage from './pages/ReservationPage'
 import CleaningPage from './pages/CleaningPage'
 import PropertyPage from './pages/PropertyPage'
+import UserPage from './pages/UserPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestDashboard from './pages/GuestDashboard'
@@ -55,6 +56,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner']}>
                 <PropertyPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/user" 
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <UserPage />
               </ProtectedRoute>
             } 
           />

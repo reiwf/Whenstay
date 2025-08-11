@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function UserModal({ user, onSave, onClose }) {
+export default function UserModal({ isOpen, user, onClose, onUserSaved }) {
   const [formData, setFormData] = useState({
     firstName: user?.first_name || '',
     lastName: user?.last_name || '',
@@ -16,12 +16,14 @@ export default function UserModal({ user, onSave, onClose }) {
     e.preventDefault()
     if (user) {
       // For editing, pass the user ID as second parameter
-      onSave(formData, user.id)
+      onUserSaved(formData, user.id)
     } else {
       // For creating, just pass the form data
-      onSave(formData)
+      onUserSaved(formData)
     }
   }
+
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -174,7 +176,3 @@ export default function UserModal({ user, onSave, onClose }) {
     </div>
   )
 }
-
-
-
-

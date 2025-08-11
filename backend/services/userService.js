@@ -206,11 +206,11 @@ class UserService {
         .eq('is_active', true);
 
       return {
-        totalUsers: totalUsers || 0,
-        adminUsers: adminUsers || 0,
-        ownerUsers: ownerUsers || 0,
-        guestUsers: guestUsers || 0,
-        cleanerUsers: cleanerUsers || 0
+        total: totalUsers || 0,
+        admin: adminUsers || 0,
+        owner: ownerUsers || 0,
+        guest: guestUsers || 0,
+        cleaner: cleanerUsers || 0
       };
     } catch (error) {
       console.error('Database error fetching user stats:', error);
@@ -256,12 +256,32 @@ class UserService {
         throw new Error('Failed to fetch users with details');
       }
 
-      // Add computed stats for each user
+      // Fetch auth users to get email addresses
+      const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
+        // Continue without auth data if there's an error
+      }
+
+      // Create a map of auth users by ID for quick lookup
+      const authUserMap = {};
+      if (authUsers && authUsers.users) {
+        authUsers.users.forEach(authUser => {
+          authUserMap[authUser.id] = authUser;
+        });
+      }
+
+      // Add computed stats and auth data for each user
       const usersWithStats = data.map(user => {
         const activeProperties = user.properties?.filter(p => p.is_active) || [];
+        const authUser = authUserMap[user.id];
 
         return {
           ...user,
+          email: authUser?.email || null, // Add email from auth system
+          email_confirmed: authUser?.email_confirmed_at ? true : false,
+          last_sign_in: authUser?.last_sign_in_at || null,
           stats: {
             totalProperties: activeProperties.length,
             recentTasks: 0, // Remove cleaning_tasks for now since it may not exist

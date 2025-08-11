@@ -74,7 +74,10 @@ const Sidebar = ({
     } else if (itemId === 'properties') {
       // Navigate to the dedicated property page
       navigate('/property')
-    } else if (itemId === 'dashboard' || itemId === 'users') {
+    } else if (itemId === 'users') {
+      // Navigate to the dedicated user page
+      navigate('/user')
+    } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {
         navigate('/dashboard')
