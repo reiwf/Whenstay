@@ -75,6 +75,11 @@ $$ language 'plpgsql';
 CREATE OR REPLACE FUNCTION manage_cleaning_task()
 RETURNS trigger AS $$
 BEGIN
+    -- Only process if we have required fields
+    IF NEW.property_id IS NULL OR NEW.room_unit_id IS NULL OR NEW.check_out_date IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     -- 1. Delete old cleaning task if room or checkout date changed
     DELETE FROM cleaning_tasks
     WHERE reservation_id = NEW.id;
@@ -89,6 +94,7 @@ BEGIN
         task_type,
         status,
         priority,
+        booking_name,
         created_at,
         updated_at
     )
@@ -99,8 +105,9 @@ BEGIN
         (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
         NEW.check_out_date,
         'checkout',
-        'pending',
+        CASE WHEN NEW.status = 'cancelled' THEN 'cancelled' ELSE 'pending' END,
         'normal', -- temporary, will recalc below
+        NEW.booking_name,
         now(),
         now()
     );
@@ -121,6 +128,64 @@ BEGIN
     WHERE ct.room_unit_id = NEW.room_unit_id
       AND ct.task_date = NEW.check_out_date;
 
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to enforce cleaner role
+CREATE OR REPLACE FUNCTION enforce_cleaner_role()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.cleaner_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM user_profiles 
+            WHERE id = NEW.cleaner_id 
+            AND role = 'cleaner' 
+            AND is_active = true
+        ) THEN
+            RAISE EXCEPTION 'Assigned user must be an active cleaner';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to set booking name on cleaning task
+CREATE OR REPLACE FUNCTION set_ct_booking_name()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.reservation_id IS NOT NULL AND NEW.booking_name IS NULL THEN
+        SELECT booking_name INTO NEW.booking_name
+        FROM reservations 
+        WHERE id = NEW.reservation_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to set cleaning status based on reservation status
+CREATE OR REPLACE FUNCTION set_cleaning_status_on_insert_if_cancelled()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.reservation_id IS NOT NULL THEN
+        -- Check if the associated reservation is cancelled
+        IF EXISTS (
+            SELECT 1 FROM reservations 
+            WHERE id = NEW.reservation_id 
+            AND status = 'cancelled'
+        ) THEN
+            NEW.status = 'cancelled';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update cleaning task updated_at
+CREATE OR REPLACE FUNCTION update_cleaning_task_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -382,19 +447,37 @@ create table public.cleaning_tasks (
   completed_at timestamp with time zone null,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
+  booking_name text null,
   constraint cleaning_tasks_pkey primary key (id),
   constraint cleaning_tasks_reservation_id_key unique (reservation_id),
+  constraint cleaning_tasks_cleaner_id_fkey foreign KEY (cleaner_id) references user_profiles (id) on delete set null,
   constraint fk_cleaning_task_property foreign KEY (property_id) references properties (id) on delete CASCADE,
   constraint fk_cleaning_task_reservation foreign KEY (reservation_id) references reservations (id) on delete CASCADE,
-  constraint fk_cleaning_task_room_unit foreign KEY (room_unit_id) references room_units (id) on delete CASCADE,
-  constraint fk_cleaning_task_cleaner foreign KEY (cleaner_id) references user_profiles (id) on delete set null
+  constraint fk_cleaning_task_room_unit foreign KEY (room_unit_id) references room_units (id) on delete CASCADE
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_cleaning_tasks_cleaner_id on public.cleaning_tasks using btree (cleaner_id) TABLESPACE pg_default;
+
+create index IF not exists idx_cleaning_tasks_priority on public.cleaning_tasks using btree (priority) TABLESPACE pg_default;
 
 create index IF not exists idx_cleaning_tasks_room_unit_date on public.cleaning_tasks using btree (room_unit_id, task_date) TABLESPACE pg_default;
 
 create index IF not exists idx_cleaning_tasks_status on public.cleaning_tasks using btree (status) TABLESPACE pg_default;
 
-create index IF not exists idx_cleaning_tasks_priority on public.cleaning_tasks using btree (priority) TABLESPACE pg_default;
+create index IF not exists idx_cleaning_tasks_reservation_id on public.cleaning_tasks using btree (reservation_id) TABLESPACE pg_default;
+
+create trigger check_cleaner_role BEFORE INSERT
+or
+update OF cleaner_id on cleaning_tasks for EACH row
+execute FUNCTION enforce_cleaner_role ();
+
+create trigger set_ct_booking_name BEFORE INSERT
+or
+update OF reservation_id on cleaning_tasks for EACH row
+execute FUNCTION set_ct_booking_name ();
+
+create trigger trg_set_cleaning_status_on_insert BEFORE INSERT on cleaning_tasks for EACH row
+execute FUNCTION set_cleaning_status_on_insert_if_cancelled ();
 
 create trigger update_cleaning_task_updated_at BEFORE
 update on cleaning_tasks for EACH row

@@ -210,22 +210,22 @@ export const adminAPI = {
   updateUserStatus: (id, isActive) => api.patch(`/users/${id}/status`, { isActive }),
   
   // Cleaning Task Management
-  getCleaningTasks: (params = {}) => api.get('/cleaning-tasks', { params }),
+  getCleaningTasks: (params = {}) => api.get('/cleaning/tasks', { params }),
   
-  createCleaningTask: (taskData) => api.post('/cleaning-tasks', taskData),
+  createCleaningTask: (taskData) => api.post('/cleaning/tasks', taskData),
   
-  updateCleaningTask: (id, taskData) => api.put(`/cleaning-tasks/${id}`, taskData),
+  updateCleaningTask: (id, taskData) => api.put(`/cleaning/tasks/${id}`, taskData),
   
-  deleteCleaningTask: (id) => api.delete(`/cleaning-tasks/${id}`),
+  deleteCleaningTask: (id) => api.delete(`/cleaning/tasks/${id}`),
   
   assignCleanerToTask: (id, cleanerId) => 
-    api.patch(`/cleaning-tasks/${id}/assign`, { cleanerId }),
+    api.patch(`/cleaning/tasks/${id}/assign`, { cleanerId }),
   
   // Get available cleaners
-  getAvailableCleaners: () => api.get('/cleaners'),
+  getAvailableCleaners: () => api.get('/cleaning/cleaners'),
   
   // Get cleaning task statistics
-  getCleaningTaskStats: (params = {}) => api.get('/cleaning-tasks/stats', { params }),
+  getCleaningTaskStats: (params = {}) => api.get('/cleaning/tasks/stats', { params }),
 }
 
 export const reservationAPI = {

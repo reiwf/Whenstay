@@ -4,6 +4,7 @@ import CheckinPage from './pages/CheckinPage'
 import Login from './pages/Login'
 import AdminDashboard from './pages/AdminDashboard'
 import ReservationPage from './pages/ReservationPage'
+import CleaningPage from './pages/CleaningPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestDashboard from './pages/GuestDashboard'
@@ -35,6 +36,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin']}>
                 <ReservationPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/cleaning" 
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'cleaner']}>
+                <CleaningPage />
               </ProtectedRoute>
             } 
           />

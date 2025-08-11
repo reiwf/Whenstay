@@ -37,7 +37,7 @@ const Sidebar = ({
         { id: 'dashboard', label: 'Dashboard', icon: Home },
         { id: 'properties', label: 'Properties', icon: Building },
         { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
-        { id: 'cleaning', label: 'Cleaning', icon: Sparkles },
+        { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {
@@ -68,7 +68,10 @@ const Sidebar = ({
     if (itemId === 'reservation-management') {
       // Navigate to the dedicated reservation page
       navigate('/reservation')
-    } else if (itemId === 'dashboard' || itemId === 'properties' || itemId === 'cleaning' || itemId === 'users') {
+    } else if (itemId === 'cleaning' || itemId === 'cleaning-management') {
+      // Navigate to the dedicated cleaning page
+      navigate('/cleaning')
+    } else if (itemId === 'dashboard' || itemId === 'properties' || itemId === 'users') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {
         navigate('/dashboard')

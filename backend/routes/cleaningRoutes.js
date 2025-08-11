@@ -6,8 +6,33 @@ const { adminAuth } = require('../middleware/auth');
 // Get cleaning tasks
 router.get('/tasks', adminAuth, async (req, res) => {
   try {
-    const { propertyId, cleanerId, taskDate, status } = req.query;
-    const filters = { propertyId, cleanerId, taskDate, status };
+    const { 
+      propertyId, 
+      cleanerId, 
+      taskDate, 
+      taskDateFrom, 
+      taskDateTo, 
+      status, 
+      includeCancelled,
+      limit,
+      offset,
+      sortBy,
+      sortOrder
+    } = req.query;
+    
+    const filters = { 
+      propertyId, 
+      cleanerId, 
+      taskDate, 
+      taskDateFrom, 
+      taskDateTo, 
+      status, 
+      includeCancelled: includeCancelled === 'true',
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined,
+      sortBy,
+      sortOrder
+    };
 
     const tasks = await reservationService.getCleaningTasks(filters);
 

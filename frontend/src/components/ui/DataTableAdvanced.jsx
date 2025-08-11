@@ -296,19 +296,6 @@ export function DataTableAdvanced({
             </div>
           )}
 
-          {/* Date Range Filter */}
-          {(dateRangeColumn || dateColumns.length > 0) && (
-            <DateRangePicker
-              dateRange={currentDateRange}
-              onDateRangeChange={(newDateRange) => {
-                // Simply pass the date range to external handler without interference
-                onDateRangeChange?.(newDateRange)
-              }}
-              placeholder="Filter by date range"
-              className="w-80"
-              showClear={true}
-            />
-          )}
         </div>
         
 
