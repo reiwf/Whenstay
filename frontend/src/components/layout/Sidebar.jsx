@@ -71,7 +71,10 @@ const Sidebar = ({
     } else if (itemId === 'cleaning' || itemId === 'cleaning-management') {
       // Navigate to the dedicated cleaning page
       navigate('/cleaning')
-    } else if (itemId === 'dashboard' || itemId === 'properties' || itemId === 'users') {
+    } else if (itemId === 'properties') {
+      // Navigate to the dedicated property page
+      navigate('/property')
+    } else if (itemId === 'dashboard' || itemId === 'users') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {
         navigate('/dashboard')

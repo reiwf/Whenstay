@@ -15,7 +15,6 @@ import { useUsers } from '../hooks/useUsers'
 // Import tab components
 import PropertiesTab from '../components/admin/tabs/PropertiesTab'
 import UsersTab from '../components/admin/tabs/UsersTab'
-import CleaningTab from '../components/admin/tabs/CleaningTab'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -417,16 +416,9 @@ export default function AdminDashboard() {
       case 'reservations':
         return <ReservationsTab />
       case 'cleaning':
-        // Hide cleaning tab from owners
-        if (profile?.role === 'owner') {
-          return (
-            <div className="text-center py-12">
-              <p className="text-gray-500">Access denied</p>
-              <p className="text-sm text-gray-400 mt-2">This section is not available for your role</p>
-            </div>
-          )
-        }
-        return <CleaningTab />
+        // Redirect to dedicated cleaning page
+        navigate('/cleaning')
+        return null
       case 'users':
         return (
           <UsersTab

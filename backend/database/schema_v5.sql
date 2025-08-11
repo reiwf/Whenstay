@@ -226,6 +226,7 @@ create table public.properties (
   access_time time without time zone null,
   default_cleaner_id uuid null,
   beds24_property_id bigint null,
+  departure_time time without time zone null,
   constraint properties_pkey primary key (id),
   constraint properties_default_cleaner_id_fkey foreign KEY (default_cleaner_id) references user_profiles (id) on delete set null,
   constraint properties_owner_id_fkey foreign KEY (owner_id) references user_profiles (id) on delete CASCADE
