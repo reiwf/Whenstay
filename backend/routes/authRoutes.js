@@ -90,30 +90,5 @@ router.post('/logout', adminAuth, async (req, res) => {
   }
 });
 
-// Create test admin user (development only)
-router.post('/create-test-admin', async (req, res) => {
-  try {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({ error: 'Not available in production' });
-    }
-
-    const profile = await userService.createTestAdminUser();
-
-    res.status(201).json({
-      message: 'Test admin user created successfully',
-      profile: {
-        id: profile.id,
-        role: profile.role,
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        email: 'admin@whenstay.com',
-        is_active: profile.is_active
-      }
-    });
-  } catch (error) {
-    console.error('Error creating test admin user:', error);
-    res.status(500).json({ error: 'Failed to create test admin user', details: error.message });
-  }
-});
 
 module.exports = router;

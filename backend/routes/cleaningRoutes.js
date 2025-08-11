@@ -34,6 +34,11 @@ router.get('/tasks', adminAuth, async (req, res) => {
       sortOrder
     };
 
+    // Role-based filtering: cleaners can only see tasks assigned to them
+    if (req.userProfile.role === 'cleaner') {
+      filters.cleanerId = req.user.id; // Force filter by current user's ID
+    }
+
     const tasks = await reservationService.getCleaningTasks(filters);
 
     res.status(200).json({

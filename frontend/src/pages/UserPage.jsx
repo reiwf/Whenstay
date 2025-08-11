@@ -322,7 +322,7 @@ export default function UserPage() {
 
   return (
     <DashboardLayout
-      activeSection="user-management"
+      activeSection="users"
       onSectionChange={handleSectionChange}
       pageTitle="User Management"
       pageSubtitle="Manage system users and their roles"

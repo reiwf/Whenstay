@@ -67,7 +67,7 @@ const GuestSearch = () => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+    <form onSubmit={handleSubmit} className="flex items-center text-primary-800 space-x-2">
       <div className="relative">
         <input
           type="text"
@@ -77,10 +77,10 @@ const GuestSearch = () => {
             if (error) setError(false) // Clear error when user types
           }}
           placeholder="Check-in with Label ID"
-          className={`px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:border-transparent w-32 sm:w-40 md:w-48 transition-all duration-200 ${
+          className={`placeholder-primary-400 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-1 w-32 sm:w-40 md:w-48 transition-all duration-200 border ${
             error
-              ? 'border-red-500 bg-red-50 focus:ring-red-500 animate-shake'
-              : 'border-gray-300 focus:ring-gray-900'
+              ? 'border-red-200 bg-red-50 text-red-500 focus:ring-red-500 animate-shake'
+              : 'border-primary-400 focus:border-primary-400'
           }`}
           disabled={loading}
         />
@@ -88,7 +88,7 @@ const GuestSearch = () => {
       <button
         type="submit"
         disabled={loading}
-        className="flex items-center justify-center px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center justify-center px-3 py-2 bg-primary-900 text-white rounded-lg hover:bg-primary-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         aria-label="Search with Label ID"
       >
         {loading ? (

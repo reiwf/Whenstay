@@ -42,7 +42,6 @@ const Sidebar = ({
       )
     } else if (userRole === 'owner') {
       items.push(
-        { id: 'dashboard', label: 'Dashboard', icon: Home },
         { id: 'properties', label: 'My Properties', icon: Building }
       )
     } else if (userRole === 'cleaner') {

@@ -9,12 +9,8 @@ import { PageHeader, StatsCard, DataTable, EmptyState } from '../components/ui'
 
 // Import custom hooks
 import { useAdminData } from '../hooks/useAdminData'
-import { useProperties } from '../hooks/useProperties'
-import { useUsers } from '../hooks/useUsers'
 
-// Import tab components
-import PropertiesTab from '../components/admin/tabs/PropertiesTab'
-import UsersTab from '../components/admin/tabs/UsersTab'
+// Tab components removed - using dedicated pages instead
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -31,6 +27,19 @@ export default function AdminDashboard() {
     }
   }, [profile])
 
+  // Handle navigation when activeSection changes
+  useEffect(() => {
+    if (activeSection === 'properties' && activeSection !== 'dashboard') {
+      navigate('/property')
+    } else if (activeSection === 'reservations' && activeSection !== 'dashboard') {
+      navigate('/reservation')
+    } else if (activeSection === 'cleaning' && activeSection !== 'dashboard') {
+      navigate('/cleaning')
+    } else if (activeSection === 'users' && activeSection !== 'dashboard') {
+      navigate('/user')
+    }
+  }, [activeSection, navigate])
+
   // Use custom hooks
   const { 
     stats, 
@@ -43,32 +52,6 @@ export default function AdminDashboard() {
     loadDashboardData,
     loadTodayDashboardData
   } = useAdminData()
-  const { 
-    properties, 
-    createProperty, 
-    updateProperty, 
-    deleteProperty,
-    createRoom,
-    updateRoom,
-    deleteRoom,
-    createRoomType,
-    updateRoomType,
-    deleteRoomType,
-    createRoomUnit,
-    updateRoomUnit,
-    deleteRoomUnit,
-    loadProperties
-  } = useProperties()
-  const { 
-    users, 
-    userStats, 
-    createUser, 
-    updateUser, 
-    deleteUser, 
-    updateUserRole, 
-    updateUserStatus,
-    loadUsers
-  } = useUsers()
 
   useEffect(() => {
     // Load dashboard data when component mounts
@@ -78,13 +61,7 @@ export default function AdminDashboard() {
     }
   }, [isLoggedIn, hasAdminAccess, loadDashboardData, loadTodayDashboardData])
 
-  useEffect(() => {
-    if (activeSection === 'properties') {
-      loadProperties()
-    } else if (activeSection === 'users') {
-      loadUsers()
-    }
-  }, [activeSection, loadProperties, loadUsers])
+  // Data loading moved to dedicated pages - no need to load here
 
   const handleSync = async () => {
     try {
@@ -386,51 +363,32 @@ export default function AdminDashboard() {
           </div>
         )
       case 'properties':
-        // Hide properties tab from cleaners
-        if (profile?.role === 'cleaner') {
-          return (
-            <div className="text-center py-12">
-              <p className="text-gray-500">Access denied</p>
-              <p className="text-sm text-gray-400 mt-2">This section is not available for your role</p>
-            </div>
-          )
-        }
+        // Handled by useEffect navigation
         return (
-          <PropertiesTab
-            properties={properties}
-            onCreateProperty={createProperty}
-            onUpdateProperty={updateProperty}
-            onDeleteProperty={deleteProperty}
-            onCreateRoom={createRoom}
-            onUpdateRoom={updateRoom}
-            onDeleteRoom={deleteRoom}
-            onCreateRoomType={createRoomType}
-            onUpdateRoomType={updateRoomType}
-            onDeleteRoomType={deleteRoomType}
-            onCreateRoomUnit={createRoomUnit}
-            onUpdateRoomUnit={updateRoomUnit}
-            onDeleteRoomUnit={deleteRoomUnit}
-            userRole={profile?.role}
-          />
+          <div className="text-center py-12">
+            <p className="text-gray-500">Redirecting to Properties...</p>
+          </div>
         )
       case 'reservations':
-        return <ReservationsTab />
-      case 'cleaning':
-        // Redirect to dedicated cleaning page
-        navigate('/cleaning')
-        return null
-      case 'users':
+        // Handled by useEffect navigation
         return (
-          <UsersTab
-            users={users}
-            userStats={userStats}
-            onLoadUsers={loadUsers}
-            onCreateUser={createUser}
-            onUpdateUser={updateUser}
-            onDeleteUser={deleteUser}
-            onUpdateUserRole={updateUserRole}
-            onUpdateUserStatus={updateUserStatus}
-          />
+          <div className="text-center py-12">
+            <p className="text-gray-500">Redirecting to Reservations...</p>
+          </div>
+        )
+      case 'cleaning':
+        // Handled by useEffect navigation
+        return (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Redirecting to Cleaning...</p>
+          </div>
+        )
+      case 'users':
+        // Handled by useEffect navigation
+        return (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Redirecting to Users...</p>
+          </div>
         )
       default:
         return (

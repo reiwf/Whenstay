@@ -74,10 +74,10 @@ export default function CleaningPage() {
 
   // Load initial data
   useEffect(() => {
-    if (hasAdminAccess()) {
+    if (hasAdminAccess() || profile?.role === 'cleaner') {
       loadInitialData()
     }
-  }, [hasAdminAccess])
+  }, [hasAdminAccess, profile])
 
   const loadInitialData = async () => {
     try {
