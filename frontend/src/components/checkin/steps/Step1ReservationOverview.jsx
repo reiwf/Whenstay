@@ -1,4 +1,5 @@
-import { Calendar, MapPin, Users, Home, Clock, CheckCircle, Edit, AlertTriangle } from 'lucide-react'
+import { Calendar, MapPin, Users, Home, Clock, CheckCircle, Edit, AlertTriangle, ExternalLink } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import StepNavigation from '../shared/StepNavigation'
 
 export default function Step1ReservationOverview({ 
@@ -11,6 +12,7 @@ export default function Step1ReservationOverview({
   onEnterModificationMode, 
   onExitModificationMode 
 }) {
+  const { token } = useParams()
 
   console.log('Reservation data:', reservation)
   if (!reservation) {
@@ -52,8 +54,17 @@ export default function Step1ReservationOverview({
 
       {/* Check-in Completion Status */}
       {checkinCompleted && !isModificationMode && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
-          <div className="flex items-start">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8 relative">
+          {/* Resubmit button in top right */}
+          <button
+            onClick={onEnterModificationMode}
+            className="absolute top-4 right-4 inline-flex items-center px-3 py-1.5 border border-primary-300 bg-primary-200 text-primary-900 text-xs font-medium rounded-md hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            <Edit className="w-3 h-3 mr-1" />
+            Modify Info
+          </button>
+          
+          <div className="flex items-start pr-20">
             <CheckCircle className="w-6 h-6 text-primary-600 mr-3 mt-1" />
             <div className="flex-1">
               <h3 className="text-l font-semibold text-primary-900 mb-2">
@@ -90,13 +101,13 @@ export default function Step1ReservationOverview({
                 </p>
               </div>
               
-              <div className="mt-4 flex gap-3">
+              <div className="mt-4">
                 <button
-                  onClick={onEnterModificationMode}
+                  onClick={() => window.location.href = `/guest/${token}`}
                   className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Resubmit Check-in Info
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Go to Guest Dashboard
                 </button>
               </div>
             </div>

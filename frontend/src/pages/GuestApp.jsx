@@ -320,80 +320,63 @@ export default function GuestApp() {
 
   const { reservation, property, room } = dashboardData
 
-  const renderOverviewSection = () => (
-    <div className="space-y-8">
-        {/* Reservation Overview */}
+  const renderOverviewSection = () => {
+    return (
+      <div className="space-y-8">
+        {/* Welcome Banner */}
         <div className="card">
-          <div className="flex justify-between items-start mb-6">
-            <h2 className="text-lg font-semibold text-primary-900">Your Reservation</h2>
+          <div className="text-center">
+            <p className="text-l font-bold text-primary-900 mb-2">
+              Hello, {reservation?.guest_name}!
+            </p>
+            <p className="text-sm text-primary-600 mb-4">
+              Thank you for choosing us for your stay
+            </p>
+            
             {checkinStatus?.completed ? (
               <span className="status-badge status-completed">
-                <CheckCircle className="w-4 h-4 mr-1 " />
+                <CheckCircle className="w-4 h-4 mr-1" />
                 Check-in Complete
               </span>
             ) : (
               <span className="status-badge status-pending">
-                <Clock className="w-4 h-4 mr-1 " />
+                <Clock className="w-4 h-4 mr-1" />
                 Check-in Pending
               </span>
             )}
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <PlaneLanding className="w-5 h-5 text-primary-400 mr-3" />
-                <div>
-                  <p className="text-sm text-primary-600">Check-in Date</p>
-                  <p className="font-medium text-primary-900">{new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}</p>
-                </div>
-              </div>
-              
-              
-              
-              <div className="flex items-center">
-                <Users className="w-5 h-5 text-primary-400 mr-3" />
-                <div>
-                  <p className="text-sm text-primary-600">Guests</p>
-                  <p className="font-medium text-primary-900">{reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}</p>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <PlaneTakeoff className="w-5 h-5 text-primary-400 mr-3" />
-                <div>
-                  <p className="text-sm  text-primary-600">Check-out Date</p>
-                  <p className="font-medium text-primary-900">{new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}</p>
-                </div>
+        {/* Check-in Action Card */}
+        {!checkinStatus?.completed && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <div className="flex items-start">
+              <AlertCircle className="w-6 h-6 text-yellow-600 mr-3 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+                  Complete Your Check-in
+                </h3>
+                <p className="text-yellow-800 mb-4">
+                  Please complete your online check-in process to receive your room access details. You must complete check-in before your arrival to get the access code.
+                </p>
+                <button 
+                  onClick={() => navigate(`/checkin/${token}`)}
+                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Complete Check-in Now
+                </button>
               </div>
             </div>
           </div>
-
-          {!checkinStatus?.completed && (
-            <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
-                <p className="text-yellow-800">
-                  Please complete your check-in process before your arrival.{' '}
-                  <button 
-                    onClick={() => navigate(`/checkin/${token}`)}
-                    className="font-medium underline hover:no-underline"
-                  >
-                    Complete Check-in
-                  </button>
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Time-based Room Access Section */}
         {canAccessRoomDetails() && (
-          <div className="card border-primary-200 bg-primary-50">
+          <div className="card border-primary-200">
             <div className="flex items-center mb-4">
               <Unlock className="w-6 h-6 text-primary-600 mr-2" />
-              <h2 className="text-lg font-semibold text-primary-900">Enter Room Details</h2>
+              <h2 className="text-lg font-semibold text-primary-900">Room Access Details</h2>
               <span className="ml-auto text-xs text-primary-50 bg-primary-500 px-2 py-1 rounded-full">
                 Available Now
               </span>
@@ -446,7 +429,7 @@ export default function GuestApp() {
               <div className="space-y-4">
                 {room.access_instructions && (
                   <div>
-                    <h3 className="text-sm font-medium text-primary-900 mb-2">Detailed Access Instructions</h3>
+                    <h3 className="text-sm font-medium text-primary-900 mb-2">Access Instructions</h3>
                     <div className="bg-white border border-primary-200 rounded-lg p-3">
                       <p className="text-sm text-primary-800 whitespace-pre-line">{room.access_instructions}</p>
                     </div>
@@ -520,14 +503,146 @@ export default function GuestApp() {
             </div>
           </div>
         )}        
-    </div>    
-  )
+      </div>    
+    )
+  }
+
+  const renderReservationSection = () => {
+    const checkInDate = new Date(reservation.check_in_date)
+    const checkOutDate = new Date(reservation.check_out_date)
+    const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24))
+
+    return (
+      <div className="space-y-8">
+        {/* Detailed Reservation Information */}
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-primary-900 mb-4">
+            Reservation Details
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Check-in Information */}
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <PlaneLanding className="w-5 h-5 text-primary-600 mr-3" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Check-in Date</p>
+                  <p className="text-lg text-primary-700">
+                    {checkInDate.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <PlaneTakeoff className="w-5 h-5 text-primary-600 mr-3" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Check-out Date</p>
+                  <p className="text-lg text-primary-700">
+                    {checkOutDate.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <Users className="w-5 h-5 text-primary-600 mr-3" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Guests</p>
+                  <p className="text-lg text-primary-700">
+                    {reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Property Information */}
+            <div className="space-y-4">
+              <div className="flex items-start">
+                <Building className="w-5 h-5 text-primary-600 mr-3 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Property</p>
+                  <p className="text-lg text-primary-700">
+                    {property?.name || 'Property Name'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <Home className="w-5 h-5 text-primary-600 mr-3 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Room</p>
+                  <p className="text-lg text-primary-700">
+                    {room?.room_name || 'Room'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <Clock className="w-5 h-5 text-primary-600 mr-3 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Duration</p>
+                  <p className="text-lg text-primary-700">
+                    {nights} {nights === 1 ? 'Night' : 'Nights'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Room Details - show if available */}
+          {(room?.bed_configuration || room?.room_size_sqm || room?.max_guests) && (
+            <div className="mt-6 pt-6 border-t border-primary-200">
+              <h4 className="text-md font-semibold text-primary-900 mb-3">
+                Room Features
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {room?.bed_configuration && (
+                  <div>
+                    <p className="text-sm font-medium text-primary-900">Bed Configuration</p>
+                    <p className="text-sm text-primary-700">{room.bed_configuration}</p>
+                  </div>
+                )}
+                
+                {room?.room_size_sqm && (
+                  <div>
+                    <p className="text-sm font-medium text-primary-900">Room Size</p>
+                    <p className="text-sm text-primary-700">{room.room_size_sqm} sq m</p>
+                  </div>
+                )}
+                
+                {room?.max_guests && (
+                  <div>
+                    <p className="text-sm font-medium text-primary-900">Maximum Guests</p>
+                    <p className="text-sm text-primary-700">{room.max_guests} guests</p>
+                  </div>
+                )}
+
+                {room?.floor_number && (
+                  <div>
+                    <p className="text-sm font-medium text-primary-900">Floor</p>
+                    <p className="text-sm text-primary-700">Floor {room.floor_number}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const renderPropertySection = () => (
     <div className="space-y-8">
       {/* Property Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* WiFi Information */}
+        {/* Basic Property Info */}
         <div className="card">
           <div className="space-y-4">
               <div className="flex items-center">
@@ -548,16 +663,7 @@ export default function GuestApp() {
             </div>
         </div>
 
-        {/* Check-in Instructions */}
-        {property.check_in_instructions && (
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-              <p className="text-primary-800">{property.check_in_instructions}</p>
-            </div>
-          </div>
-        )} 
-
+        {/* WiFi Information */}
         <div className="card">
           <div className="flex items-center mb-3">
             <Wifi className="w-5 h-5 text-primary-600 mr-2" />
@@ -585,9 +691,17 @@ export default function GuestApp() {
             <p className="font-medium">{property.emergency_contact}</p>
           </div>
         )}
-      </div>
 
-       
+        {/* Check-in Instructions */}
+        {property.check_in_instructions && (
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <p className="text-primary-800">{property.check_in_instructions}</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* House Rules */}
       {property.house_rules && (
@@ -615,11 +729,7 @@ export default function GuestApp() {
           </div>
         </div>
       )}
-    </div>
-  )
 
-  const renderLocalSection = () => (
-    <div className="space-y-8">
       {/* Local Recommendations */}
       {property.location_info && (
         <div className="card">
@@ -686,7 +796,7 @@ export default function GuestApp() {
       <div className="card">
         <div className="text-center">
           <MessageCircle className="w-12 h-12 text-primary-600 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Need Help?</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-2">Need Help?</h2>
           <p className="text-gray-600 mb-4">
             Our support team is here to help with any questions or issues during your stay.
           </p>
@@ -704,7 +814,7 @@ export default function GuestApp() {
       <div className="card">
         <div className="text-center py-8">
           <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Documents</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Documents</h3>
           <p className="text-gray-600">Important documents and agreements will appear here.</p>
         </div>
       </div>
@@ -723,10 +833,10 @@ export default function GuestApp() {
     switch (activeSection) {
       case 'overview':
         return renderOverviewSection()
+      case 'reservation':
+        return renderReservationSection()
       case 'property':
         return renderPropertySection()
-      case 'local':
-        return renderLocalSection()
       case 'documents':
         return renderDocumentsSection()
       default:
@@ -735,9 +845,9 @@ export default function GuestApp() {
   }
 
   const navigationItems = [
-    { id: 'overview', label: 'Overview', icon: Home },
+    { id: 'overview', label: 'Room key', icon: Home },
+    { id: 'reservation', label: 'Reservation', icon: FileText },
     { id: 'property', label: 'Property', icon: Building },
-    { id: 'local', label: 'Local', icon: MapPin },
     { id: 'documents', label: 'Support', icon: MessageCircle }
   ]
 
@@ -749,7 +859,7 @@ export default function GuestApp() {
           <div className="flex items-center justify-between">
             <div className="flex items-center ml-2 space-x-3">
               <div>
-                <h1 className="text-lg font-semibold text-primary-900 truncate">
+                <h1 className="text-sm font-semibold text-primary-900 truncate">
                   Hello, {reservation?.guest_name}!
                 </h1>
                 <p className="text-sm text-primary-600 truncate">

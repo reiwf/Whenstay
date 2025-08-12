@@ -7,7 +7,8 @@ import {
   Clock, 
   Briefcase, 
   UserCheck,
-  AlertCircle 
+  AlertCircle,
+  CheckCircle 
 } from 'lucide-react'
 import PhoneInput from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
@@ -21,7 +22,10 @@ export default function Step2GuestInformation({
   formData, 
   onUpdateFormData, 
   onNext, 
-  onPrevious 
+  onPrevious,
+  checkinCompleted = false,
+  isModificationMode = false,
+  guestData = null
 }) {
   const [errors, setErrors] = useState({})
 
@@ -70,6 +74,9 @@ export default function Step2GuestInformation({
     }
   }
 
+  // Determine if we should show read-only view
+  const isReadOnly = checkinCompleted && !isModificationMode
+
   return (
     <div>
       <div className="text-center mb-2">
@@ -77,9 +84,29 @@ export default function Step2GuestInformation({
           Guest Information
         </h2>
         <p className="text-primary-600">
-          Please provide your personal information for check-in
+          {isReadOnly 
+            ? "Your submitted guest information" 
+            : isModificationMode 
+              ? "Update your personal information for check-in"
+              : "Please provide your personal information for check-in"
+          }
         </p>
       </div>
+
+      {/* Read-only confirmation when check-in is completed */}
+      {isReadOnly && (
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <CheckCircle className="w-6 h-6 text-primary-600 mr-3" />
+            <h3 className="text-lg font-semibold text-primary-900">
+              Information Submitted
+            </h3>
+          </div>
+          <p className="text-primary-800">
+            Your guest information has been successfully submitted and is currently under review.
+          </p>
+        </div>
+      )}
 
       <form className="space-y-6">
         {/* Personal Information Section */}
@@ -100,9 +127,10 @@ export default function Step2GuestInformation({
                 required
                 value={formData.firstName || ''}
                 onChange={(e) => handleInputChange('firstName', e.target.value)}
+                disabled={isReadOnly}
                 className={`w-full px-4 py-3 form-field ${
                   errors.firstName ? 'border-red-500' : 'border-primary-300'
-                }`}
+                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 placeholder="Enter your first name"
               />
               {errors.firstName && (
@@ -123,9 +151,10 @@ export default function Step2GuestInformation({
                 required
                 value={formData.lastName || ''}
                 onChange={(e) => handleInputChange('lastName', e.target.value)}
+                disabled={isReadOnly}
                 className={`w-full px-4 py-3 form-field ${
                   errors.lastName ? 'border-red-500' : 'border-primary-300'
-                }`}
+                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 placeholder="Enter your last name"
               />
               {errors.lastName && (
@@ -146,9 +175,10 @@ export default function Step2GuestInformation({
                 required
                 value={formData.personalEmail || ''}
                 onChange={(e) => handleInputChange('personalEmail', e.target.value)}
+                disabled={isReadOnly}
                 className={`w-full px-4 py-3 form-field ${
                   errors.personalEmail ? 'border-red-500' : 'border-primary-300'
-                }`}
+                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 placeholder="your.personal@email.com"
               />
               {errors.personalEmail && (
@@ -171,6 +201,7 @@ export default function Step2GuestInformation({
                 flags={flags}
                 value={formData.contactNumber || ''}
                 onChange={(value) => handleInputChange('contactNumber', value || '')}
+                disabled={isReadOnly}
                 className={errors.contactNumber ? 'phone-input-error' : ''}
                 placeholder="Enter phone number"
               />
@@ -203,6 +234,7 @@ export default function Step2GuestInformation({
               <TimePicker
                 value={formData.estimatedCheckinTime || null}
                 onChange={(val) => handleInputChange("estimatedCheckinTime", val || "")}
+                disabled={isReadOnly}
                 format="24"
                 step={60} // or 30 / 15
                 placeholder="HH:mm"
@@ -226,7 +258,8 @@ export default function Step2GuestInformation({
               <select
                 value={formData.travelPurpose || ''}
                 onChange={(e) => handleInputChange('travelPurpose', e.target.value)}
-                className="w-full px-4 py-3 form-field"
+                disabled={isReadOnly}
+                className={`w-full px-4 py-3 form-field ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               >
                 <option value="">Select purpose</option>
                 <option value="Business">Business</option>

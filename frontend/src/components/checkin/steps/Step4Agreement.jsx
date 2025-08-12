@@ -46,6 +46,9 @@ export default function Step4Agreement({
     }
   }
 
+  // Determine if we should show read-only view
+  const isReadOnly = checkinCompleted && !isModificationMode
+
   // Convert markdown-style text to JSX
   const formatAgreementText = (text) => {
     return text.split('\n').map((line, index) => {
@@ -84,9 +87,29 @@ export default function Step4Agreement({
           Guest Agreement
         </h2>
         <p className="text-primary-600">
-          Please review and accept our terms and conditions
+          {isReadOnly 
+            ? "Your accepted guest agreement" 
+            : isModificationMode 
+              ? "Review and update your agreement acceptance"
+              : "Please review and accept our terms and conditions"
+          }
         </p>
       </div>
+
+      {/* Read-only confirmation when check-in is completed */}
+      {isReadOnly && (
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <CheckCircle className="w-6 h-6 text-primary-600 mr-3" />
+            <h3 className="text-lg font-semibold text-primary-900">
+              Agreement Accepted
+            </h3>
+          </div>
+          <p className="text-primary-800">
+            You have successfully reviewed and accepted our guest agreement. Your check-in is complete!
+          </p>
+        </div>
+      )}
 
       {/* Agreement Text */}
       <div className="text-sm bg-white border border-gray-300 rounded-lg mb-6">
@@ -131,10 +154,10 @@ export default function Step4Agreement({
             id="agreement"
             checked={agreementAccepted}
             onChange={(e) => handleAgreementChange(e.target.checked)}
-            disabled={!hasReadAgreement}
+            disabled={!hasReadAgreement || isReadOnly}
             className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 transform scale-150"
           />
-          <label htmlFor="agreement" className="text-sm text-gray-700 cursor-pointer select-none">
+          <label htmlFor="agreement" className={`text-sm text-gray-700 select-none ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}>
             <span className="font-medium">I acknowledge that I have read, understood, and agree to comply with all terms and conditions outlined in this guest agreement.</span>
             <br />
             <span className="text-gray-600">

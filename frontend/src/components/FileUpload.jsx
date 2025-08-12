@@ -14,7 +14,8 @@ export default function FileUpload({
   className = '',
   bucketName = 'guest-documents',
   folder = '',
-  showFileName = false // Whether to show filename for existing images
+  showFileName = false, // Whether to show filename for existing images
+  disabled = false // Whether the component should be disabled
 }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [preview, setPreview] = useState(initialImageUrl)
@@ -52,7 +53,7 @@ export default function FileUpload({
   }
 
   const handleFileSelect = async (file) => {
-    if (!validateFile(file)) return
+    if (disabled || !validateFile(file)) return
 
     setSelectedFile(file)
     setUploading(true)
@@ -196,34 +197,36 @@ export default function FileUpload({
             />
             
             {/* Delete Button Overlay */}
-            <div className="absolute top-2 right-2 flex gap-2">
-              {hasExistingImage && !selectedFile && (
-                <button
-                  type="button"
-                  onClick={handleDeleteExisting}
-                  disabled={deleting}
-                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors disabled:opacity-50"
-                  title="Delete image"
-                >
-                  {deleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-              
-              {selectedFile && (
-                <button
-                  type="button"
-                  onClick={removeFile}
-                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
-                  title="Remove selected file"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+            {!disabled && (
+              <div className="absolute top-2 right-2 flex gap-2">
+                {hasExistingImage && !selectedFile && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteExisting}
+                    disabled={deleting}
+                    className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors disabled:opacity-50"
+                    title="Delete image"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+                
+                {selectedFile && (
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                    title="Remove selected file"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Upload Progress Overlay */}
             {uploading && (
@@ -254,17 +257,19 @@ export default function FileUpload({
         </div>
 
         {/* Change Image Button */}
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={openFileDialog}
-            disabled={uploading || deleting}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
-          >
-            <Camera className="w-4 h-4 mr-2" />
-            {hasExistingImage && !selectedFile ? 'Change Image' : 'Replace Image'}
-          </button>
-        </div>
+        {!disabled && (
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={openFileDialog}
+              disabled={uploading || deleting}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              {hasExistingImage && !selectedFile ? 'Change Image' : 'Replace Image'}
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -273,11 +278,11 @@ export default function FileUpload({
   return (
     <div className={className}>
       <div
-        className={`file-upload-area ${dragOver ? 'dragover' : ''} ${uploading ? 'uploading' : ''}`}
-        onDrop={uploading ? undefined : handleDrop}
-        onDragOver={uploading ? undefined : handleDragOver}
-        onDragLeave={uploading ? undefined : handleDragLeave}
-        onClick={uploading ? undefined : openFileDialog}
+        className={`file-upload-area ${dragOver ? 'dragover' : ''} ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''}`}
+        onDrop={(uploading || disabled) ? undefined : handleDrop}
+        onDragOver={(uploading || disabled) ? undefined : handleDragOver}
+        onDragLeave={(uploading || disabled) ? undefined : handleDragLeave}
+        onClick={(uploading || disabled) ? undefined : openFileDialog}
       >
         {uploading ? (
           <>
@@ -310,7 +315,7 @@ export default function FileUpload({
         accept={accept}
         onChange={handleFileInputChange}
         className="hidden"
-        disabled={uploading}
+        disabled={uploading || disabled}
       />
     </div>
   )

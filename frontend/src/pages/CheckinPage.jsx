@@ -121,6 +121,9 @@ export default function CheckinPage() {
           onUpdateFormData={updateFormData}
           onNext={nextStep}
           onPrevious={previousStep}
+          checkinCompleted={checkinCompleted}
+          isModificationMode={isModificationMode}
+          guestData={guestData}
         />
       )}
       
@@ -130,6 +133,9 @@ export default function CheckinPage() {
           onUpdateFormData={updateFormData}
           onNext={nextStep}
           onPrevious={previousStep}
+          checkinCompleted={checkinCompleted}
+          isModificationMode={isModificationMode}
+          guestData={guestData}
         />
       )}
       

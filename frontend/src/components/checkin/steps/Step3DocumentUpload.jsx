@@ -7,7 +7,10 @@ export default function Step3DocumentUpload({
   formData, 
   onUpdateFormData, 
   onNext, 
-  onPrevious 
+  onPrevious,
+  checkinCompleted = false,
+  isModificationMode = false,
+  guestData = null
 }) {
   const [uploadError, setUploadError] = useState('')
 
@@ -43,6 +46,9 @@ export default function Step3DocumentUpload({
   }
 
   const isDocumentUploaded = formData.passportFile || formData.passportUrl
+  
+  // Determine if we should show read-only view
+  const isReadOnly = checkinCompleted && !isModificationMode
 
   return (
     <div>
@@ -51,9 +57,29 @@ export default function Step3DocumentUpload({
           Document Upload
         </h2>
         <p className="text-primary-600">
-          Please upload a clear photo of your passport or government-issued ID
+          {isReadOnly 
+            ? "Your submitted identification document" 
+            : isModificationMode 
+              ? "Update your identification document"
+              : "Please upload a clear photo of your passport or government-issued ID"
+          }
         </p>
       </div>
+
+      {/* Read-only confirmation when check-in is completed */}
+      {isReadOnly && (
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <CheckCircle className="w-6 h-6 text-primary-600 mr-3" />
+            <h3 className="text-lg font-semibold text-primary-900">
+              Document Submitted
+            </h3>
+          </div>
+          <p className="text-primary-800">
+            Your identification document has been successfully uploaded and is currently under review.
+          </p>
+        </div>
+      )}
 
       {/* Upload Instructions */}
       <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
@@ -81,6 +107,7 @@ export default function Step3DocumentUpload({
           maxSize={10 * 1024 * 1024} // 10MB
           className="w-full"
           showFileName={true}
+          disabled={isReadOnly}
         />
       </div>
 
