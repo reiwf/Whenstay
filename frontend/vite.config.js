@@ -37,6 +37,10 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
+      assetsInlineLimit: 0, // Prevent inlining of flag assets
+    },
+    optimizeDeps: {
+      include: ['react-phone-number-input/flags'],
     },
   }
 })

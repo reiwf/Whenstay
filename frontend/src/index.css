@@ -4,7 +4,20 @@
 
 @layer base {
   html {
-    font-family: 'Noto Sans', system-ui, sans-serif;
+    font-family:
+      'Noto Sans',
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      Arial,
+      /* Emoji-capable fonts */
+      'Apple Color Emoji',
+      'Segoe UI Emoji',
+      'Segoe UI Symbol',
+      'Noto Color Emoji',
+      sans-serif;
     scroll-behavior: smooth;
   }
   
@@ -18,7 +31,7 @@
   }
   
   *:focus-visible {
-    @apply ring-2 ring-primary-500 ring-offset-2 ring-offset-white;
+    @apply ring-1 ring-primary-500 ring-offset-2 ring-offset-white;
   }
   :root {
     --background: 0 0% 100%;

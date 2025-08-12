@@ -2,16 +2,19 @@
 FROM node:18-alpine AS frontend-builder
 
 # Set working directory for frontend build
-WORKDIR /app/frontend
+WORKDIR /app
 
-# Copy frontend package files
-COPY frontend/package*.json ./
+# 1) Copy root lockfile (workspaces lockfile)
+COPY package.json package-lock.json ./
+
+# 2) Copy the workspace manifest so npm can resolve it
+COPY frontend/package.json frontend/package.json
 
 # Install frontend dependencies (including devDependencies for build)
-RUN npm ci
+RUN npm ci --workspace frontend
 
 # Copy frontend source code
-COPY frontend/ ./
+COPY frontend/ frontend/
 
 # Set build-time environment variables for Vite
 ARG VITE_SUPABASE_URL=https://nwdsuuwlmockdqzxkkbm.supabase.co
@@ -24,6 +27,7 @@ ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 ENV VITE_API_URL=$VITE_API_URL
 
 # Build frontend for production
+WORKDIR /app/frontend
 RUN npm run build
 
 # Production stage

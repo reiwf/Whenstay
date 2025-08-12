@@ -89,7 +89,7 @@ export default function Step4Agreement({
       </div>
 
       {/* Agreement Text */}
-      <div className="bg-white border border-gray-300 rounded-lg mb-6">
+      <div className="text-sm bg-white border border-gray-300 rounded-lg mb-6">
         <div className="p-4 border-b border-primary-200 bg-primary-50">
           <div className="flex items-center">
             <FileText className="w-5 h-5 text-primary-600 mr-2" />

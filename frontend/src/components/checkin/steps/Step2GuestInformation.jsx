@@ -9,6 +9,10 @@ import {
   UserCheck,
   AlertCircle 
 } from 'lucide-react'
+import PhoneInput from 'react-phone-number-input'
+import 'react-phone-number-input/style.css'
+import flags from 'react-phone-number-input/flags'
+import './PhoneInput.css'
 import StepNavigation from '../shared/StepNavigation'
 import TimePicker from '@/components/ui/timepick'
 
@@ -41,8 +45,6 @@ export default function Step2GuestInformation({
 
     if (!formData.contactNumber?.trim()) {
       newErrors.contactNumber = 'Contact number is required'
-    } else if (!/^[\+]?[1-9][\d]{0,15}$/.test(formData.contactNumber.replace(/[\s\-\(\)]/g, ''))) {
-      newErrors.contactNumber = 'Please enter a valid phone number'
     }
 
     // Address validation (optional but if provided, should not be empty)
@@ -162,15 +164,15 @@ export default function Step2GuestInformation({
               <label className="block text-sm font-medium text-primary-700 mb-2">
                 Contact Number *
               </label>
-              <input
-                type="tel"
-                required
+              <PhoneInput
+                international
+                countryCallingCodeEditable={false}
+                defaultCountry="JP"
+                flags={flags}
                 value={formData.contactNumber || ''}
-                onChange={(e) => handleInputChange('contactNumber', e.target.value)}
-                className={`w-full px-4 py-3 form-field ${
-                  errors.contactNumber ? 'border-red-500' : 'border-primary-300'
-                }`}
-                placeholder="+1 (555) 123-4567"
+                onChange={(value) => handleInputChange('contactNumber', value || '')}
+                className={errors.contactNumber ? 'phone-input-error' : ''}
+                placeholder="Enter phone number"
               />
               {errors.contactNumber && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">

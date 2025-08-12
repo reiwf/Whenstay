@@ -1,8 +1,27 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "checkJs": false,
+    "target": "es2020",
+    "lib": ["dom", "dom.iterable", "es6"],
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

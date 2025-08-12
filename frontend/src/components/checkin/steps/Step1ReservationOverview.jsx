@@ -52,14 +52,14 @@ export default function Step1ReservationOverview({
 
       {/* Check-in Completion Status */}
       {checkinCompleted && !isModificationMode && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
           <div className="flex items-start">
-            <CheckCircle className="w-6 h-6 text-green-600 mr-3 mt-1" />
+            <CheckCircle className="w-6 h-6 text-primary-600 mr-3 mt-1" />
             <div className="flex-1">
-              <h3 className="text-l font-semibold text-green-900 mb-2">
+              <h3 className="text-l font-semibold text-primary-900 mb-2">
                 Check-in Complete!
               </h3>
-              <div className="space-y-2 text-green-800">
+              <div className="space-y-2 text-primary-800">
                 <p>
                   <strong>Guest Name:</strong> {guestData?.firstName} {guestData?.lastName}
                 </p>
@@ -82,8 +82,8 @@ export default function Step1ReservationOverview({
                   <strong>Status:</strong> 
                   <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
                     guestData?.adminVerified 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
+                      ? 'bg-primary-100 text-primary-800' 
+                      : 'bg-primary-100 text-primary-800'
                   }`}>
                     {guestData?.adminVerified ? 'Verified by Admin' : 'Pending Review'}
                   </span>
@@ -106,14 +106,14 @@ export default function Step1ReservationOverview({
 
       {/* Modification Mode Warning */}
       {isModificationMode && (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-8">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
           <div className="flex items-start">
-            <AlertTriangle className="w-6 h-6 text-orange-600 mr-3 mt-1" />
+            <AlertTriangle className="w-6 h-6 text-primary-600 mr-3 mt-1" />
             <div className="flex-1">
-              <h3 className="text-l font-semibold text-orange-900 mb-2">
+              <h3 className="text-l font-semibold text-primary-900 mb-2">
                 Modification Mode
               </h3>
-              <p className="text-orange-800 mb-4">
+              <p className="text-primary-800 mb-4">
                 You are now modifying your existing check-in information. Any changes you make will overwrite your previously submitted data.
               </p>
               <button

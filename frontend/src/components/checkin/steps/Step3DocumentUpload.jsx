@@ -99,20 +99,11 @@ export default function Step3DocumentUpload({
           <div className="flex items-start">
             <FileText className="w-5 h-5 text-primary-500 mr-3 mt-0.5" />
             <div>
-              <h4 className="text-sm font-semibold text-primary-900 mb-2">
-              Privacy & Security
-            </h4>
-            <p className="text-gray-700 text-sm mb-2">
-              Your document is encrypted and securely stored. We use this information only for:
-            </p>
-            <ul className="text-gray-600 text-sm space-y-1">
+            <ul className="text-primary-600 text-sm space-y-1">
               <li>• Identity verification and security purposes</li>
               <li>• Compliance with local registration laws</li>
               <li>• Property access and safety requirements</li>
             </ul>
-            <p className="text-gray-600 text-sm mt-2">
-              Your document will be automatically deleted after your stay unless required by law.
-            </p>
           </div>
         </div>
       </div>
