@@ -226,6 +226,33 @@ export const adminAPI = {
   
   // Get cleaning task statistics
   getCleaningTaskStats: (params = {}) => api.get('/cleaning/tasks/stats', { params }),
+  
+  // Communication Management
+  getCommunicationThreads: (params = {}) => api.get('/communication/threads', { params }),
+  
+  getCommunicationMessages: (threadId, params = {}) => 
+    api.get(`/communication/threads/${threadId}/messages`, { params }),
+  
+  sendCommunicationMessage: (threadId, messageData) => 
+    api.post(`/communication/threads/${threadId}/messages`, messageData),
+  
+  updateCommunicationThreadStatus: (threadId, status) => 
+    api.put(`/communication/threads/${threadId}/status`, { status }),
+  
+  getCommunicationThreadChannels: (threadId) => 
+    api.get(`/communication/threads/${threadId}/channels`),
+  
+  markCommunicationMessagesRead: (threadId, lastMessageId) => 
+    api.post(`/communication/threads/${threadId}/read`, { last_message_id: lastMessageId }),
+  
+  getCommunicationTemplates: (params = {}) => 
+    api.get('/communication/templates', { params }),
+  
+  scheduleCommunicationMessage: (scheduleData) => 
+    api.post('/communication/schedule', scheduleData),
+  
+  createCommunicationThread: (threadData) => 
+    api.post('/communication/threads', threadData),
 }
 
 export const reservationAPI = {
