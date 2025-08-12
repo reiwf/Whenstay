@@ -6,7 +6,7 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
   const { profile } = useAuth()
 
   return (
-    <header className="bg-primary-50 border-b border-primary-200 shadow-sm">
+    <header className="border-b border-primary-200 shadow-sm">
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left Side - Menu/Logo */}
         <div className="flex items-center space-x-4">

@@ -7,7 +7,7 @@ async function createTestUserProfile() {
     
     // First, create the auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: 'admin@whenstay.com',
+      email: 'admin@staylabel.com',
       password: 'admin123',
       email_confirm: true
     });
@@ -22,7 +22,7 @@ async function createTestUserProfile() {
           throw fetchError;
         }
         
-        const existingUser = existingUsers.users.find(u => u.email === 'admin@whenstay.com');
+        const existingUser = existingUsers.users.find(u => u.email === 'admin@staylabel.com');
         if (!existingUser) {
           throw new Error('User exists but could not be found');
         }
@@ -54,7 +54,7 @@ async function createTestUserProfile() {
             first_name: 'Admin',
             last_name: 'User',
             phone: '+1234567890',
-            company_name: 'Whenstay',
+            company_name: 'Staylabel',
             is_active: true
           })
           .select()
@@ -82,7 +82,7 @@ async function createTestUserProfile() {
         first_name: 'Admin',
         last_name: 'User',
         phone: '+1234567890',
-        company_name: 'Whenstay',
+        company_name: 'Staylabel',
         is_active: true
       })
       .select()
@@ -95,7 +95,7 @@ async function createTestUserProfile() {
     console.log('Created user profile:', profile);
     
     console.log('\n✅ Test admin user created successfully!');
-    console.log('📧 Email: admin@whenstay.com');
+    console.log('📧 Email: admin@staylabel.com');
     console.log('🔑 Password: admin123');
     console.log('👤 Role: admin');
     

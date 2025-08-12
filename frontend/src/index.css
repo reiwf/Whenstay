@@ -470,3 +470,93 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Base reusable form field style */
+.form-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #dedbca; /* primary-200 */
+  border-radius: 0.5rem;
+  background: white;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-height: 48px;
+  font-size: 0.875rem;
+  color: #54493a; /* primary-900 */
+}
+
+.form-field:focus-within {
+  border-color: #a3936c; /* primary-500 */
+  box-shadow: 0 0 0 3px rgba(163, 147, 108, 0.2); /* soft brown glow */
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.75rem 1rem;
+  font-size: inherit;
+  color: inherit;
+  outline: none;
+}
+
+.form-field input::placeholder,
+.form-field textarea::placeholder {
+  color: #b3a884; /* primary-400 */
+}
+
+.form-field:hover:not(:focus-within) {
+  border-color: #d2cdb6; /* primary-300 */
+}
+
+/* Error state */
+.form-field.error {
+  border-color: #ef4444; /* red-500 */
+}
+
+.form-field.error:focus-within {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+/* Disabled */
+.form-field.disabled {
+  background-color: #efeee5; /* primary-100 */
+  border-color: #dedbca;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-field.disabled input,
+.form-field.disabled select,
+.form-field.disabled textarea {
+  color: #b3a884; /* primary-400 */
+  cursor: not-allowed;
+}
+
+.tp-pop:focus,
+.tp-pop:focus-visible,
+[role="listbox"]:focus,
+[role="listbox"]:focus-visible,
+[role="option"]:focus,
+[role="option"]:focus-visible {
+  outline: none !important;
+}
+
+.tp-pop {
+  border: 1px solid #dedbca;        /* primary-200 */
+  background: #fff;
+  border-radius: 8px;
+}
+.tp-item {
+  color: #54493a;                   /* primary-900 */
+}
+.tp-item.tp-highlight {             /* hover/keyboard highlight */
+  background: #efeee5;              /* primary-100 */
+}
+.tp-item.tp-selected {              /* selected row */
+  background: #f8f7f4;              /* primary-50 */
+  color: #54493a;                   /* primary-900 */
+  font-weight: 600;
+}

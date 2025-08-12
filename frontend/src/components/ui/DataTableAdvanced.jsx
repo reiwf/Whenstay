@@ -431,7 +431,7 @@ export function DataTableAdvanced({
             onChange={(e) => {
               table.setPageSize(Number(e.target.value))
             }}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
+            className="border border-primary-300 rounded px-2 py-1 text-sm"
           >
             {pageSizeOptions.map((pageSize) => (
               <option key={pageSize} value={pageSize}>

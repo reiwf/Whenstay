@@ -93,9 +93,9 @@ const Sidebar = ({
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-primary-50 border-r border-gray-200 shadow-sm">
+    <div className="flex flex-col w-full h-full bg-primary-50 border-r border-primary-200 shadow-sm">
       {/* Header */}
-      <div className={`flex items-center justify-between p-4 border-b border-gray-200 ${
+      <div className={`flex items-center justify-between p-4 border-b border-primary-200 ${
         collapsed && !mobile ? 'px-2' : 'px-4'
       }`}>
         {/* Logo */}
@@ -105,7 +105,7 @@ const Sidebar = ({
               <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
                 <span className="text-white font-bold text-sm">S</span>
               </div>
-              <h1 className="text-lg font-bold text-gray-900">Staylabel</h1>
+              <h1 className="text-lg font-bold text-primary-900">Staylabel</h1>
             </>
           )}
           {collapsed && !mobile && (
@@ -120,7 +120,7 @@ const Sidebar = ({
           {mobile && (
             <button
               onClick={onClose}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              className="p-1 rounded-md text-primary-400 hover:text-primary-600 hover:bg-primary-100"
             >
               <X className="w-5 h-5" />
             </button>
@@ -128,7 +128,7 @@ const Sidebar = ({
           {!mobile && onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              className="p-1 rounded-md text-primary-400 hover:text-primary-600 hover:bg-primary-100"
             >
               <ChevronLeft className={`w-4 h-4 transition-transform ${
                 collapsed ? 'rotate-180' : ''
@@ -158,7 +158,7 @@ const Sidebar = ({
       </nav>
 
       {/* User Profile Section */}
-      <div className={`border-t border-gray-200 p-4 ${collapsed && !mobile ? 'px-2' : 'px-4'}`}>
+      <div className={`border-t border-primary-200 p-4 ${collapsed && !mobile ? 'px-2' : 'px-4'}`}>
         {collapsed && !mobile && (
           <div className="flex justify-center">
             <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">

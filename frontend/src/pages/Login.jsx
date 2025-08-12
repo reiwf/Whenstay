@@ -127,7 +127,7 @@ const Login = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2m-6 4h4" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-primary-900">Whenstay</h2>
+            <h2 className="text-2xl font-bold text-primary-900">Staylabel</h2>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl p-8">

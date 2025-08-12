@@ -222,36 +222,6 @@ export function useCheckinProcess(reservationId) {
     }
   }
 
-  const getStepTitle = () => {
-    switch (currentStep) {
-      case 1:
-        return 'Reservation Overview'
-      case 2:
-        return 'Guest Information'
-      case 3:
-        return 'Document Upload'
-      case 4:
-        return 'Agreement & Confirmation'
-      default:
-        return 'Check-in Process'
-    }
-  }
-
-  const getStepSubtitle = () => {
-    switch (currentStep) {
-      case 1:
-        return 'Review your reservation details'
-      case 2:
-        return 'Verify your personal information'
-      case 3:
-        return 'Upload your identification document'
-      case 4:
-        return 'Review and accept our terms'
-      default:
-        return 'Complete your check-in process'
-    }
-  }
-
   return {
     // State
     currentStep,
@@ -276,8 +246,6 @@ export function useCheckinProcess(reservationId) {
     
     // Computed
     validateCurrentStep,
-    getStepTitle,
-    getStepSubtitle,
     isValid: validateCurrentStep(),
     totalSteps: 4
   }

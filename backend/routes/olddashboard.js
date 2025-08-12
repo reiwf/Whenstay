@@ -704,7 +704,7 @@ router.post('/auth/create-test-admin', async (req, res) => {
         role: profile.role,
         first_name: profile.first_name,
         last_name: profile.last_name,
-        email: 'admin@whenstay.com',
+        email: 'admin@staylabel.com',
         is_active: profile.is_active
       }
     });

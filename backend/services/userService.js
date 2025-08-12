@@ -483,7 +483,7 @@ class UserService {
   async createTestAdminUser() {
     try {
       // Check if admin user already exists
-      const existingUser = await this.getUserByEmail('admin@whenstay.com');
+      const existingUser = await this.getUserByEmail('admin@staylabel.com');
       
       if (existingUser && existingUser.profile) {
         console.log('Test admin user already exists');
@@ -492,7 +492,7 @@ class UserService {
 
       // Create auth user
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: 'admin@whenstay.com',
+        email: 'admin@staylabel.com',
         password: 'admin123',
         email_confirm: true,
         user_metadata: {
@@ -516,7 +516,7 @@ class UserService {
           first_name: 'Admin',
           last_name: 'User',
           phone: null,
-          company_name: 'Whenstay',
+          company_name: 'Staylabel',
           is_active: true
         })
         .select()

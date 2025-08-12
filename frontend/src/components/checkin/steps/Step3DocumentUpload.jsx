@@ -46,8 +46,8 @@ export default function Step3DocumentUpload({
 
   return (
     <div>
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-primary-900 mb-2">
+      <div className="text-center mb-2">
+        <h2 className="text-xl font-bold text-primary-900 mb-2">
           Document Upload
         </h2>
         <p className="text-primary-600">

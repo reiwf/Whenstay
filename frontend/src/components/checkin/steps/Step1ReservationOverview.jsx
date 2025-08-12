@@ -31,8 +31,8 @@ export default function Step1ReservationOverview({
   return (
     <div>
       {/* Header - changes based on state */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-primary-900 mb-2">
+      <div className="text-center mb-2">
+        <h2 className="text-xl font-bold text-primary-900 mb-2">
           Welcome, {reservation.guestName}!
         </h2>
         {checkinCompleted && !isModificationMode ? (
@@ -45,7 +45,7 @@ export default function Step1ReservationOverview({
           </p>
         ) : (
           <p className="text-primary-600">
-            Let's get you checked in for your upcoming stay
+            Let's complete your online register
           </p>
         )}
       </div>
@@ -56,7 +56,7 @@ export default function Step1ReservationOverview({
           <div className="flex items-start">
             <CheckCircle className="w-6 h-6 text-green-600 mr-3 mt-1" />
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-green-900 mb-2">
+              <h3 className="text-l font-semibold text-green-900 mb-2">
                 Check-in Complete!
               </h3>
               <div className="space-y-2 text-green-800">
@@ -110,7 +110,7 @@ export default function Step1ReservationOverview({
           <div className="flex items-start">
             <AlertTriangle className="w-6 h-6 text-orange-600 mr-3 mt-1" />
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-orange-900 mb-2">
+              <h3 className="text-l font-semibold text-orange-900 mb-2">
                 Modification Mode
               </h3>
               <p className="text-orange-800 mb-4">
@@ -129,7 +129,7 @@ export default function Step1ReservationOverview({
 
       {/* Reservation Details Card */}
       <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-8">
-        <h3 className="text-lg font-semibold text-primary-900 mb-4">
+        <h3 className="text-l font-semibold text-primary-900 mb-4">
           Your Reservation Details
         </h3>
         
@@ -140,7 +140,7 @@ export default function Step1ReservationOverview({
               <Calendar className="w-5 h-5 text-primary-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Check-in Date</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {checkInDate.toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -154,7 +154,7 @@ export default function Step1ReservationOverview({
               <Clock className="w-5 h-5 text-primary-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Check-out Date</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {checkOutDate.toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -168,7 +168,7 @@ export default function Step1ReservationOverview({
               <Users className="w-5 h-5 text-primary-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Guests</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {reservation.numGuests} {reservation.numGuests === 1 ? 'Guest' : 'Guests'}
                 </p>
               </div>
@@ -181,7 +181,7 @@ export default function Step1ReservationOverview({
               <Home className="w-5 h-5 text-primary-600 mr-3 mt-1" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Property</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {reservation.propertyName || 'Property Name'}
                 </p>
               </div>
@@ -191,7 +191,7 @@ export default function Step1ReservationOverview({
               <MapPin className="w-5 h-5 text-primary-600 mr-3 mt-1" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Room</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {reservation.roomTypeName || reservation.roomTypes}
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function Step1ReservationOverview({
               <Clock className="w-5 h-5 text-primary-600 mr-3 mt-1" />
               <div>
                 <p className="text-sm font-medium text-gray-900">Duration</p>
-                <p className="text-lg text-primary-700">
+                <p className="text-l text-primary-700">
                   {nights} {nights === 1 ? 'Night' : 'Nights'}
                 </p>
               </div>
@@ -266,26 +266,6 @@ export default function Step1ReservationOverview({
           </div>
         )}
       </div>
-
-      {/* What's Next - only show for fresh check-ins or modification mode */}
-{(!checkinCompleted || isModificationMode) && (
-  <div className="bg-primary-100 border border-primary-300 rounded-lg p-6 mb-8">
-    <h4 className="text-l font-semibold text-primary-900 mb-2">
-      {isModificationMode ? "Modify Your Information" : "What's Next?"}
-    </h4>
-    <p className="text-yellow-800 mb-4">
-      {isModificationMode 
-        ? "You can update any of your previously submitted information. All fields will be pre-filled with your current data."
-        : "To complete your check-in, we'll need to collect some information and documents. This process should take just a few minutes and will help ensure a smooth arrival."
-      }
-    </p>
-    <ul className="text-yellow-700 space-y-1">
-      <li>• {isModificationMode ? "Update" : "Verify"} your personal information</li>
-      <li>• {isModificationMode ? "Replace" : "Upload"} a photo of your passport or ID</li>
-      <li>• Review and accept our guest agreement</li>
-    </ul>
-  </div>
-)}
 
 {/* Important Information */}
 <div className="bg-primary-200 border border-primary-300 rounded-lg p-4 mt-4">

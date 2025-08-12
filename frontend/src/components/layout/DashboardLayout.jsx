@@ -38,7 +38,7 @@ const DashboardLayout = ({
   }, [])
 
   return (
-    <div className="h-screen bg-primary-50 flex overflow-hidden">
+    <div className="h-screen flex overflow-hidden">
       {/* Desktop Sidebar */}
       <div className={`hidden lg:flex lg:flex-shrink-0 transition-all duration-300 ${
         sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'

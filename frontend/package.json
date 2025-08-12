@@ -1,7 +1,7 @@
 {
-  "name": "whenstay-checkin-frontend",
+  "name": "staylabel-checkin-frontend",
   "version": "1.0.0",
-  "description": "Frontend for Whenstay check-in app",
+  "description": "Frontend for Staylabel check-in app",
   "type": "module",
   "scripts": {
     "dev": "vite",

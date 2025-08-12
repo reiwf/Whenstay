@@ -19,7 +19,7 @@ class EmailService {
       const emailData = {
         from: this.fromEmail,
         to: guestEmail,
-        subject: 'Complete Your Online Check-in - Whenstay',
+        subject: 'Complete Your Online Check-in - Staylabel',
         html: this.getCheckinInvitationTemplate(guestName, checkinUrl, checkInDate)
       };
 
@@ -38,7 +38,7 @@ class EmailService {
       const emailData = {
         from: this.fromEmail,
         to: guestEmail,
-        subject: 'Check-in Completed - Whenstay',
+        subject: 'Check-in Completed - Staylabel',
         html: this.getCheckinConfirmationTemplate(guestName, checkInDate)
       };
 
@@ -105,11 +105,11 @@ class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Welcome to Whenstay!</h1>
+            <h1>Welcome to Staylabel!</h1>
           </div>
           <div class="content">
             <h2>Hello ${guestName},</h2>
-            <p>Thank you for choosing Whenstay! We're excited to welcome you on <strong>${new Date(checkInDate).toLocaleDateString()}</strong>.</p>
+            <p>Thank you for choosing Staylabel! We're excited to welcome you on <strong>${new Date(checkInDate).toLocaleDateString()}</strong>.</p>
             
             <p>To make your arrival smooth and efficient, please complete your online check-in by clicking the button below:</p>
             
@@ -131,7 +131,7 @@ class EmailService {
             
             <p>We look forward to hosting you!</p>
             
-            <p>Best regards,<br>The Whenstay Team</p>
+            <p>Best regards,<br>The Staylabel Team</p>
           </div>
           <div class="footer">
             <p>This email was sent regarding your upcoming stay. If you did not make this reservation, please contact us immediately.</p>
@@ -181,10 +181,10 @@ class EmailService {
             
             <p>We can't wait to welcome you!</p>
             
-            <p>Best regards,<br>The Whenstay Team</p>
+            <p>Best regards,<br>The Staylabel Team</p>
           </div>
           <div class="footer">
-            <p>Thank you for choosing Whenstay. We're committed to making your stay exceptional.</p>
+            <p>Thank you for choosing Staylabel. We're committed to making your stay exceptional.</p>
           </div>
         </div>
       </body>
@@ -243,5 +243,3 @@ class EmailService {
 }
 
 module.exports = new EmailService();
-
-

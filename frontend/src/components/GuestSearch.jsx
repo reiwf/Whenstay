@@ -76,8 +76,8 @@ const GuestSearch = () => {
             setToken(e.target.value)
             if (error) setError(false) // Clear error when user types
           }}
-          placeholder="Check-in with Label ID"
-          className={`placeholder-primary-400 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-1 w-32 sm:w-40 md:w-48 transition-all duration-200 border ${
+          placeholder="Enter Label ID"
+          className={`placeholder-primary-400 px-3 py-2 text-xs rounded-lg focus:outline-none focus:ring-1 w-32 sm:w-40 md:w-48 transition-all duration-200 border ${
             error
               ? 'border-red-200 bg-red-50 text-red-500 focus:ring-red-500 animate-shake'
               : 'border-primary-400 focus:border-primary-400'

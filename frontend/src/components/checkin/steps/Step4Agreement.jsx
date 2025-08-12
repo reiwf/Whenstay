@@ -79,8 +79,8 @@ export default function Step4Agreement({
 
   return (
     <div>
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-primary-900 mb-2">
+      <div className="text-center mb-2">
+        <h2 className="text-xl font-bold text-primary-900 mb-2">
           Guest Agreement
         </h2>
         <p className="text-primary-600">

@@ -29,8 +29,6 @@ export default function CheckinPage() {
     submitCheckin,
     enterModificationMode,
     exitModificationMode,
-    getStepTitle,
-    getStepSubtitle
   } = useCheckinProcess(token)
 
   const handleSubmit = async () => {
@@ -102,8 +100,6 @@ export default function CheckinPage() {
   return (
     <CheckinLayout
       currentStep={currentStep}
-      title={getStepTitle()}
-      subtitle={getStepSubtitle()}
     >
       {currentStep === 1 && (
         <Step1ReservationOverview 
@@ -172,18 +168,6 @@ export function CheckinSuccessPage() {
             Thank you for completing your check-in. Your information has been submitted 
             and is now being reviewed by our team.
           </p>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-            <h2 className="text-lg font-semibold text-blue-900 mb-3">
-              What happens next?
-            </h2>
-            <ul className="text-blue-800 space-y-2 text-left">
-              <li>• Our team will review your submitted information</li>
-              <li>• You'll receive a confirmation email once approved</li>
-              <li>• Property access details will be provided upon approval</li>
-              <li>• You can arrive at your scheduled check-in time</li>
-            </ul>
-          </div>
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-8">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">

@@ -1,7 +1,7 @@
 {
-  "name": "whenstay-checkin-backend",
+  "name": "staylabel-checkin-backend",
   "version": "1.0.0",
-  "description": "Backend API for Whenstay check-in app with Beds24 integration",
+  "description": "Backend API for Staylabel check-in app with Beds24 integration",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
