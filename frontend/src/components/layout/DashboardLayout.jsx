@@ -59,7 +59,7 @@ const DashboardLayout = ({
         <div className="lg:hidden fixed inset-0 z-50 flex">
           {/* Overlay */}
           <div
-            className="fixed inset-0 bg-primary -600 bg-opacity-75 transition-opacity"
+            className="fixed inset-0 bg-primary-200 bg-opacity-75 transition-opacity"
             onClick={() => setSidebarOpen(false)}
           />
           

@@ -30,8 +30,8 @@ const DataTable = ({
     return (
       <div className="card">
         <div className="text-center py-12">
-          {EmptyIcon && <EmptyIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />}
-          <p className="text-gray-500">{emptyMessage}</p>
+          {EmptyIcon && <EmptyIcon className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />}
+          <p className="text-gray-500 text-base sm:text-lg">{emptyMessage}</p>
         </div>
       </div>
     )

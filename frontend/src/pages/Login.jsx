@@ -91,7 +91,7 @@ const Login = () => {
         <div className="absolute inset-0 bg-black opacity-20"></div>
         <div className="relative z-10 flex flex-col justify-center items-center text-white p-12">
           <div className="max-w-md text-center">
-            <h1 className="text-4xl font-bold mb-6">Welcome to Staylabel</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-6">Welcome to Staylabel</h1>
             <p className="text-xl opacity-90 mb-8">
               Streamline your property management with our comprehensive platform
             </p>
@@ -127,12 +127,12 @@ const Login = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2m-6 4h4" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-primary-900">Staylabel</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-primary-900">Staylabel</h2>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-primary-900 mb-2">
+              <h2 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-2">
                 Sign In
               </h2>
               <p className="text-primary-600">

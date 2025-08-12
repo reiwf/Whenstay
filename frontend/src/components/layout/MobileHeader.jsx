@@ -29,19 +29,7 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
 
         {/* Right Side - Actions & Profile */}
         <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <button className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 relative">
-            <Bell className="w-5 h-5" />
-            {/* Notification badge */}
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
-              <span className="text-xs text-white font-medium">3</span>
-            </span>
-          </button>
 
-          {/* Mobile Profile */}
-          <div className="lg:hidden">
-            <ProfileDropdown />
-          </div>
 
           {/* Desktop Profile (when sidebar is collapsed) */}
           <div className={`hidden lg:block ${!sidebarCollapsed ? 'lg:hidden' : ''}`}>

@@ -235,8 +235,8 @@ export function DataTableAdvanced({
     return (
       <div className={`bg-white rounded-lg border ${className}`}>
         <div className="text-center py-12">
-          {EmptyIcon && <EmptyIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />}
-          <p className="text-gray-500 text-lg font-medium">{emptyMessage}</p>
+          {EmptyIcon && <EmptyIcon className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />}
+          <p className="text-gray-500 text-base sm:text-lg font-medium">{emptyMessage}</p>
         </div>
       </div>
     )
@@ -291,7 +291,7 @@ export function DataTableAdvanced({
                 placeholder="Search..."
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-8 w-64"
+                className="pl-8 w-full md:w-64"
               />
             </div>
           )}
@@ -423,7 +423,7 @@ export function DataTableAdvanced({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between px-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between px-2 space-y-2 sm:space-y-0">
         <div className="flex items-center space-x-2">
           <p className="text-sm font-medium">Rows per page</p>
           <select
@@ -441,7 +441,7 @@ export function DataTableAdvanced({
           </select>
         </div>
 
-        <div className="flex items-center space-x-6 lg:space-x-8">
+        <div className="flex w-auto sm:w-[100px] items-center justify-center text-sm font-medium">
           <div className="flex w-[100px] items-center justify-center text-sm font-medium">
             Page {table.getState().pagination.pageIndex + 1} of{' '}
             {table.getPageCount()}

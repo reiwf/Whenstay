@@ -58,7 +58,7 @@ export default function CheckinPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h1 className="text-2xl font-bold text-red-900 mb-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-red-900 mb-4">
               Check-in Error
             </h1>
             <p className="text-red-800 mb-6">
@@ -80,7 +80,7 @@ export default function CheckinPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
             Reservation Not Found
           </h1>
           <p className="text-gray-600 mb-8">
@@ -166,7 +166,7 @@ export function CheckinSuccessPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
           <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-6" />
           
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
             Check-in Submitted Successfully!
           </h1>
           
@@ -176,7 +176,7 @@ export function CheckinSuccessPage() {
           </p>
 
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            <h3 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-3">
               Need Help?
             </h3>
             <p className="text-gray-700 mb-4">

@@ -310,8 +310,8 @@ export default function GuestApp() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Reservation Not Found</h1>
+          <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Reservation Not Found</h1>
           <p className="text-gray-600">The reservation link may be invalid or expired.</p>
         </div>
       </div>
@@ -401,7 +401,7 @@ export default function GuestApp() {
                       </button>
                     </div>
                   ) : (
-                    <p className="text-3xl font-mono font-bold text-primary-900">{room.access_code}</p>
+                    <p className="text-2xl md:text-3xl font-mono font-bold text-primary-900">{room.access_code}</p>
                   )}
                 </div>
                 
@@ -523,8 +523,8 @@ export default function GuestApp() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Check-in Information */}
             <div className="space-y-4">
-              <div className="flex items-center">
-                <PlaneLanding className="w-5 h-5 text-primary-600 mr-3" />
+              <div className="flex items-start gap-3">
+                <PlaneLanding className="w-5 h-5 text-primary-400" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Check-in Date</p>
                   <p className="text-lg text-primary-700">
@@ -537,8 +537,8 @@ export default function GuestApp() {
                 </div>
               </div>
 
-              <div className="flex items-center">
-                <PlaneTakeoff className="w-5 h-5 text-primary-600 mr-3" />
+              <div className="flex items-start gap-3">
+                <PlaneTakeoff className="w-5 h-5 text-primary-400" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Check-out Date</p>
                   <p className="text-lg text-primary-700">
@@ -551,8 +551,8 @@ export default function GuestApp() {
                 </div>
               </div>
 
-              <div className="flex items-center">
-                <Users className="w-5 h-5 text-primary-600 mr-3" />
+              <div className="flex items-start gap-3">
+                <Users className="w-5 h-5 text-primary-400" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Guests</p>
                   <p className="text-lg text-primary-700">
@@ -574,8 +574,8 @@ export default function GuestApp() {
                 </div>
               </div>
 
-              <div className="flex items-start">
-                <Home className="w-5 h-5 text-primary-600 mr-3 mt-1" />
+              <div className="flex items-start gap-3">
+                    <Home className="w-5 h-5 text-primary-600" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Room</p>
                   <p className="text-lg text-primary-700">
@@ -645,16 +645,16 @@ export default function GuestApp() {
         {/* Basic Property Info */}
         <div className="card">
           <div className="space-y-4">
-              <div className="flex items-center">
-                <Building className="w-5 h-5 text-gray-400 mr-3" />
+               <div className="flex items-start gap-3">
+                <Building className="w-5 h-5 text-gray-400" />
                 <div>
                   <p className="text-sm text-gray-600">Property</p>
                   <p className="font-medium">{property.name}</p>
                 </div>
               </div>
               
-              <div className="flex items-center">
-                <Home className="w-5 h-5 text-gray-400 mr-3" />
+              <div className="flex items-start gap-3">
+                <Home className="w-5 h-5 text-gray-400" />
                 <div>
                   <p className="text-sm text-gray-600">Room</p>
                   <p className="font-medium">{room.room_name}</p>
@@ -684,8 +684,8 @@ export default function GuestApp() {
         {/* Emergency Contact */}
         {property.emergency_contact && (
           <div className="card">
-            <div className="flex items-center mb-3">
-              <Phone className="w-5 h-5 text-red-600 mr-2" />
+            <div className="flex items-start gap-3">
+               <Phone className="w-4 h-4 text-primary-600" />
               <h3 className="text-lg font-semibold text-gray-900">Emergency Contact</h3>
             </div>
             <p className="font-medium">{property.emergency_contact}</p>
@@ -795,7 +795,7 @@ export default function GuestApp() {
       {/* Contact Support */}
       <div className="card">
         <div className="text-center">
-          <MessageCircle className="w-12 h-12 text-primary-600 mx-auto mb-4" />
+           <MessageCircle className="w-8 h-8 sm:w-12 sm:h-12 text-primary-600 mx-auto mb-4" />
           <h2 className="text-sm font-semibold text-gray-900 mb-2">Need Help?</h2>
           <p className="text-gray-600 mb-4">
             Our support team is here to help with any questions or issues during your stay.
@@ -813,7 +813,7 @@ export default function GuestApp() {
       {/* Documents placeholder */}
       <div className="card">
         <div className="text-center py-8">
-          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <FileText className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-gray-900 mb-2">Documents</h3>
           <p className="text-gray-600">Important documents and agreements will appear here.</p>
         </div>

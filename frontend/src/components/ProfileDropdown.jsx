@@ -55,7 +55,7 @@ const ProfileDropdown = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        className="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 p-2 hover:bg-gray-50"
+        className="w-full flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-primary-500 p-2 hover:bg-gray-50"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup="true"
