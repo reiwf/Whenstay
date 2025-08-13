@@ -58,7 +58,7 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
 
   const getDeliveryStatus = () => {
     if (!message.message_deliveries || message.message_deliveries.length === 0) {
-      return { status: 'pending', icon: Clock, color: 'text-gray-400' };
+      return { status: 'pending', icon: Clock, color: 'text-primary-400' };
     }
 
     const delivery = message.message_deliveries[0];
@@ -68,18 +68,18 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
     }
     
     if (delivery.read_at) {
-      return { status: 'read', icon: CheckCircle, color: 'text-blue-500' };
+      return { status: 'read', icon: CheckCircle, color: 'text-leaf-600' };
     }
     
     if (delivery.delivered_at) {
-      return { status: 'delivered', icon: CheckCircle, color: 'text-green-500' };
+      return { status: 'delivered', icon: CheckCircle, color: 'text-leaf-500' };
     }
     
     if (delivery.sent_at) {
-      return { status: 'sent', icon: CheckCircle, color: 'text-gray-500' };
+      return { status: 'sent', icon: CheckCircle, color: 'text-primary-500' };
     }
     
-    return { status: 'pending', icon: Clock, color: 'text-gray-400' };
+    return { status: 'pending', icon: Clock, color: 'text-primary-400' };
   };
 
   const deliveryStatus = getDeliveryStatus();
@@ -94,8 +94,8 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
           className={`
             inline-block px-4 py-2 rounded-2xl shadow-sm
             ${isFromGuest
-              ? 'bg-blue-600 text-white rounded-br-md'
-              : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md'
+              ? 'bg-primary-600 text-white rounded-br-md'
+              : 'bg-white border border-primary-200 text-primary-900 rounded-bl-md'
             }
             ${!isConsecutive && isFromGuest ? 'rounded-br-md' : ''}
             ${!isConsecutive && !isFromGuest ? 'rounded-bl-md' : ''}
@@ -108,7 +108,7 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
 
         {/* Timestamp and status */}
         <div className={`flex items-center mt-1 space-x-1 ${isFromGuest ? 'justify-end' : 'justify-start'}`}>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-primary-500">
             {formatTime(message.created_at)}
           </span>
           
@@ -120,7 +120,7 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
 
         {/* Sender label for consecutive messages from different roles */}
         {!isConsecutive && (
-          <div className={`text-xs text-gray-500 mt-1 ${isFromGuest ? 'text-right' : 'text-left'}`}>
+          <div className={`text-xs text-primary-500 mt-1 ${isFromGuest ? 'text-right' : 'text-left'}`}>
             {isFromGuest ? 'You' : isFromAdmin ? 'Support Team' : 'System'}
           </div>
         )}

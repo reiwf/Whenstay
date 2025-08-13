@@ -71,21 +71,33 @@ export default function CommunicationPage() {
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-120px)] flex flex-col">
+      <div className="h-full flex flex-col bg-primary-25">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="bg-white border-b border-primary-200 px-6 py-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Communication</h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <h1 className="text-2xl font-bold text-primary-900">Communication</h1>
+              <p className="text-sm text-primary-600 mt-1">
                 Manage guest conversations across all channels
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+                connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-100 text-leaf-700' : 
+                connectionStatus === 'CONNECTING' ? 'bg-yellow-100 text-yellow-700' : 
+                'bg-gray-100 text-gray-600'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-500' : 
+                  connectionStatus === 'CONNECTING' ? 'bg-yellow-500' : 'bg-gray-400'
+                }`}></div>
+                {connectionStatus === 'SUBSCRIBED' ? 'Connected' : 
+                 connectionStatus === 'CONNECTING' ? 'Connecting' : 'Disconnected'}
+              </div>
               <button
                 onClick={loadThreads}
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 disabled:opacity-50 transition-colors"
               >
                 {loading ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -94,9 +106,9 @@ export default function CommunicationPage() {
         </div>
 
         {/* Main Communication Interface */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden bg-primary-25">
           {/* Left Panel - Inbox */}
-          <div className="w-80 border-r border-gray-200 bg-white flex flex-col">
+          <div className="w-80 border-r border-primary-200 bg-white flex flex-col shadow-sm">
             <InboxPanel
               threads={threads}
               selectedThread={selectedThread}
@@ -106,7 +118,7 @@ export default function CommunicationPage() {
           </div>
 
           {/* Center Panel - Messages */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 bg-primary-50">
             <MessagePanel
               thread={selectedThread}
               messages={messages}
@@ -120,7 +132,7 @@ export default function CommunicationPage() {
           </div>
 
           {/* Right Panel - Reservation Details */}
-          <div className="w-80 border-l border-gray-200 bg-white">
+          <div className="w-80 border-l border-primary-200 bg-white shadow-sm">
             <ReservationPanel
               thread={selectedThread}
               reservation={reservation}

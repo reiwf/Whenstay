@@ -549,7 +549,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.beds24BookingId}
                           readOnly={!!reservation}
                           onChange={(e) => !reservation && setFormData({ ...formData, beds24BookingId: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none ${reservation ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-2 focus:ring-blue-500'} ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none ${reservation ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-blue-500'} ${
                             errors.beds24BookingId ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="Beds24 booking reference"
@@ -569,7 +569,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         <select
                           value={formData.bookingSource}
                           onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         >
                           <option value="">Select source</option>
                           <option value="Airbnb">Airbnb</option>
@@ -598,7 +598,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           required
                           value={formData.bookingName}
                           onChange={(e) => setFormData({ ...formData, bookingName: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.bookingName ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="John Smith"
@@ -619,7 +619,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="text"
                           value={formData.bookingLastname}
                           onChange={(e) => setFormData({ ...formData, bookingLastname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           placeholder="Smith"
                         />
                       </div>
@@ -633,7 +633,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           required
                           value={formData.bookingEmail}
                           onChange={(e) => setFormData({ ...formData, bookingEmail: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.bookingEmail ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="john@example.com"
@@ -654,7 +654,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="tel"
                           value={formData.bookingPhone}
                           onChange={(e) => setFormData({ ...formData, bookingPhone: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           placeholder="+1 (555) 123-4567"
                         />
                       </div>
@@ -677,7 +677,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           required
                           value={formData.checkInDate}
                           onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.checkInDate ? 'border-red-300' : 'border-gray-300'
                           }`}
                         />
@@ -698,7 +698,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           required
                           value={formData.checkOutDate}
                           onChange={(e) => setFormData({ ...formData, checkOutDate: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.checkOutDate ? 'border-red-300' : 'border-gray-300'
                           }`}
                         />
@@ -730,7 +730,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           max="20"
                           value={formData.numGuests}
                           onChange={(e) => setFormData({ ...formData, numGuests: parseInt(e.target.value) || 1 })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.numGuests ? 'border-red-300' : 'border-gray-300'
                           }`}
                         />
@@ -753,7 +753,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           max="20"
                           value={formData.numAdults}
                           onChange={(e) => setFormData({ ...formData, numAdults: parseInt(e.target.value) || 1 })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.numAdults ? 'border-red-300' : 'border-gray-300'
                           }`}
                         />
@@ -775,7 +775,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           max="10"
                           value={formData.numChildren}
                           onChange={(e) => setFormData({ ...formData, numChildren: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
                     </div>
@@ -795,7 +795,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         required
                         value={formData.roomUnitId}
                         onChange={(e) => handleRoomSelection(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                           errors.roomUnitId ? 'border-red-300' : 'border-gray-300'
                         }`}
                       >
@@ -832,7 +832,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           min="0"
                           value={formData.totalAmount}
                           onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.totalAmount ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="0.00"
@@ -855,7 +855,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           min="0"
                           value={formData.price}
                           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.price ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="0.00"
@@ -878,7 +878,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           min="0"
                           value={formData.commission}
                           onChange={(e) => setFormData({ ...formData, commission: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             errors.commission ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="0.00"
@@ -907,7 +907,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         <select
                           value={formData.status}
                           onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         >
                           {statusOptions.map(option => (
                             <option key={option.value} value={option.value}>
@@ -927,7 +927,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.specialRequests}
                           onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
                           rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           placeholder="Any special requests or notes..."
                         />
                       </div>
@@ -940,7 +940,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.comments}
                           onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
                           rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           placeholder="Internal comments..."
                         />
                       </div>
@@ -1004,7 +1004,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="text"
                           value={formData.guestFirstname}
                           onChange={(e) => setFormData({ ...formData, guestFirstname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="John"
                         />
                       </div>
@@ -1017,7 +1017,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="text"
                           value={formData.guestLastname}
                           onChange={(e) => setFormData({ ...formData, guestLastname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="Smith"
                         />
                       </div>
@@ -1030,7 +1030,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="email"
                           value={formData.guestMail}
                           onChange={(e) => setFormData({ ...formData, guestMail: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 ${
                             errors.guestMail ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="personal@example.com"
@@ -1051,7 +1051,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="tel"
                           value={formData.guestContact}
                           onChange={(e) => setFormData({ ...formData, guestContact: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="+1 (555) 123-4567"
                         />
                       </div>
@@ -1064,7 +1064,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           value={formData.guestAddress}
                           onChange={(e) => setFormData({ ...formData, guestAddress: e.target.value })}
                           rows={2}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="123 Main St, City, State, Country"
                         />
                       </div>
@@ -1086,7 +1086,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="time"
                           value={formData.estimatedCheckinTime}
                           onChange={(e) => setFormData({ ...formData, estimatedCheckinTime: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                         />
                       </div>
 
@@ -1097,7 +1097,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         <select
                           value={formData.travelPurpose}
                           onChange={(e) => setFormData({ ...formData, travelPurpose: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                         >
                           <option value="">Select purpose</option>
                           <option value="Business">Business</option>
@@ -1147,7 +1147,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="text"
                           value={formData.emergencyContactName}
                           onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="Emergency contact person"
                         />
                       </div>
@@ -1160,7 +1160,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                           type="tel"
                           value={formData.emergencyContactPhone}
                           onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
                           placeholder="+1 (555) 123-4567"
                         />
                       </div>
@@ -1234,7 +1234,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         type="text"
                         value={formData.apiReference}
                         onChange={(e) => setFormData({ ...formData, apiReference: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                         placeholder="API reference"
                       />
                     </div>
@@ -1247,7 +1247,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         type="text"
                         value={formData.rateDescription}
                         onChange={(e) => setFormData({ ...formData, rateDescription: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                         placeholder="Rate description"
                       />
                     </div>
@@ -1260,7 +1260,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         type="text"
                         value={formData.lang}
                         onChange={(e) => setFormData({ ...formData, lang: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                         placeholder="en"
                       />
                     </div>
@@ -1273,7 +1273,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         type="datetime-local"
                         value={formData.bookingTime}
                         onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                       />
                     </div>
 
@@ -1285,7 +1285,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                         value={formData.apiMessage}
                         onChange={(e) => setFormData({ ...formData, apiMessage: e.target.value })}
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                         placeholder="API message"
                       />
                     </div>

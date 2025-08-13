@@ -120,7 +120,7 @@ export default function ScheduleModal({ thread, channel, onClose, onSchedule }) 
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select a template...</option>
                 {templates
@@ -152,7 +152,7 @@ export default function ScheduleModal({ thread, channel, onClose, onSchedule }) 
                 value={customMessage}
                 onChange={(e) => setCustomMessage(e.target.value)}
                 placeholder="Enter your custom message..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 rows="3"
               />
             </div>
@@ -168,7 +168,7 @@ export default function ScheduleModal({ thread, channel, onClose, onSchedule }) 
               value={scheduleAt}
               onChange={(e) => setScheduleAt(e.target.value)}
               min={getMinDateTime()}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 

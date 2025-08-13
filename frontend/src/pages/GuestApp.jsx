@@ -362,7 +362,7 @@ export default function GuestApp() {
                 </p>
                 <button 
                   onClick={() => navigate(`/checkin/${token}`)}
-                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-yellow-500"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Complete Check-in Now
@@ -639,8 +639,8 @@ export default function GuestApp() {
     )
   }
 
-  const renderPropertySection = () => (
-    <div className="space-y-8">
+  const renderPropertySection  = () => (
+    <div className="space-y-8 ">
       {/* Property Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Basic Property Info */}
@@ -792,7 +792,7 @@ export default function GuestApp() {
   )
 
   const renderDocumentsSection = () => (
-    <div className="h-[calc(100vh-180px)]">
+    <div className="h-full">
       {/* Guest Message Panel */}
       <GuestMessagePanel 
         token={token} 
@@ -832,66 +832,74 @@ export default function GuestApp() {
   ]
 
   return (
-    <div className="min-h-screen bg-primary-50 flex flex-col">
-      {/* Mobile Header */}
-      <div className="bg-white shadow-sm border-b border-primary-200 sticky top-0 z-10">
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center ml-2 space-x-3">
-              <div>
-                <h1 className="text-sm font-semibold text-primary-900 truncate">
-                  Hello, {reservation?.guest_name}!
-                </h1>
-                <p className="text-sm text-primary-600 truncate">
-                  Label ID : {token}
-                </p>
+    <div className="min-h-screen bg-primary-50">
+      {/* App wrapper with responsive max-width */}
+      <div className="border rounded-lg mx-auto w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
+
+        {/* Mobile Header (sticky inside wrapper so it stays centered) */}
+        <div className="bg-white shadow-sm border-b border-primary-200 sticky top-0 z-10 rounded-lg">
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center ml-2 space-x-3">
+                <div>
+                  <h1 className="text-sm font-semibold text-primary-900 truncate">
+                    Hello, {reservation?.guest_name}!
+                  </h1>
+                  <p className="text-sm text-primary-600 truncate">
+                    Label ID : {token}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 pb-20">
-        {activeSection === 'documents' ? (
-          <div className="h-full">
-            {renderContent()}
+        {/* Main Content */}
+        <div className="flex flex-col min-h-[calc(100vh-56px-64px)]"> 
+          {/* subtract header/footer heights roughly to avoid hidden content */}
+          <div className="flex-1 pb-20 px-4 py-6">
+            {/* If you still want a wider inner area on certain tabs, keep it responsive but capped */}
+            <div className={activeSection === 'documents'
+              ? 'max-w-none'
+              : 'mx-auto w-full max-w-[720px]'}  // optional inner cap
+            >
+              {renderContent()}
+            </div>
           </div>
-        ) : (
-          <div className="px-4 py-6 max-w-4xl mx-auto">
-            {renderContent()}
-          </div>
-        )}
-      </div>
+        </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-primary-200 z-10">
-        <div className="grid grid-cols-4 gap-1">
-          {navigationItems.map((item) => {
-            const IconComponent = item.icon
-            const isActive = activeSection === item.id
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`flex flex-col items-center py-3 px-2 transition-colors ${
-                  isActive
-                    ? 'text-primary-600 bg-primary-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-primary-50'
-                }`}
-              >
-                <IconComponent className={`w-5 h-5 mb-1 ${
-                  isActive ? 'text-primary-600' : 'text-gray-400'
-                }`} />
-                <span className="text-xs font-medium truncate">
-                  {item.label}
-                </span>
-              </button>
-            )
-          })}
+        {/* Bottom Navigation — fixed and centered to wrapper width */}
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-0 z-10
+                        w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
+          <div className="bg-white border-t border-primary-200">
+            <div className="grid grid-cols-4 gap-1">
+              {navigationItems.map((item) => {
+                const IconComponent = item.icon
+                const isActive = activeSection === item.id
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveSection(item.id)}
+                    className={`flex flex-col items-center py-3 px-2 transition-colors ${
+                      isActive
+                        ? 'text-primary-600 bg-primary-50 border rounded-lg'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-primary-50'
+                    }`}
+                  >
+                    <IconComponent className={`w-5 h-5 mb-1 ${
+                      isActive ? 'text-primary-600' : 'text-gray-400'
+                    }`} />
+                    <span className="text-xs font-medium truncate">
+                      {item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   )
+
 }

@@ -23,19 +23,6 @@ export default {
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},
-			'leaf': {
-			'50': '#f5f9f4',
-			'100': '#e5f3e5',
-			'200': '#cce6cc',
-			'300': '#add7ae',
-			'400': '#73b575',
-			'500': '#4f9851',
-			'600': '#3d7c3f',
-			'700': '#326333',
-			'800': '#2c4f2d',
-			'900': '#254227',
-			'950': '#102312',
-			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

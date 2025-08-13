@@ -158,7 +158,7 @@ const Login = () => {
                       type="email"
                       autoComplete="email"
                       required
-                      className="block w-full pl-10 pr-3 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
+                      className="block w-full pl-10 pr-3 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
                       placeholder="Enter your email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -183,7 +183,7 @@ const Login = () => {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       required
-                      className="block w-full pl-10 pr-12 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
+                      className="block w-full pl-10 pr-12 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -230,7 +230,7 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? (
                   <>

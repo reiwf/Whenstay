@@ -263,7 +263,7 @@ export default function FileUpload({
               type="button"
               onClick={openFileDialog}
               disabled={uploading || deleting}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
             >
               <Camera className="w-4 h-4 mr-2" />
               {hasExistingImage && !selectedFile ? 'Change Image' : 'Replace Image'}

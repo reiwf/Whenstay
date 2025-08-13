@@ -398,7 +398,7 @@ export default function RoomTypeModal({
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
             placeholder="e.g., Deluxe Suite, Standard Room, Penthouse"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -411,7 +411,7 @@ export default function RoomTypeModal({
             onChange={(e) => handleInputChange('description', e.target.value)}
             placeholder="Brief description of this room type..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -426,7 +426,7 @@ export default function RoomTypeModal({
             max="20"
             value={formData.maxGuests}
             onChange={(e) => handleInputChange('maxGuests', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -468,7 +468,7 @@ export default function RoomTypeModal({
             value={formData.roomSizeSqm}
             onChange={(e) => handleInputChange('roomSizeSqm', e.target.value)}
             placeholder="e.g., 25"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -481,7 +481,7 @@ export default function RoomTypeModal({
             value={formData.bedConfiguration}
             onChange={(e) => handleInputChange('bedConfiguration', e.target.value)}
             placeholder="e.g., 1 Queen Bed, 2 Single Beds, 1 King Bed + 1 Sofa Bed"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -802,7 +802,7 @@ export default function RoomTypeModal({
             value={formData.beds24RoomtypeId}
             onChange={(e) => handleInputChange('beds24RoomtypeId', e.target.value)}
             placeholder="e.g., 123456"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
           <p className="text-xs text-gray-500 mt-1">
             Link this room type to your Beds24 room type for automatic booking sync

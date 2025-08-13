@@ -232,7 +232,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
             placeholder="e.g., Sunset Beach Villa"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -246,7 +246,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.address}
             onChange={(e) => handleInputChange('address', e.target.value)}
             placeholder="e.g., 123 Ocean Drive, Miami Beach, FL 33139"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -257,7 +257,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
           <select
             value={formData.propertyType}
             onChange={(e) => handleInputChange('propertyType', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             {PROPERTY_TYPES.map(type => (
               <option key={type.value} value={type.value}>
@@ -298,7 +298,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             onChange={(e) => handleInputChange('description', e.target.value)}
             placeholder="Brief description of the property..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -323,7 +323,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
                 value={formData.ownerId}
                 onChange={(e) => handleInputChange('ownerId', e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
               >
                 <option value="">Select an owner</option>
                 {owners.map((owner) => (
@@ -350,7 +350,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             <select
               value={formData.defaultCleanerId}
               onChange={(e) => handleInputChange('defaultCleanerId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="">No default cleaner</option>
               {cleaners.map((cleaner) => (
@@ -373,7 +373,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             type="time"
             value={formData.accessTime}
             onChange={(e) => handleInputChange('accessTime', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
           <p className="text-xs text-gray-500 mt-1">
             Time when guests can access their rooms
@@ -395,7 +395,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.wifiName}
             onChange={(e) => handleInputChange('wifiName', e.target.value)}
             placeholder="e.g., SunsetBeach_WiFi"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -408,7 +408,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.wifiPassword}
             onChange={(e) => handleInputChange('wifiPassword', e.target.value)}
             placeholder="WiFi password"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -421,7 +421,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.emergencyContact}
             onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
             placeholder="e.g., +1 (555) 123-4567"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -434,7 +434,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             onChange={(e) => handleInputChange('checkInInstructions', e.target.value)}
             placeholder="Instructions for guests during check-in..."
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -447,7 +447,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             onChange={(e) => handleInputChange('houseRules', e.target.value)}
             placeholder="Property rules and guidelines for guests..."
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -470,7 +470,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
               value={formData.locationInfo.latitude}
               onChange={(e) => handleInputChange('locationInfo.latitude', e.target.value)}
               placeholder="e.g., 25.7617"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div>
@@ -483,7 +483,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
               value={formData.locationInfo.longitude}
               onChange={(e) => handleInputChange('locationInfo.longitude', e.target.value)}
               placeholder="e.g., -80.1918"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
         </div>
@@ -502,7 +502,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.locationInfo.neighborhood}
             onChange={(e) => handleInputChange('locationInfo.neighborhood', e.target.value)}
             placeholder="e.g., South Beach, Downtown"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -515,7 +515,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             onChange={(e) => handleInputChange('locationInfo.landmarks', e.target.value)}
             placeholder="e.g., 5 minutes walk to Miami Beach, near Lincoln Road Mall"
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
@@ -528,7 +528,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             onChange={(e) => handleInputChange('locationInfo.transportation', e.target.value)}
             placeholder="e.g., Bus stop 2 blocks away, Metro station 10 minutes walk"
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -581,7 +581,7 @@ export default function PropertyModal({ property, onSave, onClose, onDelete }) {
             value={formData.beds24PropertyId}
             onChange={(e) => handleInputChange('beds24PropertyId', e.target.value)}
             placeholder="e.g., 123456"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
           <p className="text-xs text-gray-500 mt-1">
             Link this property to your Beds24 property for automatic booking sync

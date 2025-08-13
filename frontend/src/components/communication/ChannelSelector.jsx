@@ -15,7 +15,7 @@ export default function ChannelSelector({ availableChannels, selectedChannel, on
       <select
         value={selectedChannel}
         onChange={(e) => onChannelChange(e.target.value)}
-        className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-8 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="appearance-none bg-white border border-gray-300 rounded-md px-3 py-2 pr-8 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
       >
         {availableChannels.map((channel) => (
           <option key={channel} value={channel}>

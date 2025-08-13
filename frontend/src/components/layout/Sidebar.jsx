@@ -15,6 +15,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import SidebarItem from './SidebarItem'
 import ProfileDropdown from '../ProfileDropdown'
+import { useGlobalCommunication } from '../../hooks/useGlobalCommunication'
 
 const Sidebar = ({ 
   activeSection, 
@@ -28,6 +29,7 @@ const Sidebar = ({
   const { profile } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { unreadCount } = useGlobalCommunication()
 
   // Navigation items based on user role
   const getNavigationItems = () => {
@@ -153,6 +155,7 @@ const Sidebar = ({
             label={item.label}
             active={activeSection === item.id}
             collapsed={collapsed && !mobile}
+            notificationCount={item.id === 'communication' ? unreadCount : 0}
             onClick={() => {
               handleNavigationClick(item.id)
               if (mobile && onClose) {

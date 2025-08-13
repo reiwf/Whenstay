@@ -65,7 +65,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   value={formData.unitNumber}
                   onChange={(e) => setFormData({ ...formData, unitNumber: e.target.value })}
                   placeholder="e.g., 201, A1, Suite-A"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -80,7 +80,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   value={formData.floorNumber}
                   onChange={(e) => setFormData({ ...formData, floorNumber: e.target.value })}
                   placeholder="e.g., 2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -93,7 +93,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   value={formData.accessCode}
                   onChange={(e) => setFormData({ ...formData, accessCode: e.target.value })}
                   placeholder="e.g., 1234, #5678"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -106,7 +106,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   value={formData.wifiName}
                   onChange={(e) => setFormData({ ...formData, wifiName: e.target.value })}
                   placeholder="e.g., Room201_WiFi"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -119,7 +119,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   value={formData.wifiPassword}
                   onChange={(e) => setFormData({ ...formData, wifiPassword: e.target.value })}
                   placeholder="WiFi password for this unit"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -132,7 +132,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   onChange={(e) => setFormData({ ...formData, accessInstructions: e.target.value })}
                   placeholder="Specific instructions for accessing this unit..."
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -145,7 +145,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   onChange={(e) => setFormData({ ...formData, unitAmenities: e.target.value })}
                   placeholder="Additional amenities specific to this unit..."
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
 
@@ -158,7 +158,7 @@ export default function RoomUnitModal({ roomUnit, roomType, onSave, onClose }) {
                   onChange={(e) => setFormData({ ...formData, maintenanceNotes: e.target.value })}
                   placeholder="Any maintenance notes or special considerations..."
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
             </div>

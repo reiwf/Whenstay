@@ -10,7 +10,7 @@ const CHANNEL_ICONS = {
 };
 
 const ROLE_COLORS = {
-  guest: 'text-blue-600',
+  guest: 'text-primary-600',
   host: 'text-green-600',
   assistant: 'text-purple-600',
   system: 'text-gray-600'
@@ -84,7 +84,7 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
       case 'delivered':
         return <CheckCheck className="w-3 h-3 text-gray-500" />;
       case 'read':
-        return <CheckCheck className="w-3 h-3 text-blue-500" />;
+        return <CheckCheck className="w-3 h-3 text-primary-500" />;
       case 'failed':
         return <AlertCircle className="w-3 h-3 text-red-500" />;
       default:
@@ -136,7 +136,7 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 py-2 shadow-sm border text-sm ${
           isFromHost
-            ? 'bg-blue-600 text-white border-blue-600'
+            ? 'bg-primary-600 text-white border-primary-600'
             : message.origin_role === 'assistant'
             ? 'bg-purple-50 text-purple-900 border-purple-200'
             : message.origin_role === 'system'
@@ -162,7 +162,7 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
                   key={index}
                   className={`text-xs p-2 rounded border ${
                     isFromHost 
-                      ? 'bg-blue-500 border-blue-400' 
+                      ? 'bg-primary-500 border-primary-400' 
                       : 'bg-gray-100 border-gray-200'
                   }`}
                 >
@@ -179,7 +179,7 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
 
           {/* Message footer with delivery status */}
           <div className={`flex items-center justify-between mt-1 text-xs ${
-            isFromHost ? 'text-blue-200' : 'text-gray-500'
+            isFromHost ? 'text-primary-200' : 'text-gray-500'
           }`}>
             <div className="flex items-center space-x-1">
               {/* Delivery status for host messages */}

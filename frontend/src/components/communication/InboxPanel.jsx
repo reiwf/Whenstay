@@ -61,18 +61,18 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Conversations</h2>
+      <div className="p-4 rounded-lg border-b border-primary-200">
+        <h2 className="text-lg font-semibold text-primary-900 mb-3">Conversations</h2>
         
         {/* Search */}
         <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-400 w-4 h-4" />
           <input
             type="text"
             placeholder="Search conversations..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-9 pr-3 py-2 border border-primary-300 rounded-md text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
 
@@ -88,8 +88,8 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
               onClick={() => setFilter(key)}
               className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 filter === key
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-primary-600 hover:text-primary-900 hover:bg-primary-100'
               }`}
             >
               {label} {count > 0 && `(${count})`}
@@ -101,20 +101,20 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
       {/* Thread List */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="p-4 text-center text-gray-500">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
+          <div className="p-4 text-center text-primary-500">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-2"></div>
             Loading conversations...
           </div>
         )}
 
         {!loading && filteredThreads.length === 0 && (
-          <div className="p-4 text-center text-gray-500">
-            <MessageCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+          <div className="p-4 text-center text-primary-500">
+            <MessageCircle className="w-8 h-8 mx-auto mb-2 text-primary-300" />
             <p className="text-sm">No conversations found</p>
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+                className="text-primary-600 hover:text-primary-800 text-xs mt-1"
               >
                 Clear search
               </button>
@@ -126,17 +126,19 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
           <div
             key={thread.id}
             onClick={() => onThreadSelect(thread)}
-            className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-              selectedThread?.id === thread.id
-                ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                : ''
-            }`}
+             className={`flex flex-col justify-between rounded-lg border border-primary-200 cursor-pointer hover:bg-primary-50 transition-colors
+              ${selectedThread?.id === thread.id ? 'bg-primary-50 border-primary-500' : ''}`}
+            style={{
+              height: '72px',       // fixed height for bar-like look
+              maxHeight: '72px',    // ensure it never grows taller
+              padding: '0.75rem',   // thinner padding
+            }}
           >
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-primary-900 truncate">
                   {thread.subject || 'No subject'}
-                </h3>
+                </p>
                 <div className="flex items-center mt-1">
                   {/* Channel indicators */}
                   <div className="flex space-x-1 mr-2">
@@ -146,7 +148,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
                       </span>
                     ))}
                     {getThreadChannels(thread).length > 3 && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-primary-400">
                         +{getThreadChannels(thread).length - 3}
                       </span>
                     )}
@@ -154,7 +156,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
                   
                   {/* Status indicators */}
                   {thread.status === 'archived' && (
-                    <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                    <span className="text-xs text-primary-500 bg-primary-100 px-1.5 py-0.5 rounded">
                       Archived
                     </span>
                   )}
@@ -162,28 +164,20 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
               </div>
               
               <div className="flex flex-col items-end ml-2">
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-primary-500">
                   {formatTimestamp(thread.last_message_at)}
                 </span>
                 {thread.unread_count > 0 && (
-                  <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5 mt-1 min-w-[20px] text-center">
+                  <span className="bg-primary-500 text-white text-xs rounded-full px-2 py-0.5 mt-1 min-w-[20px] text-center">
                     {thread.unread_count > 99 ? '99+' : thread.unread_count}
                   </span>
                 )}
               </div>
             </div>
 
-            <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
+            <p className="text-xs text-primary-600 line-clamp-2 leading-relaxed">
               {thread.last_message_preview || 'No messages yet'}
             </p>
-
-            {/* Additional metadata */}
-            {thread.reservation_id && (
-              <div className="flex items-center mt-2 text-xs text-gray-500">
-                <Clock className="w-3 h-3 mr-1" />
-                Reservation #{thread.reservation_id.slice(0, 8)}
-              </div>
-            )}
           </div>
         ))}
       </div>

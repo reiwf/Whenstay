@@ -155,7 +155,7 @@ export default function MessagePanel({
       <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
         {loading && messages.length === 0 && (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading messages...</p>
           </div>
         )}
@@ -198,7 +198,7 @@ export default function MessagePanel({
               onChange={(e) => setDraft(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder={`Send a message via ${selectedChannel}...`}
-              className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 max-h-32"
+              className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 max-h-32"
               rows="1"
             />
             <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
@@ -210,7 +210,7 @@ export default function MessagePanel({
           <button
             onClick={handleSend}
             disabled={!draft.trim() || sending || draft.length > 1000}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

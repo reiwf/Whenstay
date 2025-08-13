@@ -13,7 +13,7 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
           {/* Mobile Menu Button */}
           <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             <Menu className="w-6 h-6" />
           </button>

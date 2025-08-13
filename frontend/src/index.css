@@ -108,7 +108,7 @@
   
   /* Form Components */
   .input-field {
-    @apply w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
   }
   
   .form-group {
@@ -226,7 +226,7 @@
   }
   
   .mobile-menu-button {
-    @apply p-2 rounded-md text-primary-600 hover:text-primary-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500;
+    @apply p-2 rounded-md text-primary-600 hover:text-primary-900 hover:bg-primary-100 focus:outline-none focus:ring-1 focus:ring-primary-500;
   }
   
   /* Responsive grid layouts */

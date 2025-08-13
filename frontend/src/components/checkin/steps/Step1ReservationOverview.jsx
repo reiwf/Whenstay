@@ -58,7 +58,7 @@ export default function Step1ReservationOverview({
           {/* Resubmit button in top right */}
           <button
             onClick={onEnterModificationMode}
-            className="absolute top-4 right-4 inline-flex items-center px-3 py-1.5 border border-primary-300 bg-primary-200 text-primary-900 text-xs font-medium rounded-md hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="absolute top-4 right-4 inline-flex items-center px-3 py-1.5 border border-primary-300 bg-primary-200 text-primary-900 text-xs font-medium rounded-md hover:bg-primary-500 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500"
           >
             <Edit className="w-3 h-3 mr-1" />
             Modify Info
@@ -104,7 +104,7 @@ export default function Step1ReservationOverview({
               <div className="mt-4">
                 <button
                   onClick={() => window.location.href = `/guest/${token}`}
-                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Go to Guest Dashboard
@@ -129,7 +129,7 @@ export default function Step1ReservationOverview({
               </p>
               <button
                 onClick={onExitModificationMode}
-                className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Cancel Modification
               </button>
