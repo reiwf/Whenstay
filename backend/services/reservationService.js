@@ -1401,6 +1401,7 @@ class ReservationService {
           id: data.id,
           beds24_booking_id: data.beds24_booking_id,
           booking_name: data.booking_name,
+          booking_lastname: data.lastName,
           booking_email: data.booking_email,
           booking_phone: data.booking_phone,
           check_in_date: data.check_in_date,

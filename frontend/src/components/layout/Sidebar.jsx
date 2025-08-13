@@ -39,14 +39,12 @@ const Sidebar = ({
         { id: 'properties', label: 'Properties', icon: Building },
         { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
-        { id: 'messages', label: 'Messages', icon: MessageCircle },
         { id: 'communication', label: 'Communication', icon: MessageCircle },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {
       items.push(
         { id: 'properties', label: 'My Properties', icon: Building },
-        { id: 'messages', label: 'Messages', icon: MessageCircle },
         { id: 'communication', label: 'Communication', icon: MessageCircle }
       )
     } else if (userRole === 'cleaner') {
@@ -81,9 +79,6 @@ const Sidebar = ({
     } else if (itemId === 'users') {
       // Navigate to the dedicated user page
       navigate('/user')
-    } else if (itemId === 'messages') {
-      // Navigate to the dedicated messaging page
-      navigate('/messages')
     } else if (itemId === 'communication') {
       // Navigate to the dedicated communication page
       navigate('/communication')

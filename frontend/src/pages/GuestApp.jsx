@@ -26,6 +26,7 @@ import {
   ArrowLeft
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
+import GuestMessagePanel from '../components/communication/GuestMessagePanel'
 
 export default function GuestApp() {
   const { token } = useParams()
@@ -791,33 +792,12 @@ export default function GuestApp() {
   )
 
   const renderDocumentsSection = () => (
-    <div className="space-y-8">
-      {/* Contact Support */}
-      <div className="card">
-        <div className="text-center">
-           <MessageCircle className="w-8 h-8 sm:w-12 sm:h-12 text-primary-600 mx-auto mb-4" />
-          <h2 className="text-sm font-semibold text-gray-900 mb-2">Need Help?</h2>
-          <p className="text-gray-600 mb-4">
-            Our support team is here to help with any questions or issues during your stay.
-          </p>
-          <button
-            onClick={handleContactSupport}
-            className="btn-primary"
-          >
-            <Phone className="w-4 h-4 mr-2" />
-            Contact Support
-          </button>
-        </div>
-      </div>
-
-      {/* Documents placeholder */}
-      <div className="card">
-        <div className="text-center py-8">
-          <FileText className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Documents</h3>
-          <p className="text-gray-600">Important documents and agreements will appear here.</p>
-        </div>
-      </div>
+    <div className="h-[calc(100vh-180px)]">
+      {/* Guest Message Panel */}
+      <GuestMessagePanel 
+        token={token} 
+        guestName={reservation?.guest_name} 
+      />
     </div>
   )
 
@@ -873,9 +853,15 @@ export default function GuestApp() {
 
       {/* Main Content */}
       <div className="flex-1 pb-20">
-        <div className="px-4 py-6 max-w-4xl mx-auto">
-          {renderContent()}
-        </div>
+        {activeSection === 'documents' ? (
+          <div className="h-full">
+            {renderContent()}
+          </div>
+        ) : (
+          <div className="px-4 py-6 max-w-4xl mx-auto">
+            {renderContent()}
+          </div>
+        )}
       </div>
 
       {/* Bottom Navigation */}

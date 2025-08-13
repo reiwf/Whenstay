@@ -10,7 +10,6 @@ import UserPage from './pages/UserPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestApp from './pages/GuestApp'
-import MessagingPage from './pages/MessagingPage'
 import MessagingDemo from './pages/MessagingDemo'
 import CommunicationPage from './pages/CommunicationPage'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -75,11 +74,7 @@ function App() {
           
           <Route 
             path="/messages" 
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'owner']}>
-                <MessagingPage />
-              </ProtectedRoute>
-            } 
+            element={<Navigate to="/communication" replace />}
           />
           
           <Route 
