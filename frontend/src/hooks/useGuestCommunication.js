@@ -9,6 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export function useGuestCommunication(token) {
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false);
   const [thread, setThread] = useState(null)
   const [messages, setMessages] = useState([])
   const [sending, setSending] = useState(false)
@@ -31,21 +32,26 @@ export function useGuestCommunication(token) {
 
   // API call wrapper with error handling
   const apiCall = useCallback(async (url, options = {}) => {
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
       ...options,
-    })
+    });
+    const ct = res.headers.get('content-type') || '';
+    const isJSON = ct.includes('application/json');
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Request failed')
+    if (!res.ok) {
+      const body = isJSON ? await res.json().catch(() => ({})) : await res.text().catch(() => '');
+      const message = isJSON ? (body.error || JSON.stringify(body)) : body;
+      const err = new Error(message || `HTTP ${res.status}`);
+      err.status = res.status;
+      const retryAfter = res.headers.get('retry-after');
+      err.retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : 0;
+      throw err;
     }
 
-    return response.json()
-  }, [])
+    return isJSON ? res.json() : res.text();
+  }, []);
+
 
   // Setup real-time subscription for messages in the guest's thread
   const setupMessagesSubscription = useCallback((threadId) => {
@@ -138,28 +144,41 @@ export function useGuestCommunication(token) {
   }, [token, apiCall, setupThreadSubscription])
 
   // Load messages for the guest's thread
-  const loadMessages = useCallback(async () => {
-    if (!token) return []
+  const loadInFlightRef = useRef(null);
+  const lastLoadAtRef = useRef(0);
 
-    try {
-      setLoading(true)
-      const data = await apiCall(`/api/guest/${token}/thread/messages`)
-      const messagesData = data.messages || []
-      setMessages(messagesData)
-      
-      
-      // Auto-scroll to bottom
-      setTimeout(() => scrollToBottom(false), 100)
-      
-      return messagesData
-    } catch (error) {
-      console.error('Error loading messages:', error)
-      toast.error('Failed to load messages')
-      throw error
-    } finally {
-      setLoading(false)
+  const loadMessages = useCallback(async () => {
+    if (!token || !thread?.id) return [];
+
+    // throttle to at most once per 2s
+    const now = Date.now();
+    if (now - lastLoadAtRef.current < 2000 && messages.length) {
+      return messages;
     }
-  }, [token, thread, apiCall, setupMessagesSubscription, scrollToBottom])
+
+    // if already fetching, reuse the same promise
+    if (loadInFlightRef.current) return loadInFlightRef.current;
+
+    const p = (async () => {
+      try {
+        setLoading(true);
+        const data = await apiCall(`/api/guest/${token}/thread/messages`);
+        const msgs = data?.messages || [];
+        setMessages(msgs);
+        // scroll but don't force smooth every time
+        setTimeout(() => scrollToBottom(false), 100);
+        return msgs;
+      } finally {
+        lastLoadAtRef.current = Date.now();
+        loadInFlightRef.current = null;
+        setLoading(false);
+      }
+    })();
+
+    loadInFlightRef.current = p;
+    return p;
+  }, [token, thread?.id, messages, apiCall, scrollToBottom]);
+
 
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (content, parentMessageId = null) => {
@@ -223,6 +242,7 @@ export function useGuestCommunication(token) {
       setSending(false)
     }
   }, [token, thread, apiCall, scrollToBottom])
+  
 
   // Initialize thread and load messages with real-time setup
   const initialize = useCallback(async () => {
@@ -247,11 +267,15 @@ export function useGuestCommunication(token) {
   // Refresh data
   const refresh = useCallback(async () => {
     try {
-      await loadMessages()
-    } catch (error) {
-      console.error('Error refreshing:', error)
+      setRefreshing(true);          // 👈 separate flag
+      await loadMessages();
+    } catch (e) {
+      console.error('Error refreshing:', e);
+    } finally {
+      setRefreshing(false);
     }
-  }, [loadMessages])
+  }, [loadMessages]);
+
 
   // Cleanup subscriptions on unmount or token change
   useEffect(() => {
@@ -281,6 +305,7 @@ export function useGuestCommunication(token) {
   return {
     // State
     loading,
+    refreshing,
     thread,
     messages,
     sending,

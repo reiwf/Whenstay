@@ -32,11 +32,11 @@ export default function GuestMessageBubble({ message, isConsecutive = false }) {
     }
     
     if (delivery.read_at) {
-      return { status: 'read', icon: CheckCircle, color: 'text-blue-500' };
+      return { status: 'read', icon: CheckCircle, color: 'text-leaf-500' };
     }
     
     if (delivery.delivered_at) {
-      return { status: 'delivered', icon: CheckCircle, color: 'text-green-500' };
+      return { status: 'delivered', icon: CheckCircle, color: 'text-leaf-500' };
     }
     
     if (delivery.sent_at) {
@@ -56,7 +56,7 @@ export default function GuestMessageBubble({ message, isConsecutive = false }) {
         <div className={`
           inline-block px-4 py-2 rounded-2xl shadow-sm
           ${isFromGuest
-            ? 'bg-blue-600 text-white rounded-br-md'
+            ? 'bg-primary-600 text-white rounded-br-md'
             : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md'
           }
           ${!isConsecutive && isFromGuest ? 'rounded-br-md' : ''}

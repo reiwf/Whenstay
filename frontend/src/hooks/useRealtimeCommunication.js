@@ -6,6 +6,12 @@ import toast from 'react-hot-toast'
 // Initialize Supabase client
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+console.log('Admin: Supabase config:', { 
+  url: supabaseUrl ? 'Set' : 'Missing', 
+  key: supabaseAnonKey ? 'Set' : 'Missing' 
+})
+
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export function useRealtimeCommunication() {
@@ -90,51 +96,66 @@ export function useRealtimeCommunication() {
   const setupMessagesSubscription = useCallback((threadId) => {
     if (messagesChannelRef.current) {
       supabase.removeChannel(messagesChannelRef.current)
+      messagesChannelRef.current = null
     }
 
     if (!threadId) return
 
+    console.log('Admin: Setting up messages subscription for thread:', threadId)
+
     messagesChannelRef.current = supabase
-      .channel(`messages_thread_${threadId}`)
+      .channel(`admin_messages_thread_${threadId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'messages',
           filter: `thread_id=eq.${threadId}`
         },
         (payload) => {
-          console.log('New message received:', payload)
-          const newMessage = payload.new
-          
-          setMessages(prev => {
-            // Avoid duplicates
-            if (prev.some(msg => msg.id === newMessage.id)) {
-              return prev
-            }
-            return [...prev, newMessage]
+          console.log('Admin: Message event received:', {
+            eventType: payload.eventType,
+            table: payload.table,
+            threadId: threadId,
+            payload: payload
           })
           
-          // Update thread's last message info
-          setThreads(prev => 
-            prev.map(thread => 
-              thread.id === threadId 
-                ? {
-                    ...thread,
-                    last_message_at: newMessage.created_at,
-                    last_message_preview: newMessage.content.substring(0, 160)
-                  }
-                : thread
+          if (payload.eventType === 'INSERT') {
+            const newMessage = payload.new
+            console.log('Admin: Processing new message:', newMessage)
+            
+            setMessages(prev => {
+              // Avoid duplicates
+              if (prev.some(msg => msg.id === newMessage.id)) {
+                console.log('Admin: Duplicate message detected, skipping')
+                return prev
+              }
+              const updated = [...prev, newMessage]
+              console.log('Admin: Messages updated, count:', updated.length, 'New message from:', newMessage.origin_role)
+              return updated
+            })
+            
+            // Update thread's last message info
+            setThreads(prev => 
+              prev.map(thread => 
+                thread.id === threadId 
+                  ? {
+                      ...thread,
+                      last_message_at: newMessage.created_at,
+                      last_message_preview: newMessage.content.substring(0, 160)
+                    }
+                  : thread
+              )
             )
-          )
-          
-          // Auto-scroll to new message after a brief delay
-          setTimeout(() => scrollToBottom(), 100)
-          
-          // Show notification for incoming messages (not from current user)
-          if (newMessage.direction === 'incoming') {
-            toast.success(`New message from ${newMessage.origin_role}`)
+            
+            // Auto-scroll to new message after a brief delay
+            setTimeout(() => scrollToBottom(), 100)
+            
+            // Show notification for incoming messages (from guest)
+            if (newMessage.origin_role === 'guest') {
+              toast.success(`New message from ${newMessage.origin_role}`)
+            }
           }
         }
       )
@@ -146,7 +167,7 @@ export function useRealtimeCommunication() {
           table: 'message_deliveries'
         },
         (payload) => {
-          console.log('Message delivery updated:', payload)
+          console.log('Admin: Message delivery updated:', payload)
           // Update delivery status in messages for the current thread
           setMessages(prev => 
             prev.map(msg => {
@@ -169,7 +190,8 @@ export function useRealtimeCommunication() {
         }
       )
       .subscribe((status) => {
-        console.log('Messages subscription status:', status)
+        console.log('Admin: Messages subscription status:', status)
+        setConnectionStatus(status)
       })
   }, [scrollToBottom])
 
@@ -226,16 +248,13 @@ export function useRealtimeCommunication() {
     }
   }, [setupThreadsSubscription])
 
-  // Load messages for a thread with real-time setup
+  // Load messages for a thread
   const loadMessages = useCallback(async (threadId, params = {}) => {
     try {
       setLoading(true)
       const response = await adminAPI.getCommunicationMessages(threadId, params)
       const messagesData = response.data.messages || []
       setMessages(messagesData)
-      
-      // Setup real-time subscription for messages
-      setupMessagesSubscription(threadId)
       
       // Auto-scroll to bottom
       setTimeout(() => scrollToBottom(false), 100)
@@ -248,7 +267,7 @@ export function useRealtimeCommunication() {
     } finally {
       setLoading(false)
     }
-  }, [setupMessagesSubscription, scrollToBottom])
+  }, [scrollToBottom])
 
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (threadId, messageData) => {
@@ -511,6 +530,30 @@ export function useRealtimeCommunication() {
       console.error('Error refreshing:', error)
     }
   }, [loadThreads, loadMessages, selectedThread])
+
+  // Setup messages subscription when selectedThread changes (like guest implementation)
+  useEffect(() => {
+    if (!selectedThread?.id) {
+      // Clean up subscription if no thread selected
+      if (messagesChannelRef.current) {
+        console.log('Admin: Cleaning up messages subscription - no thread selected')
+        supabase.removeChannel(messagesChannelRef.current)
+        messagesChannelRef.current = null
+      }
+      return
+    }
+
+    console.log('Admin: Setting up messages subscription for thread:', selectedThread.id)
+    setupMessagesSubscription(selectedThread.id)
+    
+    return () => {
+      if (messagesChannelRef.current) {
+        console.log('Admin: Cleaning up messages subscription for thread:', selectedThread.id)
+        supabase.removeChannel(messagesChannelRef.current)
+        messagesChannelRef.current = null
+      }
+    }
+  }, [selectedThread?.id, setupMessagesSubscription])
 
   // Cleanup subscriptions on unmount
   useEffect(() => {
