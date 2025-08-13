@@ -304,4 +304,53 @@ router.post('/:token/thread/messages', async (req, res) => {
   }
 });
 
+// POST /api/guest/:token/messages/:messageId/read - Mark a message as read for guest
+router.post('/:token/messages/:messageId/read', async (req, res) => {
+  try {
+    const { token, messageId } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    if (!messageId) {
+      return res.status(400).json({ error: 'Message ID is required' });
+    }
+
+    // Get reservation data to validate token
+    const dashboardData = await reservationService.getGuestAppData(token);
+    if (!dashboardData) {
+      return res.status(404).json({ error: 'Reservation not found or invalid token' });
+    }
+
+    const reservationId = dashboardData.reservation.id;
+
+    // Verify the message belongs to this guest's thread
+    const { data: message, error: messageError } = await supabase
+      .from('messages')
+      .select(`
+        id,
+        thread_id,
+        message_threads!inner(reservation_id)
+      `)
+      .eq('id', messageId)
+      .eq('message_threads.reservation_id', reservationId)
+      .single();
+
+    if (messageError || !message) {
+      return res.status(404).json({ error: 'Message not found or access denied' });
+    }
+
+    // Use the communication service to mark message as read
+    const communicationService = require('../services/communicationService');
+    const result = await communicationService.markMessageAsRead(messageId, 'inapp');
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Error marking guest message as read:', error);
+    res.status(500).json({ error: 'Failed to mark message as read' });
+  }
+});
+
 module.exports = router;

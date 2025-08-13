@@ -53,8 +53,12 @@ export function useRealtimeCommunication() {
 
   // Setup real-time subscription for threads
   const setupThreadsSubscription = useCallback(() => {
+    console.log('🔧 Setting up threads subscription...')
+    
     if (threadsChannelRef.current) {
+      console.log('🧹 Removing existing threads channel')
       supabase.removeChannel(threadsChannelRef.current)
+      threadsChannelRef.current = null
     }
 
     threadsChannelRef.current = supabase
@@ -67,7 +71,7 @@ export function useRealtimeCommunication() {
           table: 'message_threads'
         },
         (payload) => {
-          console.log('Thread change received:', payload)
+          console.log('📨 Thread change received:', payload.eventType, payload.new?.id)
           
           switch (payload.eventType) {
             case 'INSERT':
@@ -80,15 +84,17 @@ export function useRealtimeCommunication() {
                 )
               )
               // Update selected thread if it's the one being updated
-              if (selectedThread?.id === payload.new.id) {
-                setSelectedThread(payload.new)
-              }
+              setSelectedThread(prev => 
+                prev?.id === payload.new.id ? payload.new : prev
+              )
               break
             case 'DELETE':
               setThreads(prev => prev.filter(thread => thread.id !== payload.old.id))
               // Clear selection if deleted thread was selected
+              setSelectedThread(prev => 
+                prev?.id === payload.old.id ? null : prev
+              )
               if (selectedThread?.id === payload.old.id) {
-                setSelectedThread(null)
                 setMessages([])
                 setReservation(null)
               }
@@ -97,10 +103,64 @@ export function useRealtimeCommunication() {
         }
       )
       .subscribe((status) => {
-        console.log('Threads subscription status:', status)
+        console.log('📡 Threads subscription status:', status)
         setConnectionStatus(status)
       })
-  }, [selectedThread])
+      
+    console.log('✅ Threads subscription setup complete')
+  }, []) // Remove selectedThread dependency to prevent recreating subscription
+
+  // Setup global real-time subscription for message delivery status updates
+  const setupGlobalDeliverySubscription = useCallback(() => {
+    console.log('🔧 Setting up global delivery subscription...')
+    
+    if (globalMessagesChannelRef.current) {
+      console.log('🧹 Removing existing global delivery channel')
+      supabase.removeChannel(globalMessagesChannelRef.current)
+      globalMessagesChannelRef.current = null
+    }
+
+    globalMessagesChannelRef.current = supabase
+      .channel('global_message_deliveries')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message_deliveries'
+        },
+        (payload) => {
+          console.log('🔔 GLOBAL DELIVERY STATUS UPDATE received:', {
+            messageId: payload.new.message_id,
+            status: payload.new.status,
+            channel: payload.new.channel,
+            timestamp: new Date().toISOString()
+          })
+          
+          setMessages(prev => 
+            prev.map(msg => {
+              if (msg.id === payload.new.message_id) {
+                console.log('✅ Updating delivery status for message:', msg.id, 'to:', payload.new.status)
+                
+                const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+                  delivery.channel === payload.new.channel 
+                    ? { ...delivery, ...payload.new }
+                    : delivery
+                ) || [payload.new]
+                
+                return { ...msg, message_deliveries: updatedDeliveries }
+              }
+              return msg
+            })
+          )
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Global delivery subscription status:', status)
+      })
+      
+    console.log('✅ Global delivery subscription setup complete')
+  }, [])
 
   // Setup real-time subscription for messages in selected thread
   const setupMessagesSubscription = useCallback((threadId) => {
@@ -109,6 +169,7 @@ export function useRealtimeCommunication() {
     if (messagesChannelRef.current) {
       console.log('🧹 Removing existing messages channel')
       supabase.removeChannel(messagesChannelRef.current)
+      messagesChannelRef.current = null
     }
 
     if (!threadId) {
@@ -118,7 +179,6 @@ export function useRealtimeCommunication() {
 
     const channelName = `messages_thread_${threadId}`
     console.log('📡 Creating channel:', channelName)
-    console.log('🎯 Filter:', `thread_id=eq.${threadId}`)
 
     messagesChannelRef.current = supabase
       .channel(channelName)
@@ -131,71 +191,62 @@ export function useRealtimeCommunication() {
           filter: `thread_id=eq.${threadId}`
         },
         (payload) => {
-          console.log('🔥 ADMIN: New message received:', payload)
-          console.log('📋 Message details:', {
-            id: payload.new.id,
-            thread_id: payload.new.thread_id,
-            direction: payload.new.direction,
-            origin_role: payload.new.origin_role,
-            content: payload.new.content?.substring(0, 50) + '...'
-          })
+          console.log('📨 New message received for thread:', threadId, 'Message ID:', payload.new.id)
           
           const newMessage = payload.new
           
-          console.log('✅ Message is for current thread, processing...')
+          // Skip processing if this message is from our own optimistic update
+          if (newMessage.id.startsWith('temp_')) {
+            console.log('⏭️ Skipping temp message from real-time:', newMessage.id)
+            return
+          }
           
           setMessages(prev => {
-            // Avoid duplicates
-            if (prev.some(msg => msg.id === newMessage.id)) {
-              console.log('⚠️ Duplicate message detected, skipping:', newMessage.id)
+            // Check for existing message by ID
+            const existingIndex = prev.findIndex(msg => msg.id === newMessage.id)
+            if (existingIndex !== -1) {
+              // Message already exists - this happens when real-time fires after optimistic update
+              console.log('⚠️ Duplicate message detected via real-time:', newMessage.id, '- skipping')
               return prev
             }
-            console.log('✅ Adding new message to state:', newMessage.id)
+            
+            // Check if this message replaces a temp message that was just sent
+            const tempMessageIndex = prev.findIndex(msg => 
+              msg.id.startsWith('temp_') && 
+              msg.thread_id === newMessage.thread_id &&
+              msg.content === newMessage.content &&
+              msg.origin_role === newMessage.origin_role
+            )
+            
+            if (tempMessageIndex !== -1) {
+              // Replace the temp message with the real one
+              console.log('🔄 Replacing temp message with real message:', newMessage.id)
+              const updated = [...prev]
+              updated[tempMessageIndex] = newMessage
+              return updated
+            }
+            
+            // This is a genuine new message (usually incoming)
+            if (process.env.NODE_ENV === 'development') {
+              console.log('✅ Admin: Added new message:', newMessage.id, 'from', newMessage.origin_role)
+            }
             return [...prev, newMessage]
           })
           
-          // Auto-scroll to new message after a brief delay
+          // Auto-scroll to new message
           setTimeout(() => scrollToBottom(), 100)
           
-          // Show notification for incoming messages (not from current user)
-          if (newMessage.direction === 'incoming' || newMessage.origin_role === 'guest') {
+          // Show notification for incoming messages
+          if (newMessage.direction === 'incoming') {
             toast.success(`New message from ${newMessage.origin_role}`)
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'message_deliveries'
-        },
-        (payload) => {
-          console.log('Message delivery updated:', payload)
-          // Update delivery status in messages for the current thread
-          setMessages(prev => 
-            prev.map(msg => {
-              if (!msg.message_deliveries) return msg;
-              
-              const updatedDeliveries = msg.message_deliveries.map(delivery => 
-                delivery.message_id === payload.new.message_id 
-                  ? { ...delivery, ...payload.new }
-                  : delivery
-              );
-              
-              // Check if any delivery was updated
-              const hasUpdates = updatedDeliveries.some((delivery, index) => 
-                delivery !== msg.message_deliveries[index]
-              );
-              
-              return hasUpdates ? { ...msg, message_deliveries: updatedDeliveries } : msg;
-            })
-          )
-        }
-      )
       .subscribe((status) => {
-        console.log('Messages subscription status:', status)
+        console.log('📡 Messages subscription status:', status, 'for thread:', threadId)
       })
+      
+    console.log('✅ Messages subscription setup complete for thread:', threadId)
   }, [scrollToBottom])
 
   // Typing indicator functionality
@@ -241,6 +292,7 @@ export function useRealtimeCommunication() {
       
       // Setup real-time subscriptions
       setupThreadsSubscription()
+      setupGlobalDeliverySubscription()
       
       return threadsData
     } catch (error) {
@@ -250,7 +302,7 @@ export function useRealtimeCommunication() {
     } finally {
       setLoading(false)
     }
-  }, [setupThreadsSubscription])
+  }, [setupThreadsSubscription, setupGlobalDeliverySubscription])
 
   // Load messages for a thread with real-time setup
   const loadMessages = useCallback(async (threadId, params = {}) => {
@@ -458,6 +510,96 @@ export function useRealtimeCommunication() {
     }
   }, [])
 
+  // Mark a specific message as read
+  const markMessageAsRead = useCallback(async (messageId, channel = 'inapp') => {
+    try {
+      const response = await fetch(`/api/communication/messages/${messageId}/read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ channel })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to mark message as read')
+      }
+
+      // Update message delivery status in local state
+      setMessages(prev => 
+        prev.map(msg => {
+          if (msg.id === messageId) {
+            const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+              delivery.channel === channel 
+                ? { ...delivery, status: 'read', read_at: new Date().toISOString() }
+                : delivery
+            ) || []
+            return { ...msg, message_deliveries: updatedDeliveries }
+          }
+          return msg
+        })
+      )
+
+      return true
+    } catch (error) {
+      console.error('Error marking message as read:', error)
+      return false
+    }
+  }, [])
+
+  // Mark all unread messages in thread as read
+  const markAllMessagesAsRead = useCallback(async (threadId, beforeMessageId = null) => {
+    try {
+      const response = await fetch(`/api/communication/threads/${threadId}/read-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ before_message_id: beforeMessageId })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to mark messages as read')
+      }
+
+      const result = await response.json()
+
+      // Update delivery status for all relevant messages
+      setMessages(prev => 
+        prev.map(msg => {
+          if (msg.direction === 'incoming') {
+            const currentStatus = msg.message_deliveries?.[0]?.status
+            if (currentStatus !== 'read') {
+              const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+                delivery.channel === 'inapp' 
+                  ? { ...delivery, status: 'read', read_at: new Date().toISOString() }
+                  : delivery
+              ) || []
+              return { ...msg, message_deliveries: updatedDeliveries }
+            }
+          }
+          return msg
+        })
+      )
+
+      // Update thread unread count
+      setThreads(prev => 
+        prev.map(thread => 
+          thread.id === threadId 
+            ? { ...thread, unread_count: 0 }
+            : thread
+        )
+      )
+
+      return result
+    } catch (error) {
+      console.error('Error marking all messages as read:', error)
+      return false
+    }
+  }, [])
+
   // Load message templates
   const loadTemplates = useCallback(async (params = {}) => {
     try {
@@ -634,6 +776,8 @@ export function useRealtimeCommunication() {
     updateThreadStatus,
     loadThreadChannels,
     markMessagesRead,
+    markMessageAsRead,
+    markAllMessagesAsRead,
     loadTemplates,
     scheduleMessage,
     createThread,

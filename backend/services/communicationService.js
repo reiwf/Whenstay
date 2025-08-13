@@ -257,8 +257,12 @@ class CommunicationService {
           await this.sendBeds24(messageId, content, data);
           break;
         case 'inapp':
-          // In-app messages don't need external routing
-          await this.updateDeliveryStatus(messageId, channel, 'delivered');
+          // In-app messages: queued → sent → delivered
+          await this.updateDeliveryStatus(messageId, channel, 'sent');
+          // Simulate brief delay for sent → delivered transition
+          setTimeout(async () => {
+            await this.updateDeliveryStatus(messageId, channel, 'delivered');
+          }, 1000);
           break;
         default:
           throw new Error(`Unsupported channel: ${channel}`);
@@ -329,6 +333,85 @@ class CommunicationService {
       .eq('channel', channel);
 
     if (error) throw error;
+  }
+
+  // ===== READ STATUS MANAGEMENT =====
+
+  async markMessageAsRead(messageId, channel = 'inapp') {
+    try {
+      // Update delivery status to 'read' with timestamp
+      await this.updateDeliveryStatus(messageId, channel, 'read');
+      
+      // Get the message to trigger real-time updates if needed
+      const { data: message } = await this.supabase
+        .from('messages')
+        .select('thread_id, content')
+        .eq('id', messageId)
+        .single();
+
+      if (message) {
+        // Optionally trigger real-time notification for read status
+        await this.notifyDeliveryStatusChange(message.thread_id, messageId, 'read');
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+      throw error;
+    }
+  }
+
+  async markThreadMessagesAsRead(threadId, beforeMessageId = null) {
+    try {
+      // Get all unread messages in the thread
+      let query = this.supabase
+        .from('messages')
+        .select(`
+          id,
+          message_deliveries!inner(status)
+        `)
+        .eq('thread_id', threadId)
+        .eq('direction', 'incoming')
+        .neq('message_deliveries.status', 'read');
+
+      if (beforeMessageId) {
+        query = query.lte('created_at', (
+          await this.supabase
+            .from('messages')
+            .select('created_at')
+            .eq('id', beforeMessageId)
+            .single()
+        ).data.created_at);
+      }
+
+      const { data: messages, error } = await query;
+      if (error) throw error;
+
+      // Mark each message as read
+      const markReadPromises = messages.map(msg => 
+        this.markMessageAsRead(msg.id, 'inapp')
+      );
+
+      await Promise.all(markReadPromises);
+
+      return { success: true, marked_count: messages.length };
+    } catch (error) {
+      console.error('Error marking thread messages as read:', error);
+      throw error;
+    }
+  }
+
+  async notifyDeliveryStatusChange(threadId, messageId, status) {
+    // Trigger real-time notification for delivery status change
+    const { error } = await this.supabase
+      .channel(`thread-${threadId}`)
+      .send({
+        type: 'broadcast',
+        event: 'delivery_status_change',
+        payload: { messageId, status, timestamp: new Date().toISOString() }
+      });
+
+    if (error) console.error('Real-time delivery status notification error:', error);
   }
 
   // ===== TEMPLATE MANAGEMENT =====

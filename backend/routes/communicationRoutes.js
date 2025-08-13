@@ -139,26 +139,26 @@ router.post('/threads/:threadId/messages', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    // Use the send_message function
-    const { data: messageId, error } = await supabase.rpc('send_message', {
-      p_thread_id: threadId,
-      p_channel: channel,
-      p_content: content.trim(),
-      p_origin_role: 'host',
-      p_parent_message_id: parent_message_id
+    // Use the communication service for proper status progression
+    const communicationService = require('../services/communicationService');
+    
+    const message = await communicationService.sendMessage({
+      thread_id: threadId,
+      channel: channel,
+      content: content.trim(),
+      origin_role: 'host',
+      parent_message_id: parent_message_id
     });
-
-    if (error) throw error;
 
     // Mark thread as read for the sender
     await supabase.rpc('mark_messages_read', {
       p_thread_id: threadId,
       p_user_id: userId,
-      p_last_message_id: messageId
+      p_last_message_id: message.id
     });
 
-    // Get the complete message data to return
-    const { data: message } = await supabase
+    // Get the complete message data with delivery status
+    const { data: completeMessage } = await supabase
       .from('messages')
       .select(`
         id,
@@ -178,10 +178,10 @@ router.post('/threads/:threadId/messages', async (req, res) => {
           read_at
         )
       `)
-      .eq('id', messageId)
+      .eq('id', message.id)
       .single();
 
-    res.status(201).json({ message });
+    res.status(201).json({ message: completeMessage });
 
   } catch (error) {
     console.error('Error sending message:', error);
@@ -365,6 +365,44 @@ router.post('/threads/:threadId/read', async (req, res) => {
   } catch (error) {
     console.error('Error marking messages as read:', error);
     res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+});
+
+// POST /api/communication/messages/:messageId/read - Mark a specific message as read
+router.post('/messages/:messageId/read', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { channel = 'inapp' } = req.body;
+
+    const communicationService = require('../services/communicationService');
+    
+    // Mark the specific message as read
+    const result = await communicationService.markMessageAsRead(messageId, channel);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Error marking message as read:', error);
+    res.status(500).json({ error: 'Failed to mark message as read' });
+  }
+});
+
+// POST /api/communication/threads/:threadId/read-all - Mark all messages in thread as read
+router.post('/threads/:threadId/read-all', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    const { before_message_id } = req.body;
+
+    const communicationService = require('../services/communicationService');
+    
+    // Mark all messages in thread as read
+    const result = await communicationService.markThreadMessagesAsRead(threadId, before_message_id);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Error marking thread messages as read:', error);
+    res.status(500).json({ error: 'Failed to mark thread messages as read' });
   }
 });
 

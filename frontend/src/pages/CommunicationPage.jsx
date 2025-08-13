@@ -17,6 +17,7 @@ export default function CommunicationPage() {
     loadThreads,
     updateThreadStatus,
     selectThread,
+    markMessageAsRead,
     reservation,
     messageListRef,
     connectionStatus
@@ -113,6 +114,7 @@ export default function CommunicationPage() {
               onChannelChange={setSelectedChannel}
               onSendMessage={handleSendMessage}
               onThreadAction={handleThreadAction}
+              onMarkAsRead={markMessageAsRead}
               loading={loading}
             />
           </div>

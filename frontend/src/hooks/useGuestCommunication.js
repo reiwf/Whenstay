@@ -18,6 +18,8 @@ export function useGuestCommunication(token) {
   const messagesChannelRef = useRef(null)
   const threadChannelRef = useRef(null)
   const messageListRef = useRef(null)
+  const currentSubscriptionThreadId = useRef(null)
+  const currentThreadSubscriptionId = useRef(null)
 
   // Auto-scroll to bottom of messages
   const scrollToBottom = useCallback((smooth = true) => {
@@ -49,11 +51,32 @@ export function useGuestCommunication(token) {
 
   // Setup real-time subscription for messages in the guest's thread
   const setupMessagesSubscription = useCallback((threadId) => {
-    if (messagesChannelRef.current) supabase.removeChannel(messagesChannelRef.current);
-    if (!threadId) return;
+    const handlerId = Math.random().toString(36).substr(2, 9)
+    console.log('🔧 Guest: Setting up messages subscription for thread:', threadId, 'Handler ID:', handlerId)
+    
+    // Check if we already have a subscription for this thread
+    if (currentSubscriptionThreadId.current === threadId && messagesChannelRef.current) {
+      console.log('✅ Guest: Subscription already exists for thread:', threadId, 'skipping setup')
+      return
+    }
+    
+    if (messagesChannelRef.current) {
+      console.log('🧹 Guest: Removing existing messages channel')
+      supabase.removeChannel(messagesChannelRef.current)
+      messagesChannelRef.current = null
+    }
+    
+    if (!threadId) {
+      console.log('⚠️ Guest: No threadId provided, skipping subscription setup')
+      currentSubscriptionThreadId.current = null
+      return
+    }
+
+    const channelName = `guest_messages_thread_${threadId}`
+    console.log('📡 Guest: Creating channel:', channelName)
 
     messagesChannelRef.current = supabase
-      .channel(`guest_messages_thread_${threadId}`)
+      .channel(channelName)
       .on('postgres_changes', {
           event: 'INSERT', schema: 'public', table: 'messages',
           filter: `thread_id=eq.${threadId}`
@@ -61,7 +84,24 @@ export function useGuestCommunication(token) {
         (payload) => {
           const newMessage = payload.new;
 
-          setMessages(prev => (prev.some(m => m.id === newMessage.id) ? prev : [...prev, newMessage]));
+          // Skip processing if this message is from our own optimistic update
+          if (newMessage.id.startsWith('temp_')) {
+            return
+          }
+
+          setMessages(prev => {
+            const existingIndex = prev.findIndex(msg => msg.id === newMessage.id)
+            if (existingIndex !== -1) {
+              // Silently skip duplicates (React Strict Mode behavior)
+              return prev
+            }
+            
+            // Only log successful additions to reduce noise
+            if (process.env.NODE_ENV === 'development') {
+              console.log('✅ Guest: Added new message:', newMessage.id, 'from', newMessage.origin_role)
+            }
+            return [...prev, newMessage]
+          });
 
           // use functional update; don't close over `thread`
           setThread(prev => prev ? {
@@ -91,28 +131,56 @@ export function useGuestCommunication(token) {
         }
       )
       .subscribe((status) => {
-        console.log('Guest messages subscription status:', status);
+        console.log('📡 Guest: Messages subscription status:', status, 'for thread:', threadId);
         setConnectionStatus(status);
       });
+      
+    // Track the current subscription thread ID
+    currentSubscriptionThreadId.current = threadId
+    console.log('✅ Guest: Messages subscription setup complete for thread:', threadId)
   }, [scrollToBottom]);
 
   // Setup real-time subscription for thread updates
   const setupThreadSubscription = useCallback((threadId) => {
-    if (threadChannelRef.current) supabase.removeChannel(threadChannelRef.current);
-    if (!threadId) return;
+    console.log('🔧 Guest: Setting up thread subscription for thread:', threadId)
+    
+    // Check if we already have a thread subscription for this thread
+    if (currentThreadSubscriptionId.current === threadId && threadChannelRef.current) {
+      console.log('✅ Guest: Thread subscription already exists for thread:', threadId, 'skipping setup')
+      return
+    }
+    
+    if (threadChannelRef.current) {
+      console.log('🧹 Guest: Removing existing thread channel')
+      supabase.removeChannel(threadChannelRef.current)
+      threadChannelRef.current = null
+    }
+    
+    if (!threadId) {
+      console.log('⚠️ Guest: No threadId provided, skipping thread subscription setup')
+      currentThreadSubscriptionId.current = null
+      return
+    }
+
+    const channelName = `guest_thread_${threadId}`
+    console.log('📡 Guest: Creating thread channel:', channelName)
 
     threadChannelRef.current = supabase
-      .channel(`guest_thread_${threadId}`)
+      .channel(channelName)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'message_threads',
         filter: `id=eq.${threadId}`
       }, (payload) => {
-        console.log('Guest: Thread updated:', payload);
+        console.log('📨 Guest: Thread updated:', threadId, payload.eventType);
         setThread(payload.new);
       })
       .subscribe((status) => {
-        console.log('Guest thread subscription status:', status);
+        console.log('📡 Guest: Thread subscription status:', status, 'for thread:', threadId);
       });
+      
+    // Track the current thread subscription ID
+    currentThreadSubscriptionId.current = threadId
+    console.log('✅ Guest: Thread subscription setup complete for thread:', threadId)
   }, []);
 
   // Get or create communication thread for guest
@@ -241,6 +309,47 @@ export function useGuestCommunication(token) {
     }
   }, [token, loadThread, loadMessages, setupMessagesSubscription, setupThreadSubscription]);
 
+  // Mark messages as read for guest side
+  const markMessageAsRead = useCallback(async (messageId) => {
+    try {
+      const response = await apiCall(`/api/guest/${token}/messages/${messageId}/read`, {
+        method: 'POST'
+      })
+      
+      // Update message delivery status in local state
+      setMessages(prev => 
+        prev.map(msg => {
+          if (msg.id === messageId) {
+            const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+              delivery.channel === 'inapp' 
+                ? { ...delivery, status: 'read', read_at: new Date().toISOString() }
+                : delivery
+            ) || []
+            return { ...msg, message_deliveries: updatedDeliveries }
+          }
+          return msg
+        })
+      )
+
+      return response
+    } catch (error) {
+      console.error('Error marking message as read:', error)
+      return false
+    }
+  }, [token, apiCall])
+
+  // Auto-mark messages as read when they become visible
+  const autoMarkMessagesRead = useCallback((visibleMessages) => {
+    visibleMessages.forEach(msg => {
+      if (msg.direction === 'incoming' && msg.origin_role !== 'guest') {
+        const currentStatus = msg.message_deliveries?.[0]?.status
+        if (currentStatus && currentStatus !== 'read') {
+          markMessageAsRead(msg.id)
+        }
+      }
+    })
+  }, [markMessageAsRead])
+
   // Refresh data
   const refresh = useCallback(async () => {
     try {
@@ -261,6 +370,9 @@ export function useGuestCommunication(token) {
         supabase.removeChannel(threadChannelRef.current)
         threadChannelRef.current = null
       }
+      // Reset tracking refs
+      currentSubscriptionThreadId.current = null
+      currentThreadSubscriptionId.current = null
     }
   }, [token])
 
@@ -279,6 +391,8 @@ export function useGuestCommunication(token) {
     initialize,
     refresh,
     scrollToBottom,
+    markMessageAsRead,
+    autoMarkMessagesRead,
     
     // Refs for external use
     messageListRef,

@@ -11,6 +11,7 @@ export default function MessagePanel({
   onChannelChange,
   onSendMessage,
   onThreadAction,
+  onMarkAsRead,
   loading
 }) {
   const [draft, setDraft] = useState('');
@@ -180,6 +181,7 @@ export default function MessagePanel({
                 messages[index - 1].direction === message.direction &&
                 new Date(message.created_at) - new Date(messages[index - 1].created_at) < 5 * 60 * 1000 // 5 minutes
               }
+              onMarkAsRead={onMarkAsRead}
             />
           ))}
           <div ref={messagesEndRef} />

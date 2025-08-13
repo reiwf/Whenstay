@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Check, CheckCheck, AlertCircle, Clock, Bot, User } from 'lucide-react';
 
 const CHANNEL_ICONS = {
@@ -16,11 +16,47 @@ const ROLE_COLORS = {
   system: 'text-gray-600'
 };
 
-export default function MessageBubble({ message, isConsecutive = false }) {
+export default function MessageBubble({ message, isConsecutive = false, onMarkAsRead }) {
+  const messageRef = useRef(null);
   const isIncoming = message.direction === 'incoming';
   const isOutgoing = message.direction === 'outgoing';
   const isFromGuest = message.origin_role === 'guest';
   const isFromHost = message.origin_role === 'host' || message.origin_role === 'admin';
+
+  // Setup intersection observer to track when message becomes visible
+  useEffect(() => {
+    if (!messageRef.current || !onMarkAsRead || !isIncoming) return;
+    
+    const currentStatus = message.message_deliveries?.[0]?.status;
+    if (currentStatus === 'read') return; // Already read
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+            // Message is visible for more than 50% of its area
+            setTimeout(() => {
+              // Check if still visible and call mark as read
+              const currentEntry = observer.takeRecords()[0] || entry;
+              if (currentEntry.isIntersecting) {
+                onMarkAsRead(message.id);
+              }
+            }, 2000); // Wait 2 seconds before marking as read
+          }
+        });
+      },
+      {
+        threshold: 0.5, // Trigger when 50% of message is visible
+        rootMargin: '0px 0px -50px 0px' // Require message to be 50px into viewport
+      }
+    );
+
+    observer.observe(messageRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [message.id, message.message_deliveries, isIncoming, onMarkAsRead]);
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { 
@@ -68,7 +104,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
   };
 
   return (
-    <div className={`flex ${isFromHost ? 'justify-end' : 'justify-start'}`}>
+    <div ref={messageRef} className={`flex ${isFromHost ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[70%]`}>
         {/* Message header (role/channel info) */}
         {!isConsecutive && (

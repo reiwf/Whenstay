@@ -18,15 +18,16 @@ export default function GuestMessagePanel({ token, guestName }) {
     sendMessage,
     initialize,
     refresh,
+    markMessageAsRead,
     messageListRef
   } = useGuestCommunication(token);
 
-  // Initialize communication on mount
+  // Initialize communication on mount - only run when token changes
   useEffect(() => {
     if (token) {
       initialize();
     }
-  }, [token, initialize]);
+  }, [token]); // Removed initialize dependency to prevent re-runs
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -144,6 +145,7 @@ export default function GuestMessagePanel({ token, guestName }) {
               key={message.id}
               message={message}
               isConsecutive={isConsecutive}
+              onMarkAsRead={markMessageAsRead}
             />
           );
         })}
