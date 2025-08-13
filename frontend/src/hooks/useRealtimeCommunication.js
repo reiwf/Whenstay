@@ -3,10 +3,25 @@ import { createClient } from '@supabase/supabase-js'
 import { adminAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
-// Initialize Supabase client
+// Initialize Supabase clients - Debug environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+
+console.log('🔧 Environment variables check:', {
+  url: supabaseUrl ? 'loaded' : 'missing',
+  anonKey: supabaseAnonKey ? 'loaded' : 'missing', 
+  serviceKey: supabaseServiceKey ? 'loaded' : 'missing'
+})
+
+// Use service role client for admin operations (bypasses RLS)
+const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
+
+if (supabaseServiceKey) {
+  console.log('🔧 Admin Supabase client initialized with service role key')
+} else {
+  console.log('⚠️ Admin Supabase client falling back to anonymous key - service key not loaded!')
+}
 
 export function useRealtimeCommunication() {
   const [loading, setLoading] = useState(false)
@@ -22,6 +37,7 @@ export function useRealtimeCommunication() {
   // Refs for real-time subscriptions
   const threadsChannelRef = useRef(null)
   const messagesChannelRef = useRef(null)
+  const globalMessagesChannelRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const messageListRef = useRef(null)
 
@@ -88,14 +104,24 @@ export function useRealtimeCommunication() {
 
   // Setup real-time subscription for messages in selected thread
   const setupMessagesSubscription = useCallback((threadId) => {
+    console.log('🔧 Setting up messages subscription for thread:', threadId)
+    
     if (messagesChannelRef.current) {
+      console.log('🧹 Removing existing messages channel')
       supabase.removeChannel(messagesChannelRef.current)
     }
 
-    if (!threadId) return
+    if (!threadId) {
+      console.log('⚠️ No threadId provided, skipping subscription setup')
+      return
+    }
+
+    const channelName = `messages_thread_${threadId}`
+    console.log('📡 Creating channel:', channelName)
+    console.log('🎯 Filter:', `thread_id=eq.${threadId}`)
 
     messagesChannelRef.current = supabase
-      .channel(`messages_thread_${threadId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -105,35 +131,34 @@ export function useRealtimeCommunication() {
           filter: `thread_id=eq.${threadId}`
         },
         (payload) => {
-          console.log('New message received:', payload)
+          console.log('🔥 ADMIN: New message received:', payload)
+          console.log('📋 Message details:', {
+            id: payload.new.id,
+            thread_id: payload.new.thread_id,
+            direction: payload.new.direction,
+            origin_role: payload.new.origin_role,
+            content: payload.new.content?.substring(0, 50) + '...'
+          })
+          
           const newMessage = payload.new
+          
+          console.log('✅ Message is for current thread, processing...')
           
           setMessages(prev => {
             // Avoid duplicates
             if (prev.some(msg => msg.id === newMessage.id)) {
+              console.log('⚠️ Duplicate message detected, skipping:', newMessage.id)
               return prev
             }
+            console.log('✅ Adding new message to state:', newMessage.id)
             return [...prev, newMessage]
           })
-          
-          // Update thread's last message info
-          setThreads(prev => 
-            prev.map(thread => 
-              thread.id === threadId 
-                ? {
-                    ...thread,
-                    last_message_at: newMessage.created_at,
-                    last_message_preview: newMessage.content.substring(0, 160)
-                  }
-                : thread
-            )
-          )
           
           // Auto-scroll to new message after a brief delay
           setTimeout(() => scrollToBottom(), 100)
           
           // Show notification for incoming messages (not from current user)
-          if (newMessage.direction === 'incoming') {
+          if (newMessage.direction === 'incoming' || newMessage.origin_role === 'guest') {
             toast.success(`New message from ${newMessage.origin_role}`)
           }
         }
@@ -209,11 +234,12 @@ export function useRealtimeCommunication() {
   const loadThreads = useCallback(async (params = {}) => {
     try {
       setLoading(true)
+      
       const response = await adminAPI.getCommunicationThreads(params)
       const threadsData = response.data.threads || []
       setThreads(threadsData)
       
-      // Setup real-time subscription for threads
+      // Setup real-time subscriptions
       setupThreadsSubscription()
       
       return threadsData
@@ -253,6 +279,8 @@ export function useRealtimeCommunication() {
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (threadId, messageData) => {
     try {
+      const currentTime = new Date().toISOString()
+      
       // Optimistic update - add message immediately
       const optimisticMessage = {
         id: `temp_${Date.now()}`,
@@ -261,12 +289,34 @@ export function useRealtimeCommunication() {
         channel: messageData.channel,
         direction: 'outgoing',
         origin_role: 'host',
-        created_at: new Date().toISOString(),
+        created_at: currentTime,
         message_deliveries: [{ status: 'sending', channel: messageData.channel }]
       }
       
       setMessages(prev => [...prev, optimisticMessage])
       setTimeout(() => scrollToBottom(), 50)
+
+      // Optimistically update thread metadata
+      setThreads(prev => {
+        const updated = prev.map(thread => {
+          if (thread.id === threadId) {
+            return {
+              ...thread,
+              last_message_at: currentTime,
+              last_message_preview: messageData.content.substring(0, 160),
+              // Don't change unread_count for outgoing messages
+            }
+          }
+          return thread
+        })
+        
+        // Sort threads by last_message_at in descending order (most recent first)
+        return updated.sort((a, b) => {
+          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      })
 
       // Send to server
       const response = await adminAPI.sendCommunicationMessage(threadId, messageData)
@@ -279,30 +329,65 @@ export function useRealtimeCommunication() {
         )
       )
       
-      // Update thread preview in threads list
-      setThreads(prev => 
-        prev.map(thread => 
-          thread.id === threadId 
-            ? { 
-                ...thread, 
-                last_message_at: newMessage.created_at,
-                last_message_preview: messageData.content.substring(0, 160)
-              }
-            : thread
-        )
-      )
+      // Update thread metadata with real message data
+      setThreads(prev => {
+        const updated = prev.map(thread => {
+          if (thread.id === threadId) {
+            return {
+              ...thread,
+              last_message_at: newMessage.created_at,
+              last_message_preview: newMessage.content.substring(0, 160),
+            }
+          }
+          return thread
+        })
+        
+        // Sort threads by last_message_at in descending order (most recent first)
+        return updated.sort((a, b) => {
+          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      })
       
+      console.log('✅ Message sent and thread updated:', { threadId, messageId: newMessage.id })
       toast.success('Message sent successfully')
       return newMessage
     } catch (error) {
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
       
+      // Revert optimistic thread update on error
+      setThreads(prev => {
+        const updated = prev.map(thread => {
+          if (thread.id === threadId) {
+            // Find the previous message to restore metadata
+            const threadMessages = messages.filter(msg => msg.thread_id === threadId && msg.id !== optimisticMessage.id)
+            const lastMessage = threadMessages[threadMessages.length - 1]
+            
+            if (lastMessage) {
+              return {
+                ...thread,
+                last_message_at: lastMessage.created_at,
+                last_message_preview: lastMessage.content.substring(0, 160),
+              }
+            }
+          }
+          return thread
+        })
+        
+        return updated.sort((a, b) => {
+          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      })
+      
       console.error('Error sending message:', error)
       toast.error('Failed to send message')
       throw error
     }
-  }, [scrollToBottom])
+  }, [scrollToBottom, messages])
 
   // Update thread status
   const updateThreadStatus = useCallback(async (threadId, status) => {
@@ -520,6 +605,9 @@ export function useRealtimeCommunication() {
       }
       if (messagesChannelRef.current) {
         supabase.removeChannel(messagesChannelRef.current)
+      }
+      if (globalMessagesChannelRef.current) {
+        supabase.removeChannel(globalMessagesChannelRef.current)
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)

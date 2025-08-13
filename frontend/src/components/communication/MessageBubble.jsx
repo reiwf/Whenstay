@@ -19,6 +19,8 @@ const ROLE_COLORS = {
 export default function MessageBubble({ message, isConsecutive = false }) {
   const isIncoming = message.direction === 'incoming';
   const isOutgoing = message.direction === 'outgoing';
+  const isFromGuest = message.origin_role === 'guest';
+  const isFromHost = message.origin_role === 'host' || message.origin_role === 'admin';
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { 
@@ -66,12 +68,12 @@ export default function MessageBubble({ message, isConsecutive = false }) {
   };
 
   return (
-    <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[70%] ${isOutgoing ? 'order-2' : 'order-1'}`}>
+    <div className={`flex ${isFromHost ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[70%]`}>
         {/* Message header (role/channel info) */}
         {!isConsecutive && (
           <div className={`flex items-center mb-1 text-xs text-gray-500 ${
-            isOutgoing ? 'justify-end' : 'justify-start'
+            isFromHost ? 'justify-end' : 'justify-start'
           }`}>
             <div className="flex items-center space-x-1">
               {/* Channel icon */}
@@ -97,7 +99,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
 
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 py-2 shadow-sm border text-sm ${
-          isOutgoing
+          isFromHost
             ? 'bg-blue-600 text-white border-blue-600'
             : message.origin_role === 'assistant'
             ? 'bg-purple-50 text-purple-900 border-purple-200'
@@ -106,7 +108,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
             : 'bg-white text-gray-900 border-gray-200'
         } ${
           isConsecutive 
-            ? isOutgoing
+            ? isFromHost
               ? 'rounded-tr-md'
               : 'rounded-tl-md'
             : ''
@@ -123,7 +125,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
                 <div
                   key={index}
                   className={`text-xs p-2 rounded border ${
-                    isOutgoing 
+                    isFromHost 
                       ? 'bg-blue-500 border-blue-400' 
                       : 'bg-gray-100 border-gray-200'
                   }`}
@@ -141,11 +143,11 @@ export default function MessageBubble({ message, isConsecutive = false }) {
 
           {/* Message footer with delivery status */}
           <div className={`flex items-center justify-between mt-1 text-xs ${
-            isOutgoing ? 'text-blue-200' : 'text-gray-500'
+            isFromHost ? 'text-blue-200' : 'text-gray-500'
           }`}>
             <div className="flex items-center space-x-1">
-              {/* Delivery status for outgoing messages */}
-              {isOutgoing && (
+              {/* Delivery status for host messages */}
+              {isFromHost && (
                 <div className="flex items-center space-x-1">
                   {renderDeliveryIcon()}
                   <span className="capitalize">{getDeliveryStatus()}</span>
@@ -165,7 +167,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
         {/* Parent message reference (for replies) */}
         {message.parent_message_id && (
           <div className={`mt-1 text-xs text-gray-500 ${
-            isOutgoing ? 'text-right' : 'text-left'
+            isFromHost ? 'text-right' : 'text-left'
           }`}>
             <span className="italic">Reply to previous message</span>
           </div>

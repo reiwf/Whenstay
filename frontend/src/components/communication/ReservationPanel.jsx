@@ -4,8 +4,6 @@ import { Calendar, MapPin, Phone, Mail, User, Home } from 'lucide-react';
 export default function ReservationPanel({ thread, reservation }) {
   // Debug logging (can be removed in production)
   if (process.env.NODE_ENV === 'development') {
-    console.log('ReservationPanel - Thread reservation_id:', thread?.reservation_id);
-    console.log('ReservationPanel - Reservation loaded:', !!reservation && !reservation.error);
   }
 
   const formatDate = (dateString) => {

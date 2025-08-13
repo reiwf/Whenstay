@@ -13,17 +13,24 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all'); // all, unread, archived
 
-  const filteredThreads = threads.filter(thread => {
-    const matchesSearch = !searchTerm || 
-      thread.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      thread.last_message_preview?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredThreads = threads
+    .filter(thread => {
+      const matchesSearch = !searchTerm || 
+        thread.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        thread.last_message_preview?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesFilter = filter === 'all' || 
-      (filter === 'unread' && thread.unread_count > 0) ||
-      (filter === 'archived' && thread.status === 'archived');
+      const matchesFilter = filter === 'all' || 
+        (filter === 'unread' && thread.unread_count > 0) ||
+        (filter === 'archived' && thread.status === 'archived');
 
-    return matchesSearch && matchesFilter;
-  });
+      return matchesSearch && matchesFilter;
+    })
+    .sort((a, b) => {
+      // Sort by last_message_at in descending order (most recent first)
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime;
+    });
 
   const getThreadChannels = (thread) => {
     if (!thread.thread_channels) return [];

@@ -113,8 +113,7 @@ export function useGuestCommunication(token) {
       .subscribe((status) => {
         console.log('Guest thread subscription status:', status);
       });
-  }, []); // ✅ stable
-
+  }, []);
 
   // Get or create communication thread for guest
   const loadThread = useCallback(async () => {
@@ -124,9 +123,6 @@ export function useGuestCommunication(token) {
       setLoading(true)
       const data = await apiCall(`/api/guest/${token}/thread`)
       setThread(data.thread)
-      
-      // Setup real-time subscription for the thread
-      
       return data.thread
     } catch (error) {
       console.error('Error loading thread:', error)
@@ -135,7 +131,7 @@ export function useGuestCommunication(token) {
     } finally {
       setLoading(false)
     }
-  }, [token, apiCall, setupThreadSubscription])
+  }, [token, apiCall])
 
   // Load messages for the guest's thread
   const loadMessages = useCallback(async () => {
@@ -146,7 +142,6 @@ export function useGuestCommunication(token) {
       const data = await apiCall(`/api/guest/${token}/thread/messages`)
       const messagesData = data.messages || []
       setMessages(messagesData)
-      
       
       // Auto-scroll to bottom
       setTimeout(() => scrollToBottom(false), 100)
@@ -159,7 +154,7 @@ export function useGuestCommunication(token) {
     } finally {
       setLoading(false)
     }
-  }, [token, thread, apiCall, setupMessagesSubscription, scrollToBottom])
+  }, [token, apiCall, scrollToBottom])
 
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (content, parentMessageId = null) => {
@@ -235,14 +230,16 @@ export function useGuestCommunication(token) {
 
       if (threadData?.id) {
         await loadMessages();
+        // Setup real-time subscriptions after loading data
+        setupMessagesSubscription(threadData.id);
+        setupThreadSubscription(threadData.id);
       }
     } catch (error) {
       console.error('Error initializing guest communication:', error);
     } finally {
       setLoading(false);
     }
-  }, [token, loadThread, loadMessages, setupMessagesSubscription]); // ✅ will no longer change every thread update
-
+  }, [token, loadThread, loadMessages, setupMessagesSubscription, setupThreadSubscription]);
 
   // Refresh data
   const refresh = useCallback(async () => {
@@ -266,17 +263,6 @@ export function useGuestCommunication(token) {
       }
     }
   }, [token])
-
-  useEffect(() => {
-    if (!thread?.id) return;
-    setupMessagesSubscription(thread.id);
-    setupThreadSubscription(thread.id);
-    return () => {
-      if (messagesChannelRef.current) supabase.removeChannel(messagesChannelRef.current);
-      if (threadChannelRef.current) supabase.removeChannel(threadChannelRef.current);
-    };
-  }, [thread?.id, setupMessagesSubscription, setupThreadSubscription]);
-
 
   return {
     // State
