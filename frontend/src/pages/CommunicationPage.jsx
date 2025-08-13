@@ -114,7 +114,6 @@ export default function CommunicationPage() {
               onSendMessage={handleSendMessage}
               onThreadAction={handleThreadAction}
               loading={loading}
-              connectionStatus={connectionStatus}
             />
           </div>
 

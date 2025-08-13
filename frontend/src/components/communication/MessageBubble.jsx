@@ -10,21 +10,15 @@ const CHANNEL_ICONS = {
 };
 
 const ROLE_COLORS = {
-  guest: 'text-leaf-600',
-  host: 'text-primary-600',
-  assistant: 'text-primary-500',
+  guest: 'text-blue-600',
+  host: 'text-green-600',
+  assistant: 'text-purple-600',
   system: 'text-gray-600'
 };
 
 export default function MessageBubble({ message, isConsecutive = false }) {
-  // In admin interface, messages from guests should appear on the left (incoming)
-  // Messages from host/admin should appear on the right (outgoing)
-  const isFromGuest = message.origin_role === 'guest';
-  const isFromHost = message.origin_role === 'host' || message.origin_role === 'admin';
-  
-  // Use role-based positioning for better UX in admin interface
-  const isIncoming = isFromGuest;
-  const isOutgoing = isFromHost;
+  const isIncoming = message.direction === 'incoming';
+  const isOutgoing = message.direction === 'outgoing';
 
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { 
@@ -52,7 +46,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
       case 'delivered':
         return <CheckCheck className="w-3 h-3 text-gray-500" />;
       case 'read':
-        return <CheckCheck className="w-3 h-3 text-leaf-500" />;
+        return <CheckCheck className="w-3 h-3 text-blue-500" />;
       case 'failed':
         return <AlertCircle className="w-3 h-3 text-red-500" />;
       default:
@@ -104,12 +98,12 @@ export default function MessageBubble({ message, isConsecutive = false }) {
         {/* Message bubble */}
         <div className={`rounded-2xl px-4 py-2 shadow-sm border text-sm ${
           isOutgoing
-            ? 'bg-primary-600 text-white border-primary-600'
+            ? 'bg-blue-600 text-white border-blue-600'
             : message.origin_role === 'assistant'
-            ? 'bg-primary-50 text-primary-900 border-primary-200'
+            ? 'bg-purple-50 text-purple-900 border-purple-200'
             : message.origin_role === 'system'
             ? 'bg-gray-50 text-gray-800 border-gray-200'
-            : 'bg-leaf-50 text-leaf-900 border-leaf-200'
+            : 'bg-white text-gray-900 border-gray-200'
         } ${
           isConsecutive 
             ? isOutgoing
@@ -126,14 +120,14 @@ export default function MessageBubble({ message, isConsecutive = false }) {
           {message.message_attachments && message.message_attachments.length > 0 && (
             <div className="mt-2 space-y-1">
               {message.message_attachments.map((attachment, index) => (
-              <div
-                key={index}
-                className={`text-xs p-2 rounded border ${
-                  isOutgoing 
-                    ? 'bg-primary-500 border-primary-400' 
-                    : 'bg-gray-100 border-gray-200'
-                }`}
-              >
+                <div
+                  key={index}
+                  className={`text-xs p-2 rounded border ${
+                    isOutgoing 
+                      ? 'bg-blue-500 border-blue-400' 
+                      : 'bg-gray-100 border-gray-200'
+                  }`}
+                >
                   📎 {attachment.path.split('/').pop()}
                   {attachment.size_bytes && (
                     <span className="ml-1">
@@ -147,7 +141,7 @@ export default function MessageBubble({ message, isConsecutive = false }) {
 
           {/* Message footer with delivery status */}
           <div className={`flex items-center justify-between mt-1 text-xs ${
-            isOutgoing ? 'text-primary-200' : 'text-gray-500'
+            isOutgoing ? 'text-blue-200' : 'text-gray-500'
           }`}>
             <div className="flex items-center space-x-1">
               {/* Delivery status for outgoing messages */}
