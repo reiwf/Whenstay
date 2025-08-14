@@ -17,10 +17,18 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
 
   // Setup intersection observer to track when guest messages become visible to admin
   useEffect(() => {
-    if (!messageRef.current || !onMarkAsRead || !isFromGuest || !isIncoming) return;
+    // For host viewing guest messages: we want to mark guest messages as read regardless of direction
+    // The key is that the message is FROM a guest (origin_role = 'guest') and being viewed by admin
+    const shouldTrackAsRead = isFromGuest;
+
+    if (!messageRef.current || !onMarkAsRead || !shouldTrackAsRead) {
+      return;
+    }
     
     const currentStatus = message.message_deliveries?.[0]?.status;
-    if (currentStatus === 'read') return; // Already read
+    if (currentStatus === 'read') {
+      return; // Already read
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -28,10 +36,17 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
           if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
             // Message is visible for more than 50% of its area
             setTimeout(() => {
-              // Check if still visible and call mark as read
+              // Check if still visible and not already read
               const currentEntry = observer.takeRecords()[0] || entry;
-              if (currentEntry.isIntersecting) {
+              const currentStatus = message.message_deliveries?.[0]?.status;
+              
+              if (currentEntry.isIntersecting && currentStatus !== 'read') {
                 onMarkAsRead(message.id, 'inapp');
+                
+                // Disconnect observer after marking as read to prevent repeated calls
+                observer.disconnect();
+              } else if (currentStatus === 'read') {
+                observer.disconnect();
               }
             }, 2000); // Wait 2 seconds before marking as read
           }
@@ -48,7 +63,7 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
     return () => {
       observer.disconnect();
     };
-  }, [message.id, message.message_deliveries, isFromGuest, isIncoming, onMarkAsRead]);
+  }, [message.id, isFromGuest, onMarkAsRead]);
 
   const formatTime24Hour = (timestamp) => {
     const date = new Date(timestamp);

@@ -514,7 +514,7 @@ export function useRealtimeCommunication() {
   const markMessageAsRead = useCallback(async (messageId, channel = 'inapp') => {
     try {
       await adminAPI.markCommunicationMessageRead(messageId, channel)
-
+      
       // Update message delivery status in local state
       setMessages(prev => 
         prev.map(msg => {
@@ -530,7 +530,6 @@ export function useRealtimeCommunication() {
         })
       )
 
-      console.log('✅ Admin marked guest message as read:', messageId, 'Status will propagate to guest via real-time')
       return true
     } catch (error) {
       console.error('Error marking message as read:', error)
