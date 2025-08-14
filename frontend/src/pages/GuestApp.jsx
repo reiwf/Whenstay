@@ -327,21 +327,21 @@ export default function GuestApp() {
         {/* Welcome Banner */}
         <div className="card">
           <div className="text-center">
-            <p className="text-l font-bold text-primary-900 mb-2">
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
               Hello, {reservation?.guest_name}!
             </p>
-            <p className="text-sm text-primary-600 mb-4">
+            <p className="text-sm sm:text-base text-primary-600 mb-4">
               Thank you for choosing us for your stay
             </p>
             
             {checkinStatus?.completed ? (
               <span className="status-badge status-completed">
-                <CheckCircle className="w-4 h-4 mr-1" />
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
                 Check-in Complete
               </span>
             ) : (
               <span className="status-badge status-pending">
-                <Clock className="w-4 h-4 mr-1" />
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
                 Check-in Pending
               </span>
             )}
@@ -350,21 +350,21 @@ export default function GuestApp() {
 
         {/* Check-in Action Card */}
         {!checkinStatus?.completed && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 sm:p-6">
             <div className="flex items-start">
-              <AlertCircle className="w-6 h-6 text-yellow-600 mr-3 mt-1" />
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mr-3 mt-1 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-yellow-900 mb-2">
                   Complete Your Check-in
                 </h3>
-                <p className="text-yellow-800 mb-4">
+                <p className="text-sm sm:text-base text-yellow-800 mb-4 break-words">
                   Please complete your online check-in process to receive your room access details. You must complete check-in before your arrival to get the access code.
                 </p>
                 <button 
                   onClick={() => navigate(`/checkin/${token}`)}
-                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-yellow-500"
+                  className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 bg-yellow-600 text-white text-sm sm:text-base font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-yellow-500 w-full sm:w-auto justify-center"
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  <ArrowLeft className="w-4 h-4 mr-2 flex-shrink-0" />
                   Complete Check-in Now
                 </button>
               </div>
@@ -376,14 +376,14 @@ export default function GuestApp() {
         {canAccessRoomDetails() && (
           <div className="card border-primary-200">
             <div className="flex items-center mb-4">
-              <Unlock className="w-6 h-6 text-primary-600 mr-2" />
-              <h2 className="text-lg font-semibold text-primary-900">Room Access Details</h2>
-              <span className="ml-auto text-xs text-primary-50 bg-primary-500 px-2 py-1 rounded-full">
+              <Unlock className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-2 flex-shrink-0" />
+              <h2 className="text-base sm:text-lg font-semibold text-primary-900 flex-1 min-w-0">Room Access Details</h2>
+              <span className="ml-auto text-xs sm:text-sm text-primary-50 bg-primary-500 px-2 py-1 rounded-full flex-shrink-0">
                 Available Now
               </span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-4">
                 <div className="bg-primary-100 border border-primary-300 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
@@ -457,47 +457,47 @@ export default function GuestApp() {
         {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
           <div className="card border-primary-200 bg-primary-50">
             <div className="flex items-center mb-4">
-              <Clock className="w-6 h-6 text-primary-600 mr-2" />
-              <h2 className="text-lg font-semibold text-primary-900">Room Access Countdown</h2>
+              <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-2 flex-shrink-0" />
+              <h2 className="text-base sm:text-lg font-semibold text-primary-900">Room Access Countdown</h2>
             </div>
             
             <div className="space-y-4">
               {/* Countdown Display */}
               {countdown && typeof countdown === 'object' && !countdown.expired && (
-                <div className="bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 border border-primary-300 rounded-lg p-6 text-center">
-                  <div className="mb-4">
-                    <p className="text-sm text-primary-950 mb-2">Room access available in:</p>
+                <div className="bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 border border-primary-300 rounded-lg p-4 sm:p-6 text-center">
+                  <div className="mb-3 sm:mb-4">
+                    <p className="text-xs sm:text-sm text-primary-950 mb-2">Room access available in:</p>
                   </div>
                   
                   {/* Time breakdown - always show when countdown exists */}
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-white border border-primary-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-primary-900">{countdown.days || 0}</div>
+                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-center">
+                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.days || 0}</div>
                       <div className="text-xs text-primary-700 font-medium">Days</div>
                     </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-primary-900">{countdown.hours || 0}</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.hours || 0}</div>
                       <div className="text-xs text-primary-700 font-medium">Hours</div>
                     </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-primary-900">{countdown.minutes || 0}</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.minutes || 0}</div>
                       <div className="text-xs text-primary-700 font-medium">Minutes</div>
                     </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-3">
-                      <div className="text-xl font-bold text-primary-900">{countdown.seconds || 0}</div>
+                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.seconds || 0}</div>
                       <div className="text-xs text-primary-700 font-medium">Seconds</div>
                     </div>
                   </div>
-                  <p className="text-sm text-primary-950 mt-2">Comeback later</p>
+                  <p className="text-xs sm:text-sm text-primary-950 mt-2">Comeback later</p>
                 </div>
               )}
               
               {/* Access Time Information */}
-              <div className="bg-primary-100 border border-primary-300 rounded-lg p-4">
-                <p className="text-primary-800">
+              <div className="bg-primary-100 border border-primary-300 rounded-lg p-3 sm:p-4">
+                <p className="text-sm sm:text-base text-primary-800">
                   <strong>Room access details will be available at {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()}.</strong>
                 </p>
-                <p className="text-sm text-primary-700 mt-2">
+                <p className="text-xs sm:text-sm text-primary-700 mt-2">
                   Your room access code and detailed instructions will automatically appear when the access time arrives.
                 </p>
               </div>
@@ -516,19 +516,19 @@ export default function GuestApp() {
     return (
       <div className="space-y-8">
         {/* Detailed Reservation Information */}
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-primary-900 mb-4">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4">
             Reservation Details
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Check-in Information */}
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <PlaneLanding className="w-5 h-5 text-primary-400" />
-                <div>
+                <PlaneLanding className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Check-in Date</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700 break-words">
                     {checkInDate.toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -539,10 +539,10 @@ export default function GuestApp() {
               </div>
 
               <div className="flex items-start gap-3">
-                <PlaneTakeoff className="w-5 h-5 text-primary-400" />
-                <div>
+                <PlaneTakeoff className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Check-out Date</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700 break-words">
                     {checkOutDate.toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -553,10 +553,10 @@ export default function GuestApp() {
               </div>
 
               <div className="flex items-start gap-3">
-                <Users className="w-5 h-5 text-primary-400" />
-                <div>
+                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Guests</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700">
                     {reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}
                   </p>
                 </div>
@@ -565,31 +565,31 @@ export default function GuestApp() {
 
             {/* Property Information */}
             <div className="space-y-4">
-              <div className="flex items-start">
-                <Building className="w-5 h-5 text-primary-600 mr-3 mt-1" />
-                <div>
+              <div className="flex items-start gap-3">
+                <Building className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Property</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700 break-words">
                     {property?.name || 'Property Name'}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                    <Home className="w-5 h-5 text-primary-600" />
-                <div>
+                <Home className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Room</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700 break-words">
                     {room?.room_name || 'Room'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start">
-                <Clock className="w-5 h-5 text-primary-600 mr-3 mt-1" />
-                <div>
+              <div className="flex items-start gap-3">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">Duration</p>
-                  <p className="text-lg text-primary-700">
+                  <p className="text-base sm:text-lg text-primary-700">
                     {nights} {nights === 1 ? 'Night' : 'Nights'}
                   </p>
                 </div>
@@ -599,36 +599,36 @@ export default function GuestApp() {
 
           {/* Additional Room Details - show if available */}
           {(room?.bed_configuration || room?.room_size_sqm || room?.max_guests) && (
-            <div className="mt-6 pt-6 border-t border-primary-200">
-              <h4 className="text-md font-semibold text-primary-900 mb-3">
+            <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-primary-200">
+              <h4 className="text-sm sm:text-base font-semibold text-primary-900 mb-3">
                 Room Features
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {room?.bed_configuration && (
                   <div>
-                    <p className="text-sm font-medium text-primary-900">Bed Configuration</p>
-                    <p className="text-sm text-primary-700">{room.bed_configuration}</p>
+                    <p className="text-xs sm:text-sm font-medium text-primary-900">Bed Configuration</p>
+                    <p className="text-xs sm:text-sm text-primary-700 break-words">{room.bed_configuration}</p>
                   </div>
                 )}
                 
                 {room?.room_size_sqm && (
                   <div>
-                    <p className="text-sm font-medium text-primary-900">Room Size</p>
-                    <p className="text-sm text-primary-700">{room.room_size_sqm} sq m</p>
+                    <p className="text-xs sm:text-sm font-medium text-primary-900">Room Size</p>
+                    <p className="text-xs sm:text-sm text-primary-700">{room.room_size_sqm} sq m</p>
                   </div>
                 )}
                 
                 {room?.max_guests && (
                   <div>
-                    <p className="text-sm font-medium text-primary-900">Maximum Guests</p>
-                    <p className="text-sm text-primary-700">{room.max_guests} guests</p>
+                    <p className="text-xs sm:text-sm font-medium text-primary-900">Maximum Guests</p>
+                    <p className="text-xs sm:text-sm text-primary-700">{room.max_guests} guests</p>
                   </div>
                 )}
 
                 {room?.floor_number && (
                   <div>
-                    <p className="text-sm font-medium text-primary-900">Floor</p>
-                    <p className="text-sm text-primary-700">Floor {room.floor_number}</p>
+                    <p className="text-xs sm:text-sm font-medium text-primary-900">Floor</p>
+                    <p className="text-xs sm:text-sm text-primary-700">Floor {room.floor_number}</p>
                   </div>
                 )}
               </div>
@@ -642,23 +642,23 @@ export default function GuestApp() {
   const renderPropertySection  = () => (
     <div className="space-y-8 ">
       {/* Property Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Basic Property Info */}
         <div className="card">
           <div className="space-y-4">
                <div className="flex items-start gap-3">
-                <Building className="w-5 h-5 text-gray-400" />
-                <div>
+                <Building className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm text-gray-600">Property</p>
-                  <p className="font-medium">{property.name}</p>
+                  <p className="font-medium break-words">{property.name}</p>
                 </div>
               </div>
               
               <div className="flex items-start gap-3">
-                <Home className="w-5 h-5 text-gray-400" />
-                <div>
+                <Home className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 flex-shrink-0" />
+                <div className="min-w-0">
                   <p className="text-sm text-gray-600">Room</p>
-                  <p className="font-medium">{room.room_name}</p>
+                  <p className="font-medium break-words">{room.room_name}</p>
                 </div>
               </div>
             </div>
@@ -667,17 +667,17 @@ export default function GuestApp() {
         {/* WiFi Information */}
         <div className="card">
           <div className="flex items-center mb-3">
-            <Wifi className="w-5 h-5 text-primary-600 mr-2" />
-            <h3 className="text-lg font-semibold text-gray-900">WiFi Information</h3>
+            <Wifi className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 mr-2 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">WiFi Information</h3>
           </div>
           <div className="space-y-2">
             <div>
               <p className="text-sm text-gray-600">Network Name</p>
-              <p className="font-mono font-medium">{property.wifi_name}</p>
+              <p className="font-mono text-sm sm:text-base font-medium break-all">{property.wifi_name}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Password</p>
-              <p className="font-mono font-medium">{property.wifi_password}</p>
+              <p className="font-mono text-sm sm:text-base font-medium break-all">{property.wifi_password}</p>
             </div>
           </div>
         </div>
@@ -685,20 +685,20 @@ export default function GuestApp() {
         {/* Emergency Contact */}
         {property.emergency_contact && (
           <div className="card">
-            <div className="flex items-start gap-3">
-               <Phone className="w-4 h-4 text-primary-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Emergency Contact</h3>
+            <div className="flex items-start gap-3 mb-3">
+               <Phone className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Emergency Contact</h3>
             </div>
-            <p className="font-medium">{property.emergency_contact}</p>
+            <p className="font-medium break-words">{property.emergency_contact}</p>
           </div>
         )}
 
         {/* Check-in Instructions */}
         {property.check_in_instructions && (
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
-            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-              <p className="text-primary-800">{property.check_in_instructions}</p>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Check-in Instructions</h2>
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 sm:p-4">
+              <p className="text-sm sm:text-base text-primary-800 break-words">{property.check_in_instructions}</p>
             </div>
           </div>
         )}
@@ -707,9 +707,9 @@ export default function GuestApp() {
       {/* House Rules */}
       {property.house_rules && (
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">House Rules</h2>
-          <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-            <p className="text-gray-800 whitespace-pre-line">{property.house_rules}</p>
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">House Rules</h2>
+          <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 sm:p-4">
+            <p className="text-sm sm:text-base text-gray-800 whitespace-pre-line break-words">{property.house_rules}</p>
           </div>
         </div>
       )}
@@ -717,13 +717,13 @@ export default function GuestApp() {
       {/* Property Amenities */}
       {property.amenities && Object.keys(property.amenities).length > 0 && (
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Property Amenities</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Property Amenities</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {Object.entries(property.amenities).map(([amenity, available]) => (
               available && (
                 <div key={amenity} className="flex items-center p-2 bg-primary-50 rounded-lg">
-                  <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                  <span className="text-sm text-gray-700 capitalize">{amenity.replace('_', ' ')}</span>
+                  <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm text-gray-700 capitalize truncate">{amenity.replace('_', ' ')}</span>
                 </div>
               )
             ))}
@@ -735,17 +735,17 @@ export default function GuestApp() {
       {property.location_info && (
         <div className="card">
             <div className="flex items-center mb-4">
-              <MapPin className="w-6 h-6 text-primary-600 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">Local Recommendations</h2>
+              <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-2 flex-shrink-0" />
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">Local Recommendations</h2>
             </div>
             
             {typeof property.location_info === 'object' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {Object.entries(property.location_info).map(([category, items]) => (
                   <div key={category} className="space-y-3">
                     <div className="flex items-center mb-3">
                       {getRecommendationIcon(category)}
-                      <h3 className="text-md font-semibold text-gray-900 ml-2 capitalize">
+                      <h3 className="text-sm sm:text-base font-semibold text-gray-900 ml-2 capitalize">
                         {category.replace('_', ' ')}
                       </h3>
                     </div>
@@ -753,37 +753,37 @@ export default function GuestApp() {
                     {Array.isArray(items) ? (
                       <div className="space-y-2">
                         {items.map((item, index) => (
-                          <div key={index} className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                          <div key={index} className="bg-primary-50 border border-primary-200 rounded-lg p-2 sm:p-3">
                             {typeof item === 'object' ? (
                               <div>
-                                <p className="font-medium text-gray-900">{item.name}</p>
+                                <p className="text-sm sm:text-base font-medium text-gray-900 break-words">{item.name}</p>
                                 {item.description && (
-                                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                                  <p className="text-xs sm:text-sm text-gray-600 mt-1 break-words">{item.description}</p>
                                 )}
                                 {item.address && (
-                                  <p className="text-xs text-gray-500 mt-1">{item.address}</p>
+                                  <p className="text-xs text-gray-500 mt-1 break-words">{item.address}</p>
                                 )}
                                 {item.distance && (
                                   <p className="text-xs text-primary-600 mt-1">{item.distance}</p>
                                 )}
                               </div>
                             ) : (
-                              <p className="text-sm text-gray-700">{item}</p>
+                              <p className="text-xs sm:text-sm text-gray-700 break-words">{item}</p>
                             )}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
-                        <p className="text-sm text-gray-700">{items}</p>
+                      <div className="bg-primary-50 border border-primary-200 rounded-lg p-2 sm:p-3">
+                        <p className="text-xs sm:text-sm text-gray-700 break-words">{items}</p>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                <p className="text-primary-800">{property.location_info}</p>
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 sm:p-4">
+                <p className="text-sm sm:text-base text-primary-800 break-words">{property.location_info}</p>
               </div>
             )}
           </div>
@@ -883,13 +883,13 @@ export default function GuestApp() {
                     className={`flex flex-col items-center py-3 px-2 transition-colors ${
                       isActive
                         ? 'text-primary-600 bg-primary-50 border rounded-lg'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-primary-50'
+                        : 'text-primary-400 hover:text-primary-900 hover:bg-primary-50'
                     }`}
                   >
                     <IconComponent className={`w-5 h-5 mb-1 ${
-                      isActive ? 'text-primary-600' : 'text-gray-400'
+                      isActive ? 'text-primary-600' : 'text-primary-400'
                     }`} />
-                    <span className="text-xs font-medium truncate">
+                    <span className="text-xs truncate">
                       {item.label}
                     </span>
                   </button>

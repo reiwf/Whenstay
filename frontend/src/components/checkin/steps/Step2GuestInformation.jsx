@@ -79,11 +79,11 @@ export default function Step2GuestInformation({
 
   return (
     <div>
-      <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-primary-900 mb-2">
+      <div className="text-center mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
           Guest Information
         </h2>
-        <p className="text-primary-600">
+        <p className="text-sm sm:text-base text-primary-600">
           {isReadOnly 
             ? "Your submitted guest information" 
             : isModificationMode 
@@ -95,31 +95,31 @@ export default function Step2GuestInformation({
 
       {/* Read-only confirmation when check-in is completed */}
       {isReadOnly && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-6">
           <div className="flex items-center mb-4">
-            <CheckCircle className="w-6 h-6 text-primary-600 mr-3" />
-            <h3 className="text-lg font-semibold text-primary-900">
+            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-3 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold text-primary-900">
               Information Submitted
             </h3>
           </div>
-          <p className="text-primary-800">
+          <p className="text-sm sm:text-base text-primary-800">
             Your guest information has been successfully submitted and is currently under review.
           </p>
         </div>
       )}
 
-      <form className="space-y-6">
+      <form className="space-y-4 sm:space-y-6">
         {/* Personal Information Section */}
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-primary-900 mb-4 flex items-center">
-            <User className="w-5 h-5 mr-2" />
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4 flex items-center">
+            <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
             Who will stay with us?
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* First Name */}
             <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
                 First Name *
               </label>
               <input
@@ -128,14 +128,21 @@ export default function Step2GuestInformation({
                 value={formData.firstName || ''}
                 onChange={(e) => handleInputChange('firstName', e.target.value)}
                 disabled={isReadOnly}
-                className={`w-full px-4 py-3 form-field ${
-                  errors.firstName ? 'border-red-500' : 'border-primary-300'
-                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                className={`form-field ${isReadOnly ? 'disabled' : ''} ${
+                  errors.firstName ? 'error' : ''
+                }`}
+                style={{
+                  width: "100%",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  background: isReadOnly ? "#f5f5f5" : "white",
+                  cursor: isReadOnly ? "not-allowed" : "text"
+                }}
                 placeholder="Enter your first name"
               />
               {errors.firstName && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
+                  <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
                   {errors.firstName}
                 </p>
               )}
@@ -143,7 +150,7 @@ export default function Step2GuestInformation({
 
             {/* Last Name */}
             <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
                 Last Name *
               </label>
               <input
@@ -152,22 +159,29 @@ export default function Step2GuestInformation({
                 value={formData.lastName || ''}
                 onChange={(e) => handleInputChange('lastName', e.target.value)}
                 disabled={isReadOnly}
-                className={`w-full px-4 py-3 form-field ${
-                  errors.lastName ? 'border-red-500' : 'border-primary-300'
-                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                className={`form-field ${isReadOnly ? 'disabled' : ''} ${
+                  errors.lastName ? 'error' : ''
+                }`}
+                style={{
+                  width: "100%",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  background: isReadOnly ? "#f5f5f5" : "white",
+                  cursor: isReadOnly ? "not-allowed" : "text"
+                }}
                 placeholder="Enter your last name"
               />
               {errors.lastName && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
+                  <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
                   {errors.lastName}
                 </p>
               )}
             </div>
 
             {/* Personal Email Address */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
                 Email Address *
               </label>
               <input
@@ -176,38 +190,60 @@ export default function Step2GuestInformation({
                 value={formData.personalEmail || ''}
                 onChange={(e) => handleInputChange('personalEmail', e.target.value)}
                 disabled={isReadOnly}
-                className={`w-full px-4 py-3 form-field ${
-                  errors.personalEmail ? 'border-red-500' : 'border-primary-300'
-                } ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                className={`form-field ${isReadOnly ? 'disabled' : ''} ${
+                  errors.personalEmail ? 'error' : ''
+                }`}
+                style={{
+                  width: "100%",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  background: isReadOnly ? "#f5f5f5" : "white",
+                  cursor: isReadOnly ? "not-allowed" : "text"
+                }}
                 placeholder="your.personal@email.com"
               />
               {errors.personalEmail && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
+                  <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
                   {errors.personalEmail}
                 </p>
               )}
             </div>
 
             {/* Contact Number */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
                 Contact Number *
               </label>
-              <PhoneInput
-                international
-                countryCallingCodeEditable={false}
-                defaultCountry="JP"
-                flags={flags}
-                value={formData.contactNumber || ''}
-                onChange={(value) => handleInputChange('contactNumber', value || '')}
-                disabled={isReadOnly}
-                className={errors.contactNumber ? 'phone-input-error' : ''}
-                placeholder="Enter phone number"
-              />
+              <div className={`form-field ${isReadOnly ? 'disabled' : ''} ${
+                errors.contactNumber ? 'error' : ''
+              }`} style={{
+                padding: 0,
+                background: isReadOnly ? "#f5f5f5" : "white",
+                cursor: isReadOnly ? "not-allowed" : "default"
+              }}>
+                <PhoneInput
+                  international
+                  countryCallingCodeEditable={false}
+                  defaultCountry="JP"
+                  flags={flags}
+                  value={formData.contactNumber || ''}
+                  onChange={(value) => handleInputChange('contactNumber', value || '')}
+                  disabled={isReadOnly}
+                  placeholder="Enter phone number"
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: "14px",
+                    background: "transparent",
+                    border: "none",
+                    height: "48px",
+                    outline: "none"
+                  }}
+                />
+              </div>
               {errors.contactNumber && (
-                <p className="mt-1 text-sm text-red-600 flex items-center">
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
+                  <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
                   {errors.contactNumber}
                 </p>
               )}
@@ -218,48 +254,55 @@ export default function Step2GuestInformation({
         </div>
 
         {/* Check-in Preferences Section */}
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-primary-900 mb-4 flex items-center">
-            <Clock className="w-5 h-5 mr-2" />
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4 flex items-center">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
             Check-in Preferences
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Estimated Check-in Time */}
             <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
                 Estimated Check-in Time
               </label>
               <div className="w-full">
-              <TimePicker
-                value={formData.estimatedCheckinTime || null}
-                onChange={(val) => handleInputChange("estimatedCheckinTime", val || "")}
-                disabled={isReadOnly}
-                format="24"
-                step={60} // or 30 / 15
-                placeholder="HH:mm"
-                clearable
-                overnightRange={{ start: "16:00", end: "03:00" }}
-                error={!!errors.estimatedCheckinTime}
-              />
-            </div>
+                <TimePicker
+                  value={formData.estimatedCheckinTime || null}
+                  onChange={(val) => handleInputChange("estimatedCheckinTime", val || "")}
+                  disabled={isReadOnly}
+                  format="24"
+                  step={60} // or 30 / 15
+                  placeholder="HH:mm"
+                  clearable
+                  overnightRange={{ start: "16:00", end: "03:00" }}
+                  error={!!errors.estimatedCheckinTime}
+                />
+              </div>
 
-              <p className="mt-1 text-sm text-primary-500">
+              <p className="mt-1 text-xs sm:text-sm text-primary-500">
                 What time do you expect to arrive for check-in?
               </p>
             </div>
 
             {/* Travel Purpose */}
             <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
-                <Briefcase className="w-4 h-4 inline mr-2" />
+              <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
+                <Briefcase className="w-3 h-3 sm:w-4 sm:h-4 inline mr-2" />
                 Travel Purpose
               </label>
               <select
                 value={formData.travelPurpose || ''}
                 onChange={(e) => handleInputChange('travelPurpose', e.target.value)}
                 disabled={isReadOnly}
-                className={`w-full px-4 py-3 form-field ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                className={`form-field ${isReadOnly ? 'disabled' : ''}`}
+                style={{
+                  width: "100%",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  background: isReadOnly ? "#f5f5f5" : "white",
+                  cursor: isReadOnly ? "not-allowed" : "pointer"
+                }}
               >
                 <option value="">Select purpose</option>
                 <option value="Business">Business</option>
@@ -269,7 +312,7 @@ export default function Step2GuestInformation({
                 <option value="Education">Education</option>
                 <option value="Other">Other</option>
               </select>
-              <p className="mt-1 text-sm text-primary-500">
+              <p className="mt-1 text-xs sm:text-sm text-primary-500">
                 Purpose of your visit
               </p>
             </div>

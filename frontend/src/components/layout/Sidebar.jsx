@@ -38,10 +38,10 @@ const Sidebar = ({
     if (userRole === 'admin') {
       items.push(
         { id: 'dashboard', label: 'Dashboard', icon: Home },
-        { id: 'properties', label: 'Properties', icon: Building },
+        { id: 'communication', label: 'Communication', icon: MessageCircle },        
         { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
-        { id: 'communication', label: 'Communication', icon: MessageCircle },
+        { id: 'properties', label: 'Properties', icon: Building },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {

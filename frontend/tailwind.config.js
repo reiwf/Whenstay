@@ -9,7 +9,19 @@ export default {
   	extend: {
   		colors: {
   			primary: {
-  				'50': '#f8f7f4',
+  				'50': '#faf8f2',
+				'100': '#f2efe2',
+				'200': '#e5ddc3',
+				'300': '#d4c69d',
+				'400': '#bfa670',
+				'500': '#b5945a',
+				'600': '#a7824f',
+				'700': '#8b6943',
+				'800': '#71553b',
+				'900': '#5c4732',
+				'950': '#312419',
+			old:{
+				'50': '#f8f7f4',
 				'100': '#efeee5',
 				'200': '#dedbca',
 				'300': '#d2cdb6',
@@ -20,6 +32,7 @@ export default {
 				'800': '#675945',
 				'900': '#54493a',
 				'950': '#2c251e',
+			},
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},

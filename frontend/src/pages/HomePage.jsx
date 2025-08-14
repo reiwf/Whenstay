@@ -9,7 +9,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary-900 rounded-lg"></div>
+              <div className="w-8 h-8 bg-primary-700 rounded-lg"></div>
               <h1 className="text-xl font-semibold text-primary-900">Staylabel</h1>
             </div>
             <div className="flex items-center space-x-6">

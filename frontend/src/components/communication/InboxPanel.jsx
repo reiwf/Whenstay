@@ -21,7 +21,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
 
       const matchesFilter = filter === 'all' || 
         (filter === 'unread' && thread.unread_count > 0) ||
-        (filter === 'archived' && thread.status === 'archived');
+        (filter === 'closed' && thread.status === 'closed');
 
       return matchesSearch && matchesFilter;
     })
@@ -81,7 +81,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
           {[
             { key: 'all', label: 'All', count: threads.length },
             { key: 'unread', label: 'Unread', count: threads.filter(t => t.unread_count > 0).length },
-            { key: 'archived', label: 'Archived', count: threads.filter(t => t.status === 'archived').length }
+            { key: 'closed', label: 'Closed', count: threads.filter(t => t.status === 'closed').length }
           ].map(({ key, label, count }) => (
             <button
               key={key}

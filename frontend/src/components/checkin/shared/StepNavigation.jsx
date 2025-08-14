@@ -16,20 +16,20 @@ export default function StepNavigation({
   const isLastStep = currentStep === totalSteps
 
   return (
-    <div className="flex justify-between items-center pt-6 border-t border-primary-200">
+    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 sm:gap-0 pt-4 sm:pt-6 border-t border-primary-200">
       {/* Previous Button */}
       {showPrevious && !isFirstStep ? (
         <button
           type="button"
           onClick={onPrevious}
           disabled={isLoading}
-          className="flex items-center px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-md hover:bg-primary-50 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50"
+          className="flex items-center justify-center px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-md hover:bg-primary-50 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 w-full sm:w-auto order-2 sm:order-1"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Previous
         </button>
       ) : (
-        <div></div>
+        <div className="hidden sm:block"></div>
       )}
 
       {/* Next/Submit Button */}
@@ -38,7 +38,7 @@ export default function StepNavigation({
           type="button"
           onClick={onNext}
           disabled={isNextDisabled || isLoading}
-          className="flex items-center px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center px-4 sm:px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto order-1 sm:order-2"
         >
           {isLoading ? (
             <>
@@ -47,7 +47,9 @@ export default function StepNavigation({
             </>
           ) : (
             <>
-              <span>{isLastStep ? 'Complete Check-in' : nextButtonText}</span>
+              <span className="text-center">
+                {isLastStep ? 'Complete Check-in' : nextButtonText}
+              </span>
               {!isLastStep && <ChevronRight className="w-4 h-4 ml-1" />}
             </>
           )}

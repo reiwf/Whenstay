@@ -82,11 +82,11 @@ export default function Step4Agreement({
 
   return (
     <div>
-      <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-primary-900 mb-2">
+      <div className="text-center mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
           Guest Agreement
         </h2>
-        <p className="text-primary-600">
+        <p className="text-sm sm:text-base text-primary-600">
           {isReadOnly 
             ? "Your accepted guest agreement" 
             : isModificationMode 
@@ -98,47 +98,47 @@ export default function Step4Agreement({
 
       {/* Read-only confirmation when check-in is completed */}
       {isReadOnly && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-6">
           <div className="flex items-center mb-4">
-            <CheckCircle className="w-6 h-6 text-primary-600 mr-3" />
-            <h3 className="text-lg font-semibold text-primary-900">
+            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-3 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold text-primary-900">
               Agreement Accepted
             </h3>
           </div>
-          <p className="text-primary-800">
+          <p className="text-sm sm:text-base text-primary-800">
             You have successfully reviewed and accepted our guest agreement. Your check-in is complete!
           </p>
         </div>
       )}
 
       {/* Agreement Text */}
-      <div className="text-sm bg-white border border-gray-300 rounded-lg mb-6">
-        <div className="p-4 border-b border-primary-200 bg-primary-50">
+      <div className="text-xs sm:text-sm bg-white border border-gray-300 rounded-lg mb-4 sm:mb-6">
+        <div className="p-3 sm:p-4 border-b border-primary-200 bg-primary-50">
           <div className="flex items-center">
-            <FileText className="w-5 h-5 text-primary-600 mr-2" />
-            <h3 className="text-lg font-semibold text-primary-900">
+            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 mr-2 flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-semibold text-primary-900">
               Terms and Conditions
             </h3>
           </div>
-          <p className="text-sm text-primary-600 mt-1">
+          <p className="text-xs sm:text-sm text-primary-600 mt-1">
             Please scroll through the entire document before accepting
           </p>
         </div>
         
         <div 
-          className="p-6 max-h-96 overflow-y-auto"
+          className="p-3 sm:p-6 max-h-64 sm:max-h-96 overflow-y-auto"
           onScroll={handleScroll}
         >
-          <div className="prose prose-sm max-w-none">
+          <div className="prose prose-xs sm:prose-sm max-w-none">
             {formatAgreementText(GUEST_AGREEMENT_TEMPLATE)}
           </div>
         </div>
         
         {!hasReadAgreement && (
-            <div className="p-4 border-t border-primary-200 bg-primary-100">
-            <div className="flex items-center">
-              <AlertCircle className="w-4 h-4 text-yellow-600 mr-2" />
-              <p className="text-sm text-primary-800">
+            <div className="p-3 sm:p-4 border-t border-primary-200 bg-primary-100">
+            <div className="flex items-start">
+              <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+              <p className="text-xs sm:text-sm text-primary-800">
                 Please scroll to the bottom of the agreement to continue
               </p>
             </div>
@@ -147,7 +147,7 @@ export default function Step4Agreement({
       </div>
 
       {/* Agreement Acceptance */}
-      <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 mb-6">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex items-start">
           <input
             type="checkbox"
@@ -155,9 +155,9 @@ export default function Step4Agreement({
             checked={agreementAccepted}
             onChange={(e) => handleAgreementChange(e.target.checked)}
             disabled={!hasReadAgreement || isReadOnly}
-            className="mt-1 mr-3 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 transform scale-150"
+            className="mt-1 mr-3 h-4 w-4 sm:h-5 sm:w-5 text-primary-600 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 flex-shrink-0"
           />
-          <label htmlFor="agreement" className={`text-sm text-gray-700 select-none ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}>
+          <label htmlFor="agreement" className={`text-xs sm:text-sm text-gray-700 select-none ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}>
             <span className="font-medium">I acknowledge that I have read, understood, and agree to comply with all terms and conditions outlined in this guest agreement.</span>
             <br />
             <span className="text-gray-600">
@@ -169,20 +169,20 @@ export default function Step4Agreement({
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-            <p className="text-red-800">{error}</p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex items-start">
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+            <p className="text-sm sm:text-base text-red-800 break-words">{error}</p>
           </div>
         </div>
       )}
 
       {/* Success Indicator */}
       {hasReadAgreement && agreementAccepted && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-            <p className="text-green-800">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex items-start">
+            <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+            <p className="text-sm sm:text-base text-green-800">
               Thank you for reviewing and accepting our guest agreement. You're ready to complete your check-in!
             </p>
           </div>
