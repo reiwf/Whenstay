@@ -108,76 +108,52 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
         )}
 
         {!loading && filteredThreads.length === 0 && (
-          <div className="p-4 text-center text-primary-500">
-            <MessageCircle className="w-8 h-8 mx-auto mb-2 text-primary-300" />
-            <p className="text-sm">No conversations found</p>
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="text-primary-600 hover:text-primary-800 text-xs mt-1"
-              >
-                Clear search
-              </button>
-            )}
-          </div>
-        )}
+                  <div className="p-4 text-center text-primary-500">
+                    <MessageCircle className="w-8 h-8 mx-auto mb-2 text-primary-300" />
+                    <p className="text-sm">No conversations found</p>
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="text-primary-600 hover:text-primary-800 text-xs mt-1"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                )}
 
-        {!loading && filteredThreads.map((thread) => (
+                {!loading && filteredThreads.map((thread) => (
           <div
             key={thread.id}
             onClick={() => onThreadSelect(thread)}
-             className={`flex flex-col justify-between rounded-lg border border-primary-200 cursor-pointer hover:bg-primary-50 transition-colors
+            className={`rounded-lg border border-primary-200 cursor-pointer hover:bg-primary-50 transition-colors
               ${selectedThread?.id === thread.id ? 'bg-primary-50 border-primary-500' : ''}`}
-            style={{
-              height: '72px',       // fixed height for bar-like look
-              maxHeight: '72px',    // ensure it never grows taller
-              padding: '0.75rem',   // thinner padding
-            }}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
+            <div className="grid grid-cols-[1fr_auto] grid-rows-2 gap-x-2 h-[72px] px-3 py-2">
+              {/* Row 1: Subject (left) + Time (right) */}
+              <div className="min-w-0 self-center">
                 <p className="text-sm font-medium text-primary-900 truncate">
                   {thread.subject || 'No subject'}
                 </p>
-                <div className="flex items-center mt-1">
-                  {/* Channel indicators */}
-                  <div className="flex space-x-1 mr-2">
-                    {getThreadChannels(thread).slice(0, 3).map((channel, idx) => (
-                      <span key={idx} className="text-xs" title={channel}>
-                        {CHANNEL_ICONS[channel] || '📱'}
-                      </span>
-                    ))}
-                    {getThreadChannels(thread).length > 3 && (
-                      <span className="text-xs text-primary-400">
-                        +{getThreadChannels(thread).length - 3}
-                      </span>
-                    )}
-                  </div>
-                  
-                  {/* Status indicators */}
-                  {thread.status === 'archived' && (
-                    <span className="text-xs text-primary-500 bg-primary-100 px-1.5 py-0.5 rounded">
-                      Archived
-                    </span>
-                  )}
-                </div>
               </div>
-              
-              <div className="flex flex-col items-end ml-2">
-                <span className="text-xs text-primary-500">
-                  {formatTimestamp(thread.last_message_at)}
-                </span>
+              <span className="text-xs text-primary-500 self-center">
+                {formatTimestamp(thread.last_message_at)}
+              </span>
+
+              {/* Row 2: Preview (left) + Unread badge (right) */}
+              <div className="min-w-0 self-center">
+                <p className="text-xs text-primary-600 truncate">
+                  {thread.last_message_preview || 'No messages yet'}
+                </p>
+              </div>
+              <div className="self-center justify-self-end">
                 {thread.unread_count > 0 && (
-                  <span className="bg-primary-500 text-white text-xs rounded-full px-2 py-0.5 mt-1 min-w-[20px] text-center">
+                  <span className="bg-primary-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center inline-block">
                     {thread.unread_count > 99 ? '99+' : thread.unread_count}
                   </span>
                 )}
               </div>
             </div>
-
-            <p className="text-xs text-primary-600 line-clamp-2 leading-relaxed">
-              {thread.last_message_preview || 'No messages yet'}
-            </p>
           </div>
         ))}
       </div>

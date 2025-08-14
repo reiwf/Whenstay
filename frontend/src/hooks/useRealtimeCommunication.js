@@ -696,7 +696,7 @@ export function useRealtimeCommunication() {
       setLoading(true)
       
       // Load messages for the thread (includes real-time setup)
-      await loadMessages(thread.id)
+      const loadedMessages = await loadMessages(thread.id)
       
       // Load available channels
       await loadThreadChannels(thread.id)
@@ -708,16 +708,10 @@ export function useRealtimeCommunication() {
         setReservation(null)
       }
       
-      // Mark messages as read
-      if (thread.unread_count > 0) {
-        // Use a timeout to ensure messages are loaded first
-        setTimeout(async () => {
-          const currentMessages = messages
-          if (currentMessages.length > 0) {
-            const latestMessage = currentMessages[currentMessages.length - 1]
-            await markMessagesRead(thread.id, latestMessage.id)
-          }
-        }, 500)
+      // Mark messages as read using the loaded messages data
+      if (thread.unread_count > 0 && loadedMessages && loadedMessages.length > 0) {
+        const latestMessage = loadedMessages[loadedMessages.length - 1]
+        await markMessagesRead(thread.id, latestMessage.id)
       }
       
     } catch (error) {
@@ -725,7 +719,7 @@ export function useRealtimeCommunication() {
     } finally {
       setLoading(false)
     }
-  }, [loadMessages, loadThreadChannels, loadReservationDetails, markMessagesRead, messages])
+  }, [loadMessages, loadThreadChannels, loadReservationDetails, markMessagesRead])
 
   // Refresh current data
   const refresh = useCallback(async () => {

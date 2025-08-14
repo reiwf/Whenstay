@@ -19,7 +19,7 @@ const SidebarItem = ({ icon: Icon, label, active, collapsed, onClick, notificati
         
         {/* Notification badge */}
         {notificationCount > 0 && (
-          <span className={`absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 ${
+          <span className={`absolute -top-1 -right-1 bg-primary-500 text-white text-xs rounded-full min-w-[10px] h-4 flex items-center justify-center px-1 ${
             collapsed ? 'text-[10px]' : 'text-xs'
           }`}>
             {notificationCount > 99 ? '99+' : notificationCount}
@@ -31,12 +31,6 @@ const SidebarItem = ({ icon: Icon, label, active, collapsed, onClick, notificati
         <>
           <span className="truncate text-left ml-4">{label}</span>
           
-          {/* Show notification badge in expanded view as well */}
-          {notificationCount > 0 && (
-            <span className="ml-auto bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-2">
-              {notificationCount > 99 ? '99+' : notificationCount}
-            </span>
-          )}
           
           {active && notificationCount === 0 && (
             <div className="ml-auto w-2 h-2 bg-primary-600 rounded-full"></div>

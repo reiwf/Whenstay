@@ -78,6 +78,38 @@ export function useGlobalCommunication() {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message_deliveries'
+        },
+        (payload) => {
+          console.log('📨 Message delivery status updated globally:', payload.new.message_id, 'status:', payload.new.status)
+          
+          // If delivery status changes (especially to 'delivered' for new messages), reload unread count
+          if (payload.new.status === 'delivered' || payload.new.status === 'read') {
+            loadUnreadCount()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message_participants'
+        },
+        (payload) => {
+          console.log('📨 Message participant updated globally:', payload.new.thread_id, 'last_read_at:', payload.new.last_read_at)
+          
+          // If last_read_at is updated, reload unread count
+          if (payload.new.last_read_at) {
+            loadUnreadCount()
+          }
+        }
+      )
       .subscribe((status) => {
         console.log('📡 Global unread count subscription status:', status)
       })
