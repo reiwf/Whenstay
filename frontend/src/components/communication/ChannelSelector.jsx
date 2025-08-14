@@ -6,7 +6,9 @@ const CHANNEL_CONFIG = {
   whatsapp: { label: 'WhatsApp', icon: '🟢', color: 'bg-green-100 text-green-800' },
   inapp: { label: 'In-App', icon: '💬', color: 'bg-blue-100 text-blue-800' },
   email: { label: 'Email', icon: '✉️', color: 'bg-purple-100 text-purple-800' },
-  sms: { label: 'SMS', icon: '📱', color: 'bg-yellow-100 text-yellow-800' }
+  sms: { label: 'SMS', icon: '📱', color: 'bg-yellow-100 text-yellow-800' },
+  airbnb: { label: 'Airbnb', icon: '🏠', color: 'bg-orange-100 text-orange-800' },
+  bookingcom: { label: 'Booking.com', icon: '🏠', color: 'bg-blue-100 text-blue-800' }
 };
 
 export default function ChannelSelector({ availableChannels, selectedChannel, onChannelChange }) {

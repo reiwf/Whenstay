@@ -77,7 +77,6 @@ const userRoutes = require('./routes/userRoutes');
 const cleaningRoutes = require('./routes/cleaningRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const guestRoutes = require('./routes/guest');
-const testRoutes = require('./routes/test');
 const communicationRoutes = require('./routes/communicationRoutes');
 
 // API routes
@@ -92,7 +91,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/cleaning', cleaningRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/guest', guestRoutes);
-app.use('/api/test', testRoutes);
 app.use('/api/communication', communicationRoutes);
 
 // Serve static files from frontend build

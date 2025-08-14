@@ -21,7 +21,7 @@ CREATE TABLE public.message_threads (
 CREATE TABLE public.thread_channels (
     id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     thread_id uuid NOT NULL REFERENCES public.message_threads(id) ON DELETE CASCADE,
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     external_thread_id text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -60,7 +60,7 @@ CREATE TABLE public.messages (
     parent_message_id uuid NULL REFERENCES public.messages(id) ON DELETE SET NULL,
     origin_role text NOT NULL CHECK (origin_role IN ('guest','host','assistant','system')),
     direction text NOT NULL CHECK (direction IN ('incoming','outgoing')),
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     content text NOT NULL,
     sent_at timestamptz NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -71,7 +71,7 @@ CREATE TABLE public.messages (
 CREATE TABLE public.message_deliveries (
     id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     message_id uuid NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     provider_message_id text NULL,
     status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','delivered','read','failed')),
     error_code text NULL,
@@ -108,7 +108,7 @@ CREATE TABLE public.message_attachments (
 CREATE TABLE public.message_templates (
     id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     name text NOT NULL,
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     language text NULL,
     content text NOT NULL,
     variables jsonb NULL,
@@ -128,7 +128,7 @@ CREATE TABLE public.automation_rules (
     offset_json jsonb NULL,
     property_id uuid NULL REFERENCES public.properties(id) ON DELETE SET NULL,
     template_id uuid NOT NULL REFERENCES public.message_templates(id),
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     filters jsonb NULL,
     options jsonb NULL,
     created_by uuid NULL REFERENCES public.user_profiles(id),
@@ -142,7 +142,7 @@ CREATE TABLE public.scheduled_messages (
     template_id uuid NOT NULL REFERENCES public.message_templates(id) ON DELETE RESTRICT,
     reservation_id uuid NULL REFERENCES public.reservations(id) ON DELETE SET NULL,
     rule_id uuid NULL REFERENCES public.automation_rules(id) ON DELETE SET NULL,
-    channel text NOT NULL CHECK (channel IN ('beds24','whatsapp','inapp','email','sms')),
+    channel text NOT NULL CHECK (channel IN ('airbnb','booking.com','whatsapp','inapp','email','sms')),
     run_at timestamptz NOT NULL,
     payload jsonb NULL,
     status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','canceled','failed')),

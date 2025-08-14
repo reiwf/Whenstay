@@ -3,6 +3,7 @@ const router = express.Router();
 const beds24Service = require('../services/beds24Service');
 const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
+const communicationService = require('../services/communicationService');
 const { adminAuth } = require('../middleware/auth');
 
 // Beds24 webhook endpoint
@@ -117,6 +118,125 @@ async function processWebhookEvent(eventType, webhookData) {
       // For unknown events, try to process as a new booking
       await handleNewBooking(webhookData);
   }
+
+  // Process messages if they exist in the webhook data
+  await processWebhookMessages(webhookData);
+}
+
+// Process messages from Beds24 webhook
+async function processWebhookMessages(webhookData) {
+  try {
+    const messages = webhookData.messages;
+    
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      console.log('No messages found in webhook data');
+      return;
+    }
+
+    console.log(`Processing ${messages.length} messages from webhook`);
+
+    // Get booking information to find the reservation
+    const booking = webhookData.booking || webhookData;
+    const beds24BookingId = booking.id || booking.beds24BookingId;
+    const apiSource = booking.apiSource || 'unknown';
+    const channel = apiSource.toLowerCase();
+
+    if (!beds24BookingId) {
+      console.error('Cannot process messages: No booking ID found in webhook data');
+      return;
+    }
+
+    // Find the reservation to get thread context
+    const reservation = await reservationService.getReservationByBeds24Id(beds24BookingId.toString());
+    
+    if (!reservation) {
+      console.error(`Cannot process messages: Reservation not found for Beds24 booking ID: ${beds24BookingId}`);
+      return;
+    }
+
+    // Find or create communication thread for this reservation
+    const thread = await communicationService.findOrCreateThreadByReservation(
+      reservation.id,
+      {
+        channels: [{ channel, external_thread_id: beds24BookingId.toString() }]
+      }
+    );
+
+    console.log(`Processing messages for thread: ${thread.id}, reservation: ${reservation.id}, channel: ${channel}`);
+
+    // Process each message
+    for (const message of messages) {
+      try {
+        await processIndividualMessage(message, thread.id, channel);
+      } catch (messageError) {
+        console.error('Error processing individual message:', {
+          messageId: message.id,
+          error: messageError.message
+        });
+        // Continue processing other messages even if one fails
+      }
+    }
+
+    console.log(`Successfully processed ${messages.length} messages for reservation ${reservation.id}`);
+
+  } catch (error) {
+    console.error('Error processing webhook messages:', error);
+    // Don't throw error to avoid breaking the main webhook processing
+  }
+}
+
+// Process an individual message from Beds24
+async function processIndividualMessage(message, threadId, channel) {
+  console.log('Processing message:', {
+    id: message.id,
+    source: message.source,
+    time: message.time,
+    read: message.read,
+    channel: channel,
+    content: message.message?.substring(0, 50) + '...'
+  });
+
+  // Map message source to origin role
+  const originRole = message.source === 'guest' ? 'guest' : 'host';
+
+  // Prepare message data for communication service
+  const messageData = {
+    thread_id: threadId,
+    channel: channel, // Use dynamic channel from apiSource
+    content: message.message || '',
+    origin_role: originRole,
+    provider_message_id: message.id.toString(),
+    read: message.read || false
+  };
+
+  // Add message timestamp if available
+  if (message.time) {
+    messageData.sent_at = message.time;
+  }
+
+  // Receive the message through communication service
+  const result = await communicationService.receiveMessage(messageData);
+
+  if (result.duplicate) {
+    console.log(`Message ${message.id} already exists, skipping`);
+    return;
+  }
+
+  // If message is marked as read, update delivery status
+  if (message.read) {
+    try {
+      await communicationService.updateDeliveryStatus(
+        result.id,
+        channel,
+        'read'
+      );
+      console.log(`Marked message ${result.id} as read`);
+    } catch (readError) {
+      console.error('Error updating message read status:', readError);
+    }
+  }
+
+  console.log(`Successfully processed message ${message.id} as message ${result.id}`);
 }
 
 // Handle new booking webhook

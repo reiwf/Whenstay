@@ -12,7 +12,9 @@ class CommunicationService {
       .from('message_threads')
       .insert({
         reservation_id: data.reservation_id || null,
-        subject: data.subject || 'New Conversation',
+        subject: data.reservation_id 
+          ? (data.subject || null)  // Let trigger handle it if reservation exists
+          : (data.subject || 'New Conversation'), // Fallback only if no reservation
         status: 'open'
       })
       .select()
@@ -573,7 +575,7 @@ class CommunicationService {
     // Create new thread
     return await this.createThread({
       reservation_id: reservationId,
-      subject: initialData.subject || `Reservation ${reservationId.slice(0, 8)}`,
+      subject: initialData.subject || null, // Let trigger handle it
       ...initialData
     });
   }
