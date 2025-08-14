@@ -170,20 +170,31 @@ export default function MessagePanel({
           </div>
         )}
 
-        <div className="space-y-4">
-          {messages.map((message, index) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              isConsecutive={
-                index > 0 && 
-                messages[index - 1].origin_role === message.origin_role &&
-                messages[index - 1].direction === message.direction &&
-                new Date(message.created_at) - new Date(messages[index - 1].created_at) < 5 * 60 * 1000 // 5 minutes
-              }
-              onMarkAsRead={onMarkAsRead}
-            />
-          ))}
+        <div className="space-y-1">
+          {messages.map((message, index) => {
+            // Helper function to format timestamp as HH:MM
+            const formatTimeKey = (timestamp) => {
+              const date = new Date(timestamp);
+              return date.toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+              });
+            };
+
+            // Determine if we should show timestamp for this message
+            const showTimestamp = index === 0 || 
+              formatTimeKey(message.created_at) !== formatTimeKey(messages[index - 1].created_at);
+
+            return (
+              <MessageBubble
+                key={`${message.id}-${index}`}
+                message={message}
+                showTimestamp={showTimestamp}
+                onMarkAsRead={onMarkAsRead}
+              />
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
       </div>

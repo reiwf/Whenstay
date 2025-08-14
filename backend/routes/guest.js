@@ -259,19 +259,18 @@ router.post('/:token/thread/messages', async (req, res) => {
       thread = { id: threadId };
     }
 
-    // Send the message using the existing send_message function
-    const { data: messageId, error: sendError } = await supabase.rpc('send_message', {
-      p_thread_id: thread.id,
-      p_channel: 'inapp',
-      p_content: content.trim(),
-      p_origin_role: 'guest',
-      p_parent_message_id: parent_message_id
+    // Send the message using the CommunicationService to ensure delivery tracking
+    const communicationService = require('../services/communicationService');
+    const message = await communicationService.sendMessage({
+      thread_id: thread.id,
+      channel: 'inapp',
+      content: content.trim(),
+      origin_role: 'guest',
+      parent_message_id: parent_message_id
     });
 
-    if (sendError) throw sendError;
-
-    // Get the complete message data to return
-    const { data: message, error: getMessageError } = await supabase
+    // Get the complete message data with delivery information
+    const { data: messageWithDeliveries, error: getMessageError } = await supabase
       .from('messages')
       .select(`
         id,
@@ -291,12 +290,12 @@ router.post('/:token/thread/messages', async (req, res) => {
           read_at
         )
       `)
-      .eq('id', messageId)
+      .eq('id', message.id)
       .single();
 
     if (getMessageError) throw getMessageError;
 
-    res.status(201).json({ message });
+    res.status(201).json({ message: messageWithDeliveries });
 
   } catch (error) {
     console.error('Error sending guest message:', error);

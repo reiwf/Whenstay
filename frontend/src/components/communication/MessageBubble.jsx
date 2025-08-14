@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Check, CheckCheck, AlertCircle, Clock, Bot, User } from 'lucide-react';
+import { Check, CheckCheck, AlertCircle, Clock } from 'lucide-react';
 
 const CHANNEL_ICONS = {
   beds24: '🛏️',
@@ -9,23 +9,15 @@ const CHANNEL_ICONS = {
   sms: '📱'
 };
 
-const ROLE_COLORS = {
-  guest: 'text-primary-600',
-  host: 'text-green-600',
-  assistant: 'text-purple-600',
-  system: 'text-gray-600'
-};
-
-export default function MessageBubble({ message, isConsecutive = false, onMarkAsRead }) {
+export default function MessageBubble({ message, showTimestamp = false, onMarkAsRead }) {
   const messageRef = useRef(null);
   const isIncoming = message.direction === 'incoming';
-  const isOutgoing = message.direction === 'outgoing';
   const isFromGuest = message.origin_role === 'guest';
   const isFromHost = message.origin_role === 'host' || message.origin_role === 'admin';
 
-  // Setup intersection observer to track when message becomes visible
+  // Setup intersection observer to track when guest messages become visible to admin
   useEffect(() => {
-    if (!messageRef.current || !onMarkAsRead || !isIncoming) return;
+    if (!messageRef.current || !onMarkAsRead || !isFromGuest || !isIncoming) return;
     
     const currentStatus = message.message_deliveries?.[0]?.status;
     if (currentStatus === 'read') return; // Already read
@@ -39,7 +31,7 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
               // Check if still visible and call mark as read
               const currentEntry = observer.takeRecords()[0] || entry;
               if (currentEntry.isIntersecting) {
-                onMarkAsRead(message.id);
+                onMarkAsRead(message.id, 'inapp');
               }
             }, 2000); // Wait 2 seconds before marking as read
           }
@@ -56,12 +48,14 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
     return () => {
       observer.disconnect();
     };
-  }, [message.id, message.message_deliveries, isIncoming, onMarkAsRead]);
+  }, [message.id, message.message_deliveries, isFromGuest, isIncoming, onMarkAsRead]);
 
-  const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
+  const formatTime24Hour = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { 
       hour: '2-digit', 
-      minute: '2-digit' 
+      minute: '2-digit',
+      hour12: false 
     });
   };
 
@@ -73,8 +67,6 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
   };
 
   const renderDeliveryIcon = () => {
-    if (isIncoming) return null;
-
     const status = getDeliveryStatus();
     switch (status) {
       case 'queued':
@@ -92,111 +84,72 @@ export default function MessageBubble({ message, isConsecutive = false, onMarkAs
     }
   };
 
-  const getRoleIcon = () => {
-    switch (message.origin_role) {
-      case 'guest':
-        return <User className="w-3 h-3" />;
-      case 'assistant':
-        return <Bot className="w-3 h-3" />;
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div ref={messageRef} className={`flex ${isFromHost ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[70%]`}>
-        {/* Message header (role/channel info) */}
-        {!isConsecutive && (
-          <div className={`flex items-center mb-1 text-xs text-gray-500 ${
-            isFromHost ? 'justify-end' : 'justify-start'
-          }`}>
-            <div className="flex items-center space-x-1">
-              {/* Channel icon */}
-              <span title={message.channel}>
-                {CHANNEL_ICONS[message.channel] || '📱'}
-              </span>
-              
-              {/* Role */}
-              <span className={`font-medium ${ROLE_COLORS[message.origin_role]}`}>
-                {message.origin_role}
-              </span>
-              
-              {/* Role icon */}
-              {getRoleIcon()}
-              
-              {/* Timestamp */}
-              <span className="ml-2">
-                {formatTimestamp(message.created_at)}
-              </span>
-            </div>
-          </div>
-        )}
+    <div className={`flex flex-col ${isFromHost ? 'items-end' : 'items-start'} ${showTimestamp ? 'mt-4' : 'mt-1'}`}>
+      {/* Timestamp - only show when showTimestamp is true */}
+      {showTimestamp && (
+        <div className={`text-xs text-gray-500 mb-1 ${isFromHost ? 'mr-2' : 'ml-2'}`}>
+          {formatTime24Hour(message.created_at)}
+        </div>
+      )}
 
-        {/* Message bubble */}
-        <div className={`rounded-2xl px-4 py-2 shadow-sm border text-sm ${
-          isFromHost
-            ? 'bg-primary-600 text-white border-primary-600'
-            : message.origin_role === 'assistant'
-            ? 'bg-purple-50 text-purple-900 border-purple-200'
-            : message.origin_role === 'system'
-            ? 'bg-gray-50 text-gray-800 border-gray-200'
-            : 'bg-white text-gray-900 border-gray-200'
-        } ${
-          isConsecutive 
-            ? isFromHost
-              ? 'rounded-tr-md'
-              : 'rounded-tl-md'
-            : ''
-        }`}>
-          {/* Message content */}
-          <div className="whitespace-pre-wrap leading-relaxed">
-            {message.content}
-          </div>
-
-          {/* Attachments */}
-          {message.message_attachments && message.message_attachments.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {message.message_attachments.map((attachment, index) => (
-                <div
-                  key={index}
-                  className={`text-xs p-2 rounded border ${
-                    isFromHost 
-                      ? 'bg-primary-500 border-primary-400' 
-                      : 'bg-gray-100 border-gray-200'
-                  }`}
-                >
-                  📎 {attachment.path.split('/').pop()}
-                  {attachment.size_bytes && (
-                    <span className="ml-1">
-                      ({(attachment.size_bytes / 1024).toFixed(1)}KB)
-                    </span>
-                  )}
-                </div>
-              ))}
+      {/* Message bubble container */}
+      <div className={`max-w-[70%] ${isFromHost ? 'items-end' : 'items-start'} flex flex-col`}>
+        {/* Message bubble with status indicator */}
+        <div className="relative">
+          <div 
+            ref={messageRef}
+            className={`rounded-2xl px-4 py-2 shadow-sm border text-sm relative ${
+              isFromHost
+                ? 'bg-primary-600 text-white border-primary-600 rounded-br-md'
+                : message.origin_role === 'assistant'
+                ? 'bg-purple-50 text-purple-900 border-purple-200 rounded-bl-md'
+                : message.origin_role === 'system'
+                ? 'bg-gray-50 text-gray-800 border-gray-200 rounded-bl-md'
+                : 'bg-white text-gray-900 border-gray-200 rounded-bl-md'
+            }`}
+          >
+            {/* Message content */}
+            <div className="whitespace-pre-wrap leading-relaxed">
+              {message.content}
             </div>
-          )}
 
-          {/* Message footer with delivery status */}
-          <div className={`flex items-center justify-between mt-1 text-xs ${
-            isFromHost ? 'text-primary-200' : 'text-gray-500'
-          }`}>
-            <div className="flex items-center space-x-1">
-              {/* Delivery status for host messages */}
-              {isFromHost && (
-                <div className="flex items-center space-x-1">
-                  {renderDeliveryIcon()}
-                  <span className="capitalize">{getDeliveryStatus()}</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Consecutive message timestamp */}
-            {isConsecutive && (
-              <span className="opacity-75">
-                {formatTimestamp(message.created_at)}
-              </span>
+            {/* Attachments */}
+            {message.message_attachments && message.message_attachments.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {message.message_attachments.map((attachment, index) => (
+                  <div
+                    key={index}
+                    className={`text-xs p-2 rounded border ${
+                      isFromHost 
+                        ? 'bg-primary-500 border-primary-400' 
+                        : 'bg-gray-100 border-gray-200'
+                    }`}
+                  >
+                    📎 {attachment.path.split('/').pop()}
+                    {attachment.size_bytes && (
+                      <span className="ml-1">
+                        ({(attachment.size_bytes / 1024).toFixed(1)}KB)
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
+
+            {/* Delivery status for outgoing messages - positioned at bottom right of bubble */}
+            {!isIncoming && (
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-sm">
+                {renderDeliveryIcon()}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Channel logo under the bubble */}
+        <div className="mt-2 flex justify-center">
+          <div className="text-sm opacity-60" title={`Channel: ${message.channel}`}>
+            {CHANNEL_ICONS[message.channel] || '📱'}
           </div>
         </div>
 

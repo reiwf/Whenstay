@@ -27,7 +27,7 @@ export default function GuestMessagePanel({ token, guestName }) {
     if (token) {
       initialize();
     }
-  }, [token]); // Removed initialize dependency to prevent re-runs
+  }, [token, initialize]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -135,16 +135,25 @@ export default function GuestMessagePanel({ token, guestName }) {
         )}
 
         {messages.map((message, index) => {
-          const isConsecutive = 
-            index > 0 && 
-            messages[index - 1].origin_role === message.origin_role &&
-            new Date(message.created_at) - new Date(messages[index - 1].created_at) < 5 * 60 * 1000; // 5 minutes
+          // Helper function to format timestamp as HH:MM
+          const formatTimeKey = (timestamp) => {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: false 
+            });
+          };
+
+          // Determine if we should show timestamp for this message
+          const showTimestamp = index === 0 || 
+            formatTimeKey(message.created_at) !== formatTimeKey(messages[index - 1].created_at);
 
           return (
             <GuestMessageBubble
-              key={message.id}
+              key={`${message.id}-${index}`}
               message={message}
-              isConsecutive={isConsecutive}
+              showTimestamp={showTimestamp}
               onMarkAsRead={markMessageAsRead}
             />
           );

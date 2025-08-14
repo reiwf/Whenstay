@@ -92,8 +92,10 @@ export function useGuestCommunication(token) {
           setMessages(prev => {
             const existingIndex = prev.findIndex(msg => msg.id === newMessage.id)
             if (existingIndex !== -1) {
-              // Silently skip duplicates (React Strict Mode behavior)
-              return prev
+              // Update existing message with new data (in case of partial updates)
+              const updated = [...prev]
+              updated[existingIndex] = { ...updated[existingIndex], ...newMessage }
+              return updated
             }
             
             // Only log successful additions to reduce noise
@@ -121,13 +123,37 @@ export function useGuestCommunication(token) {
           event: 'UPDATE', schema: 'public', table: 'message_deliveries'
         },
         (payload) => {
-          setMessages(prev => prev.map(msg => {
-            if (!msg.message_deliveries) return msg;
-            const updated = msg.message_deliveries.map(d =>
-              d.message_id === payload.new.message_id ? { ...d, ...payload.new } : d
-            );
-            return { ...msg, message_deliveries: updated };
-          }));
+          console.log('📱 Guest: Message delivery updated:', payload.new);
+          setMessages(prev => {
+            return prev.map(msg => {
+              if (msg.id === payload.new.message_id) {
+                const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+                  delivery.id === payload.new.id ? { ...delivery, ...payload.new } : delivery
+                ) || [payload.new];
+                return { ...msg, message_deliveries: updatedDeliveries };
+              }
+              return msg;
+            });
+          });
+        }
+      )
+      .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'message_deliveries'
+        },
+        (payload) => {
+          console.log('📱 Guest: New message delivery:', payload.new);
+          setMessages(prev => {
+            return prev.map(msg => {
+              if (msg.id === payload.new.message_id) {
+                const existingDeliveries = msg.message_deliveries || [];
+                const deliveryExists = existingDeliveries.some(d => d.id === payload.new.id);
+                if (!deliveryExists) {
+                  return { ...msg, message_deliveries: [...existingDeliveries, payload.new] };
+                }
+              }
+              return msg;
+            });
+          });
         }
       )
       .subscribe((status) => {

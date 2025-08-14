@@ -245,6 +245,9 @@ export const adminAPI = {
   markCommunicationMessagesRead: (threadId, lastMessageId) => 
     api.post(`/communication/threads/${threadId}/read`, { last_message_id: lastMessageId }),
   
+  markCommunicationMessageRead: (messageId, channel = 'inapp') => 
+    api.post(`/communication/messages/${messageId}/read`, { channel }),
+  
   getCommunicationTemplates: (params = {}) => 
     api.get('/communication/templates', { params }),
   

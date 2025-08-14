@@ -139,6 +139,33 @@ export function useCommunication() {
     }
   }, [])
 
+  // Mark individual message as read
+  const markMessageAsRead = useCallback(async (messageId, channel = 'inapp') => {
+    try {
+      await adminAPI.markCommunicationMessageRead(messageId, channel)
+      
+      // Update message delivery status in local state
+      setMessages(prev => 
+        prev.map(msg => {
+          if (msg.id === messageId) {
+            const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+              delivery.channel === channel 
+                ? { ...delivery, status: 'read', read_at: new Date().toISOString() }
+                : delivery
+            ) || []
+            return { ...msg, message_deliveries: updatedDeliveries }
+          }
+          return msg
+        })
+      )
+      
+      return true
+    } catch (error) {
+      console.error('Error marking message as read:', error)
+      return false
+    }
+  }, [])
+
   // Load message templates
   const loadTemplates = useCallback(async (params = {}) => {
     try {
@@ -267,6 +294,7 @@ export function useCommunication() {
     updateThreadStatus,
     loadThreadChannels,
     markMessagesRead,
+    markMessageAsRead,
     loadTemplates,
     scheduleMessage,
     createThread,

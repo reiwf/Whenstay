@@ -1,7 +1,16 @@
 import React, { useRef, useEffect } from 'react';
 import { CheckCircle, Clock, AlertCircle } from 'lucide-react';
 
-export default function GuestMessageBubble({ message, isConsecutive = false, onMarkAsRead }) {
+// Channel icons mapping
+const CHANNEL_ICONS = {
+  beds24: '🛏️',
+  whatsapp: '🟢', 
+  inapp: '💬',
+  email: '✉️',
+  sms: '📱'
+};
+
+export default function GuestMessageBubble({ message, showTimestamp = false, onMarkAsRead }) {
   const messageRef = useRef(null);
   const isFromGuest = message.origin_role === 'guest';
   const isFromAdmin = message.origin_role === 'host' || message.origin_role === 'admin';
@@ -41,19 +50,13 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
     };
   }, [message.id, message.message_deliveries, isFromAdmin, onMarkAsRead]);
 
-  const formatTime = (timestamp) => {
+  const formatTime24Hour = (timestamp) => {
     const date = new Date(timestamp);
-    const now = new Date();
-    const diffInMs = now - date;
-    const diffInHours = diffInMs / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) { // 7 days
-      return date.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    }
+    return date.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
   };
 
   const getDeliveryStatus = () => {
@@ -79,6 +82,10 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
       return { status: 'sent', icon: CheckCircle, color: 'text-primary-500' };
     }
     
+    if (delivery.status === 'sending') {
+      return { status: 'sending', icon: Clock, color: 'text-blue-500' };
+    }
+    
     return { status: 'pending', icon: Clock, color: 'text-primary-400' };
   };
 
@@ -86,44 +93,41 @@ export default function GuestMessageBubble({ message, isConsecutive = false, onM
   const StatusIcon = deliveryStatus.icon;
 
   return (
-    <div className={`flex ${isFromGuest ? 'justify-end' : 'justify-start'} ${isConsecutive ? 'mt-1' : 'mt-4'}`}>
-      <div className={`max-w-xs lg:max-w-md ${isFromGuest ? 'order-2' : 'order-1'}`}>
-        {/* Message bubble */}
-        <div 
-          ref={messageRef}
-          className={`
-            inline-block px-4 py-2 rounded-2xl shadow-sm
-            ${isFromGuest
-              ? 'bg-primary-600 text-white rounded-br-md'
-              : 'bg-white border border-primary-200 text-primary-900 rounded-bl-md'
-            }
-            ${!isConsecutive && isFromGuest ? 'rounded-br-md' : ''}
-            ${!isConsecutive && !isFromGuest ? 'rounded-bl-md' : ''}
-          `}
-        >
-          <p className="text-sm whitespace-pre-wrap break-words">
-            {message.content}
-          </p>
+    <div className={`flex flex-col ${isFromGuest ? 'items-end' : 'items-start'} ${showTimestamp ? 'mt-4' : 'mt-1'}`}>
+      {/* Timestamp - only show when showTimestamp is true */}
+      {showTimestamp && (
+        <div className={`text-xs text-primary-500 mb-1 ${isFromGuest ? 'mr-2' : 'ml-2'}`}>
+          {formatTime24Hour(message.created_at)}
         </div>
+      )}
 
-        {/* Timestamp and status */}
-        <div className={`flex items-center mt-1 space-x-1 ${isFromGuest ? 'justify-end' : 'justify-start'}`}>
-          <span className="text-xs text-primary-500">
-            {formatTime(message.created_at)}
-          </span>
-          
-          {/* Show delivery status only for guest messages */}
-          {isFromGuest && (
-            <StatusIcon className={`w-3 h-3 ${deliveryStatus.color}`} />
-          )}
-        </div>
+      {/* Message bubble container */}
+      <div className={`max-w-xs lg:max-w-md ${isFromGuest ? 'items-end' : 'items-start'} flex flex-col`}>
+        {/* Message bubble with status indicator */}
+        <div className="relative">
+          <div 
+            ref={messageRef}
+            className={`
+              inline-block px-4 py-2 rounded-2xl shadow-sm relative
+              ${isFromGuest
+                ? 'bg-primary-600 text-white rounded-br-md'
+                : 'bg-white border border-primary-200 text-primary-900 rounded-bl-md'
+              }
+            `}
+          >
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {message.content}
+            </p>
 
-        {/* Sender label for consecutive messages from different roles */}
-        {!isConsecutive && (
-          <div className={`text-xs text-primary-500 mt-1 ${isFromGuest ? 'text-right' : 'text-left'}`}>
-            {isFromGuest ? 'You' : isFromAdmin ? 'Support Team' : 'System'}
           </div>
-        )}
+        </div>
+
+        {/* Delivery status text under the bubble */}
+        <div className="flex justify-center">
+          <div className={`text-[0.625rem] ${deliveryStatus.color} opacity-75`}>
+            {deliveryStatus.status}
+          </div>
+        </div>
       </div>
     </div>
   );
