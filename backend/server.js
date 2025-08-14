@@ -9,8 +9,31 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.set('trust proxy', 1);
-// Security middleware
-app.use(helmet());
+
+// Security middleware with custom CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: [
+        "'self'",
+        "https://nwdsuuwlmockdqzxkkbm.supabase.co",
+        "https://api.staylabel.com"
+      ],
+      imgSrc: [
+        "'self'",
+        "https://nwdsuuwlmockdqzxkkbm.supabase.co",
+        "https://api.staylabel.com",
+        "data:"
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      scriptSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: []
+    }
+  }
+}));
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL || 'http://localhost:3000',

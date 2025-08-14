@@ -176,8 +176,8 @@ export default function GuestApp() {
     }
   }
 
-  const handleContactSupport = () => {
-    toast.success('Support contact feature coming soon!')
+  const handleContactcontact = () => {
+    toast.success('contact contact feature coming soon!')
   }
 
   const handleRevealAccessCode = async () => {
@@ -828,7 +828,7 @@ export default function GuestApp() {
     { id: 'overview', label: 'Room key', icon: Home },
     { id: 'reservation', label: 'Reservation', icon: FileText },
     { id: 'property', label: 'Property', icon: Building },
-    { id: 'documents', label: 'Support', icon: MessageCircle }
+    { id: 'documents', label: 'Contact', icon: MessageCircle }
   ]
 
   return (

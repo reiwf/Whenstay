@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Check, CheckCheck, AlertCircle, Clock } from 'lucide-react';
+import { Check, CheckCheck, AlertCircle, Clock, RotateCw } from 'lucide-react';
 
 const CHANNEL_ICONS = {
   beds24: '🛏️',
@@ -87,9 +87,9 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
       case 'queued':
         return <Clock className="w-3 h-3 text-gray-400" />;
       case 'sent':
-        return <Check className="w-3 h-3 text-gray-400" />;
+        return <RotateCw className="w-3 h-3 text-gray-400" />;
       case 'delivered':
-        return <CheckCheck className="w-3 h-3 text-gray-500" />;
+        return <Check className="w-3 h-3 text-gray-500" />;
       case 'read':
         return <CheckCheck className="w-3 h-3 text-primary-500" />;
       case 'failed':
@@ -151,23 +151,20 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
                 ))}
               </div>
             )}
-
-            {/* Delivery status for outgoing messages - positioned at bottom right of bubble */}
-            {!isIncoming && (
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-sm">
-                {renderDeliveryIcon()}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Channel logo under the bubble */}
-        <div className="mt-2 flex justify-center">
-          <div className="text-sm opacity-60" title={`Channel: ${message.channel}`}>
+       <div className="mt-2 flex items-center justify-center space-x-1 text-xs opacity-70">
+          <span title={`Channel: ${message.channel}`}>
             {CHANNEL_ICONS[message.channel] || '📱'}
-          </div>
-        </div>
+          </span>
 
+          {/* Separator */}
+          {!isIncoming && <span className="opacity-40">•</span>}
+
+          {/* Delivery status */}
+          {!isIncoming && renderDeliveryIcon()}
+        </div>
         {/* Parent message reference (for replies) */}
         {message.parent_message_id && (
           <div className={`mt-1 text-xs text-gray-500 ${

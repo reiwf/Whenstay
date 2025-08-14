@@ -122,12 +122,14 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
           </div>
         </div>
 
-        {/* Delivery status text under the bubble */}
-        <div className="flex justify-center">
-          <div className={`text-[0.625rem] ${deliveryStatus.color} opacity-75`}>
-            {deliveryStatus.status}
+        {/* Delivery status text under the bubble - only show for guest sent messages */}
+        {isFromGuest && (
+          <div className="flex justify-center">
+            <div className={`text-[0.625rem] ${deliveryStatus.color} opacity-75`}>
+              {deliveryStatus.status}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

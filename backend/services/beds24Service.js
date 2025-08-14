@@ -1,5 +1,7 @@
 const axios = require('axios');
-const databaseService = require('./databaseService');
+const propertyService = require('./propertyService');
+const roomService = require('./roomService');
+const reservationService = require('./reservationService');
 const { getTokyoToday } = require('./utils/dateUtils');
 
 class Beds24Service {
@@ -108,7 +110,7 @@ class Beds24Service {
   async findOrCreateProperty(beds24PropertyId) {
     try {
       // First try to find existing property
-      const existingProperty = await databaseService.findPropertyByBeds24Id(beds24PropertyId);
+      const existingProperty = await propertyService.findPropertyByBeds24Id(beds24PropertyId);
       if (existingProperty) {
         return existingProperty.id;
       }
@@ -124,7 +126,7 @@ class Beds24Service {
         isActive: true
       };
 
-      const newProperty = await databaseService.createProperty(propertyData);
+      const newProperty = await propertyService.createProperty(propertyData);
       return newProperty.id;
     } catch (error) {
       console.error('Error finding or creating property:', error);
@@ -136,7 +138,7 @@ class Beds24Service {
   async findOrCreateRoomType(beds24RoomTypeId, propertyId) {
     try {
       // First try to find existing room type
-      const existingRoomType = await databaseService.findRoomTypeByBeds24Id(beds24RoomTypeId);
+      const existingRoomType = await roomService.findRoomTypeByBeds24Id(beds24RoomTypeId);
       if (existingRoomType) {
         return existingRoomType.id;
       }
@@ -152,7 +154,7 @@ class Beds24Service {
         beds24RoomTypeId: beds24RoomTypeId
       };
 
-      const newRoomType = await databaseService.createRoomType(propertyId, roomTypeData);
+      const newRoomType = await roomService.createRoomType(propertyId, roomTypeData);
       return newRoomType.id;
     } catch (error) {
       console.error('Error finding or creating room type:', error);
@@ -164,7 +166,7 @@ class Beds24Service {
   async findOrCreateRoomUnit(beds24UnitId, roomTypeId) {
     try {
       // First try to find existing room unit by both room type and Beds24 unit ID
-      const existingRoomUnit = await databaseService.findRoomUnitByRoomTypeAndBeds24Id(roomTypeId, beds24UnitId);
+      const existingRoomUnit = await roomService.findRoomUnitByRoomTypeAndBeds24Id(roomTypeId, beds24UnitId);
       if (existingRoomUnit) {
         console.log(`Found existing room unit for Room Type: ${roomTypeId}, Beds24 Unit ID: ${beds24UnitId}`);
         return existingRoomUnit.id;
@@ -173,7 +175,7 @@ class Beds24Service {
       // If not found, create a new room unit
       console.log(`Creating placeholder room unit for Beds24 ID: ${beds24UnitId}`);
       try {
-        const roomUnit = await databaseService.createRoomUnit(roomTypeId, {
+        const roomUnit = await roomService.createRoomUnit(roomTypeId, {
           unitNumber: `Unit ${beds24UnitId}`,
           beds24UnitId: beds24UnitId,
           accessCode: 'TBD',
@@ -187,27 +189,11 @@ class Beds24Service {
           console.log(`Room unit already exists, searching for existing room unit with unit number: Unit ${beds24UnitId}`);
           
           try {
-            // Try to find room unit by room type and unit number using databaseService
-            const { data: existingUnits, error } = await databaseService.supabaseAdmin
-              .from('room_units')
-              .select('id')
-              .eq('room_type_id', roomTypeId)
-              .eq('unit_number', `Unit ${beds24UnitId}`);
-            
-            if (error) {
-              console.error('Error finding existing room unit:', error);
-            } else if (existingUnits && existingUnits.length > 0) {
-              console.log(`Found existing room unit by type and number: ${existingUnits[0].id}`);
-              return existingUnits[0].id;
-            }
-            
-            // If still not found, try a more general search for any room unit with this beds24UnitId
-            const allRoomUnits = await databaseService.getAllRoomUnits();
-            for (const unit of allRoomUnits) {
-              if (unit.beds24_unit_id === beds24UnitId) {
-                console.log(`Found existing room unit by beds24_unit_id: ${unit.id}`);
-                return unit.id;
-              }
+            // Try to find room unit by Beds24 unit ID directly
+            const existingUnit = await roomService.findRoomUnitByBeds24Id(beds24UnitId);
+            if (existingUnit) {
+              console.log(`Found existing room unit by beds24_unit_id: ${existingUnit.id}`);
+              return existingUnit.id;
             }
           } catch (searchError) {
             console.error('Error searching for existing room unit:', searchError);
