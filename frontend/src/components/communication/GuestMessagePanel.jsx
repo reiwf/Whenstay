@@ -151,7 +151,7 @@ export default function GuestMessagePanel({ token, guestName }) {
 
           return (
             <GuestMessageBubble
-              key={`${message.id}-${index}`}
+              key={message.id}
               message={message}
               showTimestamp={showTimestamp}
               onMarkAsRead={markMessageAsRead}

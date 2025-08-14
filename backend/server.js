@@ -18,7 +18,9 @@ app.use(helmet({
       connectSrc: [
         "'self'",
         "https://nwdsuuwlmockdqzxkkbm.supabase.co",
-        "https://api.staylabel.com"
+        "wss://nwdsuuwlmockdqzxkkbm.supabase.co",
+        "https://api.staylabel.com",
+        "wss://api.staylabel.com"
       ],
       imgSrc: [
         "'self'",

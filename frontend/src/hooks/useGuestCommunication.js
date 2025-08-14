@@ -20,6 +20,7 @@ export function useGuestCommunication(token) {
   const messageListRef = useRef(null)
   const currentSubscriptionThreadId = useRef(null)
   const currentThreadSubscriptionId = useRef(null)
+  const processedMessageIds = useRef(new Set())
 
   // Auto-scroll to bottom of messages
   const scrollToBottom = useCallback((smooth = true) => {
@@ -89,12 +90,36 @@ export function useGuestCommunication(token) {
             return
           }
 
+          // Skip if we've already processed this message
+          if (processedMessageIds.current.has(newMessage.id)) {
+            console.log('🔄 Guest: Skipping duplicate message:', newMessage.id)
+            return
+          }
+
+          // Mark as processed
+          processedMessageIds.current.add(newMessage.id)
+
           setMessages(prev => {
             const existingIndex = prev.findIndex(msg => msg.id === newMessage.id)
             if (existingIndex !== -1) {
               // Update existing message with new data (in case of partial updates)
               const updated = [...prev]
               updated[existingIndex] = { ...updated[existingIndex], ...newMessage }
+              return updated
+            }
+            
+            // Check if this message already exists (including temporary IDs)
+            const duplicateIndex = prev.findIndex(msg => 
+              msg.content === newMessage.content && 
+              msg.thread_id === newMessage.thread_id &&
+              msg.origin_role === newMessage.origin_role &&
+              Math.abs(new Date(msg.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 5000 // Within 5 seconds
+            )
+            
+            if (duplicateIndex !== -1) {
+              // Replace the duplicate (likely a temp message) with the real one
+              const updated = [...prev]
+              updated[duplicateIndex] = newMessage
               return updated
             }
             
@@ -254,11 +279,13 @@ export function useGuestCommunication(token) {
   const sendMessage = useCallback(async (content, parentMessageId = null) => {
     if (!token || !content?.trim()) return null
 
+    let optimisticMessage = null
+
     try {
       setSending(true)
       
       // Optimistic update - add message immediately
-      const optimisticMessage = {
+      optimisticMessage = {
         id: `temp_${Date.now()}`,
         thread_id: thread?.id,
         content: content.trim(),
@@ -283,6 +310,9 @@ export function useGuestCommunication(token) {
 
       const newMessage = data.message
       
+      // Mark this message as processed to prevent real-time duplicate
+      processedMessageIds.current.add(newMessage.id)
+      
       // Replace optimistic message with real one
       setMessages(prev => 
         prev.map(msg => 
@@ -302,8 +332,10 @@ export function useGuestCommunication(token) {
       toast.success('Message sent successfully')
       return newMessage
     } catch (error) {
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+      // Remove optimistic message on error (only if it was created)
+      if (optimisticMessage) {
+        setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+      }
       
       console.error('Error sending message:', error)
       toast.error('Failed to send message')
