@@ -330,11 +330,14 @@ export function useRealtimeCommunication() {
 
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (threadId, messageData) => {
+    // Declare optimisticMessage in the outer scope so it's accessible in catch block
+    let optimisticMessage = null;
+    
     try {
       const currentTime = new Date().toISOString()
       
       // Optimistic update - add message immediately
-      const optimisticMessage = {
+      optimisticMessage = {
         id: `temp_${Date.now()}`,
         thread_id: threadId,
         content: messageData.content,
@@ -406,36 +409,39 @@ export function useRealtimeCommunication() {
       toast.success('Message sent successfully')
       return newMessage
     } catch (error) {
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+      console.error('Error sending message:', error)
       
-      // Revert optimistic thread update on error
-      setThreads(prev => {
-        const updated = prev.map(thread => {
-          if (thread.id === threadId) {
-            // Find the previous message to restore metadata
-            const threadMessages = messages.filter(msg => msg.thread_id === threadId && msg.id !== optimisticMessage.id)
-            const lastMessage = threadMessages[threadMessages.length - 1]
-            
-            if (lastMessage) {
-              return {
-                ...thread,
-                last_message_at: lastMessage.created_at,
-                last_message_preview: lastMessage.content.substring(0, 160),
+      // Remove optimistic message on error (only if it was created)
+      if (optimisticMessage) {
+        setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+        
+        // Revert optimistic thread update on error
+        setThreads(prev => {
+          const updated = prev.map(thread => {
+            if (thread.id === threadId) {
+              // Find the previous message to restore metadata
+              const threadMessages = messages.filter(msg => msg.thread_id === threadId && msg.id !== optimisticMessage.id)
+              const lastMessage = threadMessages[threadMessages.length - 1]
+              
+              if (lastMessage) {
+                return {
+                  ...thread,
+                  last_message_at: lastMessage.created_at,
+                  last_message_preview: lastMessage.content.substring(0, 160),
+                }
               }
             }
-          }
-          return thread
+            return thread
+          })
+          
+          return updated.sort((a, b) => {
+            const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+            const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+            return bTime - aTime;
+          });
         })
-        
-        return updated.sort((a, b) => {
-          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-          return bTime - aTime;
-        });
-      })
+      }
       
-      console.error('Error sending message:', error)
       toast.error('Failed to send message')
       throw error
     }

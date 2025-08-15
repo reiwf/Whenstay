@@ -3,23 +3,133 @@ const propertyService = require('./propertyService');
 const roomService = require('./roomService');
 const reservationService = require('./reservationService');
 const { getTokyoToday } = require('./utils/dateUtils');
+const { supabaseAdmin } = require('../config/supabase');
 
 class Beds24Service {
   constructor() {
-    this.apiKey = process.env.BEDS24_REFRESH_TOKEN;
-    this.propKey = process.env.BEDS24_REFRESH_TOKEN;
+    this.propKey = process.env.BEDS24_PROPKEY;
     this.baseURL = 'https://api.beds24.com/v2';
+    this.supabase = supabaseAdmin;
     
-    if (!this.apiKey || !this.propKey) {
-      throw new Error('Missing Beds24 API credentials');
+    if (!this.propKey) {
+      throw new Error('Missing Beds24 PROPKEY credential');
     }
   }
 
-  // Get headers for Beds24 API requests
-  getHeaders() {
+  // Get stored authentication data from database
+  async getStoredAuth() {
+    const { data, error } = await this.supabase
+      .from('beds24_auth')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      throw new Error('No Beds24 authentication data found in database');
+    }
+
+    return data;
+  }
+
+  // Store updated authentication data to database
+  async storeAuth(authData) {
+    const { error } = await this.supabase
+      .from('beds24_auth')
+      .upsert({
+        id: 1, // Single row for auth data
+        access_token: authData.access_token,
+        refresh_token: authData.refresh_token,
+        expires_at: authData.expires_at,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Error storing Beds24 auth data:', error);
+      throw new Error('Failed to store Beds24 authentication data');
+    }
+  }
+
+  // Check if access token is expiring within the next hour
+  isTokenExpiring(expiresAt) {
+    if (!expiresAt) return true;
+    const expiryTime = new Date(expiresAt);
+    const nowPlusHour = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    return expiryTime <= nowPlusHour;
+  }
+
+  // Refresh access token using refresh token
+  async refreshAccessToken() {
+    try {
+      const auth = await this.getStoredAuth();
+      
+      if (!auth.refresh_token) {
+        throw new Error('No refresh token available');
+      }
+
+      console.log('🔄 Refreshing Beds24 access token...');
+
+      const response = await axios.post(`${this.baseURL}/authentication/token`, {
+        refreshToken: auth.refresh_token
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Process the response based on the format you provided
+      const newAuthData = {
+        access_token: response.data.token,
+        refresh_token: response.data.refreshToken, // New 30-day refresh token
+        expires_at: new Date(Date.now() + (response.data.expiresIn * 1000)) // expiresIn is in seconds
+      };
+
+      // Store the new tokens
+      await this.storeAuth(newAuthData);
+
+      console.log('✅ Beds24 access token refreshed successfully', {
+        expiresAt: newAuthData.expires_at,
+        expiresIn: response.data.expiresIn
+      });
+
+      return newAuthData.access_token;
+
+    } catch (error) {
+      console.error('❌ Failed to refresh Beds24 access token:', {
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      });
+      throw new Error(`Failed to refresh Beds24 access token: ${error.message}`);
+    }
+  }
+
+  // Get valid access token (refresh if needed)
+  async getValidAccessToken() {
+    try {
+      const auth = await this.getStoredAuth();
+
+      // Check if we have an access token and it's not expiring soon
+      if (auth.access_token && !this.isTokenExpiring(auth.expires_at)) {
+        return auth.access_token;
+      }
+
+      // Token is missing or expiring, refresh it
+      console.log('🔄 Access token missing or expiring, refreshing...');
+      return await this.refreshAccessToken();
+
+    } catch (error) {
+      console.error('Error getting valid access token:', error);
+      throw error;
+    }
+  }
+
+  // Get headers for Beds24 API requests with valid access token
+  async getHeaders() {
+    const accessToken = await this.getValidAccessToken();
+    
     return {
       'Content-Type': 'application/json',
-      'token': this.apiKey,
+      'token': accessToken, // Now uses access token instead of refresh token
       'propkey': this.propKey
     };
   }
@@ -34,13 +144,34 @@ class Beds24Service {
         ...params
       };
 
+      const headers = await this.getHeaders();
       const response = await axios.get(`${this.baseURL}/bookings`, {
-        headers: this.getHeaders(),
+        headers: headers,
         params: defaultParams
       });
 
       return response.data;
     } catch (error) {
+      // Handle authentication errors by attempting token refresh
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        try {
+          console.log('🔄 Authentication failed, attempting token refresh...');
+          await this.refreshAccessToken();
+          
+          // Retry the request with new token
+          const headers = await this.getHeaders();
+          const response = await axios.get(`${this.baseURL}/bookings`, {
+            headers: headers,
+            params: defaultParams
+          });
+
+          return response.data;
+        } catch (retryError) {
+          console.error('Failed to retry after token refresh:', retryError);
+          throw retryError;
+        }
+      }
+
       console.error('Error fetching bookings from Beds24:', error.response?.data || error.message);
       throw new Error('Failed to fetch bookings from Beds24');
     }
@@ -49,12 +180,32 @@ class Beds24Service {
   // Get a specific booking by ID
   async getBooking(bookingId) {
     try {
+      const headers = await this.getHeaders();
       const response = await axios.get(`${this.baseURL}/booking/${bookingId}`, {
-        headers: this.getHeaders()
+        headers: headers
       });
 
       return response.data;
     } catch (error) {
+      // Handle authentication errors by attempting token refresh
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        try {
+          console.log('🔄 Authentication failed, attempting token refresh...');
+          await this.refreshAccessToken();
+          
+          // Retry the request with new token
+          const headers = await this.getHeaders();
+          const response = await axios.get(`${this.baseURL}/booking/${bookingId}`, {
+            headers: headers
+          });
+
+          return response.data;
+        } catch (retryError) {
+          console.error('Failed to retry after token refresh:', retryError);
+          throw retryError;
+        }
+      }
+
       console.error('Error fetching booking from Beds24:', error.response?.data || error.message);
       throw new Error('Failed to fetch booking from Beds24');
     }
@@ -324,26 +475,114 @@ class Beds24Service {
     }
   }
 
-  // Sync bookings (fallback method)
-  async syncRecentBookings(daysBack = 7) {
-    try {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - daysBack);
-      
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 30); // Next 30 days
-      
-      const bookings = await this.getBookings({
-        checkIn: startDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' }),
-        checkOut: endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
-      });
 
-      return bookings.map(booking => this.processWebhookData({ booking }));
-    } catch (error) {
-      console.error('Error syncing recent bookings:', error);
-      throw error;
+  // message through Beds24 API to Airbnb -- This is working 
+async sendMessage(beds24BookingId, content, options = {}) {
+  // 1) Validate input early
+  const text = (content ?? '').toString().trim();
+  if (!text) {
+    throw new Error('Bad request: message cannot be empty');
+  }
+
+  try {
+    const headers = await this.getHeaders(); // { token, propkey, Content-Type }
+    if (options.messageId) headers['X-Idempotency-Key'] = options.messageId;
+
+    const url = `${this.baseURL}/bookings/messages`;
+
+    // 2) MUST be an array, and MUST use `message` key
+    const body = [
+      {
+        bookingId: beds24BookingId,
+        message: text,          // <-- key change fixes "no message"
+        // externalId: options.messageId, // optional if Beds24 supports idempotency by item
+      }
+    ];
+
+    const res = await axios.post(url, body, { headers });
+
+    const results = Array.isArray(res.data) ? res.data : [res.data];
+    console.log('Beds24 raw results:\n', JSON.stringify(results, null, 2));
+    const first = results[0] ?? {};
+
+    if (first.success !== true) {
+      const errs = (first.errors || []).map(e => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)));
+      const msg = errs.length ? errs.join('; ') : 'Unknown Beds24 messaging error';
+      console.error('Beds24 messaging failed:', { bookingId: beds24BookingId, messageId: options.messageId, results });
+      const err = new Error(`Beds24 rejected message: ${msg}`);
+      err.code = 'UPSTREAM_REJECTED';
+      err.details = results;
+      throw err;
     }
+
+    console.log('Message sent successfully via Beds24:', {
+      bookingId: beds24BookingId,
+      messageId: options.messageId,
+      response: results
+    });
+
+    return {
+      success: true,
+      beds24MessageId: first.messageId || first.id,
+      data: results
+    };
+
+  } catch (error) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.log('🔄 Authentication failed when sending message, attempting token refresh...');
+      await this.refreshAccessToken();
+      return this.sendMessage(beds24BookingId, text, options);
+    }
+
+    console.error('Error sending message via Beds24:', {
+      bookingId: beds24BookingId,
+      error: error.response?.data || error.message,
+      status: error.response?.status,
+      headers: error.response?.headers,
+      url: error.config?.url
+    });
+
+    const status = error.response?.status;
+    const responseData = error.response?.data;
+    let errorMessage = 'Failed to send message via Beds24';
+
+    if (status === 400) errorMessage = `Bad request: ${responseData?.message || responseData?.error || 'Invalid message data'}`;
+    else if (status === 401) errorMessage = `401 Unauthorized: ${responseData?.message || 'Authentication failed - token may be invalid'}`;
+    else if (status === 403) errorMessage = `403 Not authorized to send messages for this booking: ${responseData?.message || 'Insufficient permissions'}`;
+    else if (status === 404) errorMessage = `Booking not found in Beds24: ${responseData?.message || 'Invalid bookingId'}`;
+    else if (status === 429) errorMessage = `429 Rate limit exceeded, please try again later: ${responseData?.message || 'Too many requests'}`;
+    else if (status >= 500 && status < 600) errorMessage = `${status} Beds24 server error: ${responseData?.message || responseData?.error || 'Could not process request'}`;
+    else if (responseData?.message) errorMessage = `${status || 'Unknown'} API Error: ${responseData.message}`;
+    else if (responseData?.error) errorMessage = `${status || 'Unknown'} API Error: ${responseData.error}`;
+    else if (error.code === 'UPSTREAM_REJECTED') errorMessage = `Bad request: ${error.message.replace(/^Beds24 rejected message:\s*/, '')}`;
+
+    throw new Error(errorMessage);
   }
 }
+
+
+
+
+    // Sync bookings (fallback method)
+    async syncRecentBookings(daysBack = 7) {
+      try {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysBack);
+        
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 30); // Next 30 days
+        
+        const bookings = await this.getBookings({
+          checkIn: startDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' }),
+          checkOut: endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
+        });
+
+        return bookings.map(booking => this.processWebhookData({ booking }));
+      } catch (error) {
+        console.error('Error syncing recent bookings:', error);
+        throw error;
+      }
+    }
+  }
 
 module.exports = new Beds24Service();

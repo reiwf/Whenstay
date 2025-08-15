@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MessageBubble from '../components/communication/MessageBubble';
 
 // Mock data for demonstration
 const mockThreads = [
@@ -7,14 +8,14 @@ const mockThreads = [
     subject: 'Welcome to Tokyo Apartment',
     status: 'open',
     last_message_at: '2025-01-08T14:30:00Z',
-    last_message_preview: 'Hello! Welcome to your stay...'
+    last_message_preview: 'Guest has successfully received key pickup instructions with photo guidance...'
   },
   {
     id: '2', 
     subject: 'Osaka Business Hotel - Room 301',
     status: 'open',
-    last_message_at: '2025-01-08T12:15:00Z',
-    last_message_preview: 'Thank you for the quick response...'
+    last_message_at: '2025-01-08T12:45:00Z',
+    last_message_preview: 'Also, I noticed a small issue with the bathroom door. Here\'s a photo:'
   }
 ];
 
@@ -27,7 +28,8 @@ const mockMessages = {
       direction: 'incoming',
       channel: 'whatsapp',
       content: 'Hello! I will be arriving at 3 PM. Is early check-in possible?',
-      created_at: '2025-01-08T14:00:00Z'
+      created_at: '2025-01-08T14:00:00Z',
+      message_deliveries: [{ status: 'read', read_at: '2025-01-08T14:02:00Z' }]
     },
     {
       id: '2',
@@ -36,7 +38,8 @@ const mockMessages = {
       direction: 'outgoing',
       channel: 'whatsapp',
       content: 'Hello! Yes, early check-in is available. Please let us know when you arrive at the building.',
-      created_at: '2025-01-08T14:05:00Z'
+      created_at: '2025-01-08T14:05:00Z',
+      message_deliveries: [{ status: 'delivered', delivered_at: '2025-01-08T14:05:30Z' }]
     },
     {
       id: '3',
@@ -44,37 +47,74 @@ const mockMessages = {
       origin_role: 'guest',
       direction: 'incoming',
       channel: 'whatsapp',
-      content: 'Thank you! I am here now. How do I get the keys?',
-      created_at: '2025-01-08T14:25:00Z'
+      content: 'Thank you! I am here now. How do I get the keys? <a href="https://a0.muscache.com/im/pictures-signed/messaging/Messaging-2258135412/original/440e1fec-c277-42bb-8360-bcf1502cbdce.jpeg?X-Amz-Security-Token=IQoJb3JpZ2luX2VjEBIaCXVzLWVhc3QtMSJFMEMCICtZbGgSsLEyz3GOXpTOOJawQ%2BxKFTmUyROrMpqfnqcxAh9txrQu3E0HAJBRzACoRlMDDViXYWAHRRuTbpFTeaLpKu8DCFoQABoMMTcyNjMxNDQ4MDE5IgyYh0alhYfGA4ZbAG8qzAMldFXCpEXZz6Ic8m%2F4mHawgM7Q4keIQpoQF1h9fxQX3hTGVr1yvBPqWM0i0XNHgtZLjotvSbEEBlVsSpJdrV2wVts5THpbjb5NaKr3DoUQkiVEe8VIs53cg4tl%2Fb6NTkfg2Dd2P5Ta5iAqGvmOdD5%2BVk04NiCPNGPT4I8hx40naIZAM68JoUPhFBpYanW1v%2B34wl3qL%2B5ZoXuGk7UBj33hpy2i1Hz%2FPMzUhCkbpryK2sHFd7nUxI3LSOT%2F1lOpkpFArzyBY2yZ9NYDn9YXjkpDZTp7VlDu8BzgXt0hJoWO5fVjnglgiOJK5TSA37hJNvPIfUA2k0RqPTs8GoNjXAKalsBSW1Mkb0vmQRblZwcpsV6sRhEmNbxd8%2Fer9iPrSzOmfJtYjxGu%2BYzM3Qmtf81KoviEttBV7n6RhdRTWX7XcovaeGeMfTmP0DH5TFu4lt9q3BWbV1gc6v6XfSc2DWvbRTqaYT2wdIWbkyTdSL6xriWyD1swVQvflxcztLuhJ%2BjKGSsaS1YMz1z1ktGY9xUzKoq8plXFNJzPh478YYNgCvwSQwT4Z7By2cWnCyY0xSVwNqePEqfQzjs2lGKzmNsTyufENidbhfi6kjNFMP%2F1%2B8QGOpYB9thXpl337zakigdDTWHCZhA7%2FPyoy7NyWVGJXroKU%2FDdEO0LysZWQsleWbtA1MyAsUgw9rGwNWp0%2FY8jtJXfaKldOCRWlNFjEhowN4eONY2FQS8ILFxoquaXxuXxhmVqW2GMGOb4WfSMSHleKJE8oAbFS5PmOEWRWra3rKZkGlZjT13zpl14rvtrJaYCT2vqDSV3ial9&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20250815T100228Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIASQMNC3HJUT7VDKES%2F20250815%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3600&X-Amz-Signature=2b62ef28682b40cc6fb2c4f15f5c2144d9753ed2b9636b617a994307d9fc1e61&im_w=1200" target="_blank"><img src="https://a0.muscache.com/im/pictures-signed/messaging/Messaging-2258135412/original/440e1fec-c277-42bb-8360-bcf1502cbdce.jpeg?X-Amz-Security-Token=IQoJb3JpZ2luX2VjEBIaCXVzLWVhc3QtMSJFMEMCICtZbGgSsLEyz3GOXpTOOJawQ%2BxKFTmUyROrMpqfnqcxAh9txrQu3E0HAJBRzACoRlMDDViXYWAHRRuTbpFTeaLpKu8DCFoQABoMMTcyNjMxNDQ4MDE5IgyYh0alhYfGA4ZbAG8qzAMldFXCpEXZz6Ic8m%2F4mHawgM7Q4keIQpoQF1h9fxQX3hTGVr1yvBPqWM0i0XNHgtZLjotvSbEEBlVsSpJdrV2wVts5THpbjb5NaKr3DoUQkiVEe8VIs53cg4tl%2Fb6NTkfg2Dd2P5Ta5iAqGvmOdD5%2BVk04NiCPNGPT4I8hx40naIZAM68JoUPhFBpYanW1v%2B34wl3qL%2B5ZoXuGk7UBj33hpy2i1Hz%2FPMzUhCkbpryK2sHFd7nUxI3LSOT%2F1lOpkpFArzyBY2yZ9NYDn9YXjkpDZTp7VlDu8BzgXt0hJoWO5fVjnglgiOJK5TSA37hJNvPIfUA2k0RqPTs8GoNjXAKalsBSW1Mkb0vmQRblZwcpsV6sRhEmNbxd8%2Fer9iPrSzOmfJtYjxGu%2BYzM3Qmtf81KoviEttBV7n6RhdRTWX7XcovaeGeMfTmP0DH5TFu4lt9q3BWbV1gc6v6XfSc2DWvbRTqaYT2wdIWbkyTdSL6xriWyD1swVQvflxcztLuhJ%2BjKGSsaS1YMz1z1ktGY9xUzKoq8plXFNJzPh478YYNgCvwSQwT4Z7By2cWnCyY0xSVwNqePEqfQzjs2lGKzmNsTyufENidbhfi6kjNFMP%2F1%2B8QGOpYB9thXpl337zakigdDTWHCZhA7%2FPyoy7NyWVGJXroKU%2FDdEO0LysZWQsleWbtA1MyAsUgw9rGwNWp0%2FY8jtJXfaKldOCRWlNFjEhowN4eONY2FQS8ILFxoquaXxuXxhmVqW2GMGOb4WfSMSHleKJE8oAbFS5PmOEWRWra3rKZkGlZjT13zpl14rvtrJaYCT2vqDSV3ial9&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20250815T100228Z&X-Amz-SignedHeaders=host&X-Amz-Credential=ASIASQMNC3HJUT7VDKES%2F20250815%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3600&X-Amz-Signature=2b62ef28682b40cc6fb2c4f15f5c2144d9753ed2b9636b617a994307d9fc1e61&im_w=1200" style="height:100px"></a>',
+      created_at: '2025-01-08T14:25:00Z',
+      message_deliveries: [{ status: 'read', read_at: '2025-01-08T14:26:00Z' }]
     },
     {
       id: '4',
       thread_id: '1',
+      origin_role: 'host',
+      direction: 'outgoing',
+      channel: 'whatsapp',
+      content: 'Perfect! I can see you\'re at the right entrance. The key lockbox is located to the right of the main door. Here\'s what it looks like:',
+      created_at: '2025-01-08T14:28:00Z',
+      message_deliveries: [{ status: 'delivered', delivered_at: '2025-01-08T14:28:15Z' }],
+      message_attachments: [
+        {
+          path: 'https://images.unsplash.com/photo-1582719188393-bb71ca45dbb9?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+          content_type: 'image/jpeg',
+          size_bytes: 89234
+        }
+      ]
+    },
+    {
+      id: '5',
+      thread_id: '1',
       origin_role: 'assistant',
       direction: 'outgoing',
       channel: 'inapp',
-      content: 'Guest has arrived and is requesting key pickup instructions. Please respond.',
+      content: 'Guest has successfully received key pickup instructions with photo guidance. Check-in is proceeding smoothly.',
       created_at: '2025-01-08T14:30:00Z'
     }
   ],
   '2': [
     {
-      id: '5',
+      id: '6',
       thread_id: '2',
       origin_role: 'guest',
       direction: 'incoming',
       channel: 'email',
       content: 'I need to extend my stay by one more night. Is this possible?',
-      created_at: '2025-01-08T12:00:00Z'
+      created_at: '2025-01-08T12:00:00Z',
+      message_deliveries: [{ status: 'read', read_at: '2025-01-08T12:02:00Z' }]
     },
     {
-      id: '6',
+      id: '7',
       thread_id: '2',
       origin_role: 'host',
       direction: 'outgoing',
       channel: 'email',
       content: 'Let me check availability for you. I will get back to you within an hour.',
-      created_at: '2025-01-08T12:15:00Z'
+      created_at: '2025-01-08T12:15:00Z',
+      message_deliveries: [{ status: 'delivered', delivered_at: '2025-01-08T12:15:45Z' }]
+    },
+    {
+      id: '8',
+      thread_id: '2',
+      origin_role: 'guest',
+      direction: 'incoming',
+      channel: 'whatsapp',
+      content: 'Also, I noticed a small issue with the bathroom door. Here\'s a photo:',
+      created_at: '2025-01-08T12:45:00Z',
+      message_deliveries: [{ status: 'delivered', delivered_at: '2025-01-08T12:45:10Z' }],
+      message_attachments: [
+        {
+          path: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+          content_type: 'image/jpeg',
+          size_bytes: 124567
+        }
+      ]
     }
   ]
 };
@@ -213,24 +253,17 @@ export default function MessagingDemo() {
           {selectedThread && messages.length === 0 && (
             <div className="text-sm text-neutral-500">No messages yet</div>
           )}
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.direction === 'incoming' ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm border text-sm ${
-                m.direction === 'incoming' 
-                  ? 'bg-white border-neutral-200' 
-                  : m.origin_role === 'assistant'
-                  ? 'bg-purple-50 border-purple-100'
-                  : 'bg-blue-50 border-blue-100'
-              }`}>
-                <div className="flex items-center gap-1 text-xs text-neutral-500 mb-1">
-                  <span>{CHANNEL_ICONS[m.channel]}</span>
-                  <span className="capitalize">{m.origin_role}</span>
-                  <span className="text-neutral-400">•</span>
-                  <span>{new Date(m.created_at).toLocaleTimeString()}</span>
-                </div>
-                <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
-              </div>
-            </div>
+          {messages.map((m, index) => (
+            <MessageBubble 
+              key={m.id} 
+              message={m} 
+              showTimestamp={index === 0 || (index > 0 && 
+                new Date(m.created_at).getTime() - new Date(messages[index - 1].created_at).getTime() > 300000
+              )}
+              onMarkAsRead={(messageId, channel) => {
+                console.log(`Demo: Would mark message ${messageId} as read on ${channel}`);
+              }}
+            />
           ))}
         </div>
 

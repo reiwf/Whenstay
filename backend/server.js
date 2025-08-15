@@ -128,6 +128,20 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 StayLabel API running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  
+  // Initialize Beds24 tokens on startup if needed
+  if (process.env.NODE_ENV === 'production') {
+    setTimeout(async () => {
+      try {
+        const beds24Service = require('./services/beds24Service');
+        await beds24Service.getValidAccessToken();
+        console.log('✅ Beds24 authentication system initialized');
+      } catch (error) {
+        console.error('⚠️  Beds24 authentication initialization failed:', error.message);
+        console.log('💡 Run initializeBeds24Tokens.js script to set up tokens');
+      }
+    }, 5000); // Wait 5 seconds after server start
+  }
 });
 
 module.exports = app;

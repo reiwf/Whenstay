@@ -49,10 +49,8 @@ export default function CommunicationPage() {
 
   const handleThreadSelect = async (thread) => {
     await selectThread(thread);
-    // Auto-select best available channel for this thread
-    if (thread.thread_channels?.length > 0) {
-      setSelectedChannel(thread.thread_channels[0].channel);
-    }
+    // Always default to 'inapp' when selecting a thread
+    setSelectedChannel('inapp');
   };
 
   const handleThreadAction = async (action, threadId) => {
@@ -155,7 +153,7 @@ export default function CommunicationPage() {
             </div>
 
             {/* Center Panel - Messages */}
-            <div className="flex-1 flex flex-col min-w-0 bg-primary-50">
+            <div className="flex-1 flex flex-col bg-primary-50">
               <MessagePanel
                 thread={selectedThread}
                 messages={messages}
@@ -180,7 +178,7 @@ export default function CommunicationPage() {
           {/* Mobile/Tablet Layout */}
           <div className="flex lg:hidden flex-1 flex-col">
             {/* Mobile Messages Panel */}
-            <div className="flex-1 flex flex-col min-w-0 bg-primary-50">
+            <div className="flex-1 flex flex-col bg-primary-50">
               <MessagePanel
                 thread={selectedThread}
                 messages={messages}

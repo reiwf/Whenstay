@@ -55,9 +55,20 @@ export default function MessagePanel({
   };
 
   const getAvailableChannels = () => {
-    if (!thread?.thread_channels) return ['inapp'];
-    const channels = thread.thread_channels.map(tc => tc.channel);
-    return ['inapp', ...channels];
+    if (!thread) return ['inapp'];
+    
+    const availableChannels = ['inapp']; // Always available
+    
+    // Add channels from thread_channels if they exist
+    if (thread.thread_channels && Array.isArray(thread.thread_channels)) {
+      thread.thread_channels.forEach(tc => {
+        if (tc.channel && !availableChannels.includes(tc.channel)) {
+          availableChannels.push(tc.channel);
+        }
+      });
+    }
+    
+    return availableChannels;
   };
 
   const formatThreadSubject = () => {
@@ -67,37 +78,37 @@ export default function MessagePanel({
 
   if (!thread) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-primary-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Send className="w-8 h-8 text-primary-400" />
+      <div className="h-full flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-center max-w-sm">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Send className="w-6 h-6 sm:w-8 sm:h-8 text-primary-400" />
           </div>
-          <h3 className="text-lg font-medium text-primary-800 mb-2">No conversation selected</h3>
-          <p className="text-primary-600">Choose a conversation from the sidebar to start messaging</p>
+          <h3 className="text-base sm:text-lg font-medium text-primary-800 mb-2">No conversation selected</h3>
+          <p className="text-sm sm:text-base text-primary-600">Choose a conversation from the sidebar to start messaging</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden" style={{ height: '100%', maxHeight: '100vh' }}>
       {/* Header */}
-      <div className="bg-white border-b border-primary-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-primary-900 truncate">
+      <div className="bg-white border-b border-primary-200 px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between">
+          <div className="flex-1">
+            <h1 className="text-base sm:text-lg font-semibold text-primary-900 truncate">
               {formatThreadSubject()}
             </h1>
-            <div className="flex items-center mt-1 space-x-4">
-              <span className="text-sm text-gray-500">
-                Thread ID: {thread.id.slice(0, 8)}
+            <div className="flex flex-wrap items-center mt-1 gap-2 sm:gap-4">
+              <span className="text-xs sm:text-sm text-gray-500">
+                Thread: {thread.id.slice(0, 8)}
               </span>
               {thread.reservation_id && (
-                <span className="text-sm text-gray-500">
-                  Reservation: #{thread.reservation_id.slice(0, 8)}
+                <span className="text-xs sm:text-sm text-gray-500">
+                  Res: #{thread.reservation_id.slice(0, 8)}
                 </span>
               )}
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                 thread.status === 'open' 
                   ? 'bg-green-100 text-green-800'
                   : thread.status === 'closed'
@@ -109,42 +120,37 @@ export default function MessagePanel({
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <ChannelSelector
-              availableChannels={getAvailableChannels()}
-              selectedChannel={selectedChannel}
-              onChannelChange={onChannelChange}
-            />
-            
+          <div className="flex items-center mt-3 sm:mt-0 space-x-1 sm:space-x-2">
             <button
               onClick={() => setShowScheduleModal(true)}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              <Calendar className="w-4 h-4 mr-2" />
-              Schedule
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Schedule</span>
             </button>
 
             <div className="relative">
-              <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                More
-                <ChevronDown className="w-4 h-4 ml-2" />
+              <button className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <span className="hidden sm:inline">More</span>
+                <span className="sm:hidden">⋯</span>
+                <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
               </button>
               {/* Dropdown menu would go here */}
             </div>
 
             <button
               onClick={() => onThreadAction('close', thread.id)}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              <X className="w-4 h-4 mr-2" />
-              Close
+              <X className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Close</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
+      <div className="flex-1 overflow-y-auto bg-gray-50 p-2 sm:p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
         {loading && messages.length === 0 && (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
@@ -153,12 +159,12 @@ export default function MessagePanel({
         )}
 
         {!loading && messages.length === 0 && (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Send className="w-8 h-8 text-gray-400" />
+          <div className="text-center py-6 sm:py-8 px-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Send className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No messages yet</h3>
-            <p className="text-gray-600">Start the conversation by sending a message below</p>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No messages yet</h3>
+            <p className="text-sm sm:text-base text-gray-600">Start the conversation by sending a message below</p>
           </div>
         )}
 
@@ -192,28 +198,39 @@ export default function MessagePanel({
       </div>
 
       {/* Composer */}
-      <div className="bg-white border-t border-gray-200 p-4">
-        <div className="flex items-end space-x-3">
+      <div className="bg-white border-t border-gray-200 p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-end space-y-3 sm:space-y-0 sm:space-x-3">
           <div className="flex-1">
             <textarea
               ref={textareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={`Send a message via ${selectedChannel}...`}
-              className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 max-h-32"
+              placeholder={`Type your message...`}
+              className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 max-h-32 text-base sm:text-sm"
               rows="1"
+              style={{ fontSize: '16px' }}
             />
-            <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
-              <span>Press Enter to send, Shift+Enter for new line</span>
-              <span>{draft.length}/1000</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-2 gap-2">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <span className="text-xs text-gray-500 whitespace-nowrap">Send via:</span>
+                <ChannelSelector
+                  availableChannels={getAvailableChannels()}
+                  selectedChannel={selectedChannel}
+                  onChannelChange={onChannelChange}
+                />
+              </div>
+              <span className="text-xs text-gray-500">{draft.length}/1000</span>
+            </div>
+            <div className="mt-1 text-xs text-gray-400 hidden sm:block">
+              Press Enter to send, Shift+Enter for new line
             </div>
           </div>
           
           <button
             onClick={handleSend}
             disabled={!draft.trim() || sending || draft.length > 1000}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
             {sending ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

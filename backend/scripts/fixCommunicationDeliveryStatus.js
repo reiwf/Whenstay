@@ -22,7 +22,7 @@ async function installDeliveryStatusTrigger() {
 
   try {
     // Read the SQL file
-    const sqlFilePath = path.join(__dirname, '../database/fixDeliveryStatusTrigger.sql');
+    const sqlFilePath = path.join(__dirname, '../database/fix_message_deliveries_trigger.sql');
     const sqlContent = fs.readFileSync(sqlFilePath, 'utf8');
 
     console.log('📄 Executing SQL from:', sqlFilePath);

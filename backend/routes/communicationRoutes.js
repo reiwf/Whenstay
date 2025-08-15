@@ -25,6 +25,10 @@ router.get('/threads', async (req, res) => {
         last_message_preview,
         created_at,
         updated_at,
+        thread_channels (
+          channel,
+          external_thread_id
+        ),
         reservations (
           id,
           booking_name,

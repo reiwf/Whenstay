@@ -196,6 +196,39 @@ async function processIndividualMessage(message, threadId, channel) {
     content: message.message?.substring(0, 50) + '...'
   });
 
+  // Check if this is an echo of our outbound message (host source)
+  if (message.source === 'host') {
+    console.log(`Checking for outbound message echo: ${message.id}`);
+    
+    try {
+      // Look for recent outbound messages with matching content
+      const recentOutbound = await communicationService.findRecentOutboundMessage(
+        threadId,
+        message.message || '',
+        message.time
+      );
+
+      if (recentOutbound) {
+        // This is an echo of our outbound message - backfill the provider_message_id
+        console.log(`Found matching outbound message ${recentOutbound.id} for webhook echo ${message.id}`);
+        
+        await communicationService.updateDeliveryProviderMessageId(
+          recentOutbound.id,
+          channel,
+          message.id.toString()
+        );
+
+        console.log(`Successfully backfilled provider_message_id ${message.id} for outbound message ${recentOutbound.id}, skipping duplicate creation`);
+        return; // Skip creating duplicate message
+      } else {
+        console.log(`No matching outbound message found for host message ${message.id}, processing as new message`);
+      }
+    } catch (echoError) {
+      console.error('Error checking for outbound message echo:', echoError);
+      // Continue with normal processing if echo detection fails
+    }
+  }
+
   // Map message source to origin role
   const originRole = message.source === 'guest' ? 'guest' : 'host';
 
