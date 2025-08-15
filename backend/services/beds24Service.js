@@ -54,7 +54,7 @@ class Beds24Service {
   isTokenExpiring(expiresAt) {
     if (!expiresAt) return true;
     const expiryTime = new Date(expiresAt);
-    const nowPlusHour = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    const nowPlusHour = new Date(Date.now() + 6 * 60 * 60 * 1000);// 1 hour from now
     return expiryTime <= nowPlusHour;
   }
 

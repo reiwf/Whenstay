@@ -342,8 +342,7 @@ export function useRealtimeCommunication() {
       // Setup real-time subscription for messages
       setupMessagesSubscription(threadId)
       
-      // Auto-scroll to bottom
-      setTimeout(() => scrollToBottom(false), 100)
+      // Note: Removed auto-scroll here - MessagePanel now handles initial scroll on thread selection
       
       return messagesData
     } catch (error) {
@@ -353,7 +352,7 @@ export function useRealtimeCommunication() {
     } finally {
       setLoading(false)
     }
-  }, [setupMessagesSubscription, scrollToBottom])
+  }, [setupMessagesSubscription])
 
   // Send a new message with optimistic updates
   const sendMessage = useCallback(async (threadId, messageData) => {

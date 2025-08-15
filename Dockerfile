@@ -39,24 +39,30 @@ RUN apk add --no-cache dumb-init
 # Create app directory
 WORKDIR /app
 
+# Copy root workspace configuration files first
+COPY package.json package-lock.json ./
+
 # Copy backend package files
-COPY backend/package*.json ./
+COPY backend/package*.json backend/
 
 # Install backend dependencies (production only)
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --workspace backend --only=production && npm cache clean --force
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Copy backend source code
-COPY backend/ ./
+COPY backend/ ./backend/
 
 # Copy built frontend from previous stage
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/frontend/dist ./backend/frontend/dist
 
 # Change ownership to nodejs user
 RUN chown -R nodejs:nodejs /app
 USER nodejs
+
+# Set working directory to backend for runtime
+WORKDIR /app/backend
 
 # Expose port
 EXPOSE 3001

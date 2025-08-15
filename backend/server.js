@@ -5,6 +5,9 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config();
 
+// Import cron service for scheduled tasks
+const cronService = require('./services/cronService');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -125,23 +128,80 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 StayLabel API running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   
-  // Initialize Beds24 tokens on startup if needed
-  if (process.env.NODE_ENV === 'production') {
-    setTimeout(async () => {
-      try {
-        const beds24Service = require('./services/beds24Service');
-        await beds24Service.getValidAccessToken();
-        console.log('✅ Beds24 authentication system initialized');
-      } catch (error) {
-        console.error('⚠️  Beds24 authentication initialization failed:', error.message);
-        console.log('💡 Run initializeBeds24Tokens.js script to set up tokens');
+  // Initialize services after server starts
+  setTimeout(async () => {
+    try {
+      // Initialize Beds24 authentication system
+      const beds24Service = require('./services/beds24Service');
+      await beds24Service.getValidAccessToken();
+      console.log('✅ Beds24 authentication system initialized');
+      
+      // Initialize cron service for automated tasks
+      cronService.init();
+      console.log('✅ Cron service initialized - automated token refresh active');
+      
+    } catch (error) {
+      console.error('⚠️  Service initialization failed:', error.message);
+      if (error.message.includes('No Beds24 authentication data found')) {
+        console.log('💡 Run initializeBeds24Tokens.js script to set up initial tokens');
       }
-    }, 5000); // Wait 5 seconds after server start
+      
+      // Even if Beds24 init fails, still try to start cron service
+      try {
+        cronService.init();
+        console.log('✅ Cron service initialized (will retry token refresh automatically)');
+      } catch (cronError) {
+        console.error('❌ Cron service initialization failed:', cronError.message);
+      }
+    }
+  }, 5000); // Wait 5 seconds after server start
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  
+  try {
+    // Stop accepting new connections
+    server.close(async () => {
+      console.log('🔄 HTTP server closed');
+      
+      // Shutdown cron service
+      await cronService.shutdown();
+      
+      console.log('✅ Graceful shutdown completed');
+      process.exit(0);
+    });
+    
+    // Force close after 10 seconds
+    setTimeout(() => {
+      console.error('❌ Could not close connections in time, forcefully shutting down');
+      process.exit(1);
+    }, 10000);
+    
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
   }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
 });
 
 module.exports = app;

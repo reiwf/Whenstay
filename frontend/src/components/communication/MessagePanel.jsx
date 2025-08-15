@@ -18,12 +18,44 @@ export default function MessagePanel({
   const [sending, setSending] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
+  const [isUserScrolled, setIsUserScrolled] = useState(false);
+  const [currentThreadId, setCurrentThreadId] = useState(null);
 
-  // Auto-scroll to bottom when messages change
+  // Check if user is at the bottom of the message container
+  const isAtBottom = () => {
+    if (!messagesContainerRef.current) return true;
+    const container = messagesContainerRef.current;
+    const threshold = 50; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+  };
+
+  // Handle scroll events to track if user manually scrolled
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    setIsUserScrolled(!isAtBottom());
+  };
+
+  // Only auto-scroll when thread changes (initial load) or when user is at bottom and new message arrives
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Thread changed - this is initial load, always scroll to bottom
+    if (thread?.id !== currentThreadId) {
+      setCurrentThreadId(thread?.id || null);
+      setIsUserScrolled(false);
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+      }, 100);
+      return;
+    }
+
+    // Same thread, new messages - only scroll if user hasn't manually scrolled up
+    if (messages.length > 0 && !isUserScrolled) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    }
+  }, [thread?.id, messages, currentThreadId, isUserScrolled]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -150,7 +182,12 @@ export default function MessagePanel({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-2 sm:p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto bg-gray-50 p-2 sm:p-4" 
+        style={{ WebkitOverflowScrolling: 'touch' }}
+        onScroll={handleScroll}
+      >
         {loading && messages.length === 0 && (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
