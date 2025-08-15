@@ -1,12 +1,26 @@
 import React, { useState } from 'react';
 import { Search, MessageCircle, Clock } from 'lucide-react';
+import airbnbLogo from '../../../shared/airbnblogo.png';
 
 const CHANNEL_ICONS = {
   beds24: '🛏️',
   whatsapp: '🟢',
   inapp: '💬',
   email: '✉️',
-  sms: '📱'
+  sms: '📱',
+  airbnb: airbnbLogo,
+  bookingcom: '🏠'
+};
+
+const renderChannelIcon = (channel) => {
+  const icon = CHANNEL_ICONS[channel];
+  if (!icon) return '📱';
+  
+  if (channel === 'airbnb') {
+    return <img src={icon} alt="Airbnb" className="w-4 h-4 inline" />;
+  }
+  
+  return icon;
 };
 
 export default function InboxPanel({ threads, selectedThread, onThreadSelect, loading }) {

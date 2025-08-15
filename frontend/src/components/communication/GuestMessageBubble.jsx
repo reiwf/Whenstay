@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import airbnbLogo from '../../../shared/airbnblogo.png';
 
 // Channel icons mapping
 const CHANNEL_ICONS = {
@@ -7,7 +8,20 @@ const CHANNEL_ICONS = {
   whatsapp: '🟢', 
   inapp: '💬',
   email: '✉️',
-  sms: '📱'
+  sms: '📱',
+  airbnb: airbnbLogo,
+  bookingcom: '🏠'
+};
+
+const renderChannelIcon = (channel) => {
+  const icon = CHANNEL_ICONS[channel];
+  if (!icon) return '📱';
+  
+  if (channel === 'airbnb') {
+    return <img src={icon} alt="Airbnb" className="w-4 h-4 inline" />;
+  }
+  
+  return icon;
 };
 
 // Component to parse and render message content with HTML support

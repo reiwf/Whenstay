@@ -10,7 +10,6 @@ import UserPage from './pages/UserPage'
 import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestApp from './pages/GuestApp'
-import MessagingDemo from './pages/MessagingDemo'
 import CommunicationPage from './pages/CommunicationPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -24,7 +23,6 @@ function App() {
           <Route path="/checkin/:token" element={<CheckinPage />} />
           <Route path="/guest/:token" element={<GuestApp />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/messages-demo" element={<MessagingDemo />} />
           
           {/* Protected Admin Routes - Allow admin, owner, and cleaner roles */}
           <Route 

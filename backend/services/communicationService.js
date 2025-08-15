@@ -200,6 +200,19 @@ class CommunicationService {
       }
     }
 
+    // Auto-reopen thread if it's closed and receiving a new message
+    await this.autoReopenClosedThread(thread_id, origin_role);
+
+    // Process signed URLs in content before storing
+    let processedContent = content;
+    try {
+      const imageProcessingService = require('./imageProcessingService');
+      processedContent = await imageProcessingService.processMessageImages(content, `temp_${Date.now()}`);
+    } catch (imageError) {
+      console.error('Error processing images in message content:', imageError);
+      // Continue with original content if image processing fails
+    }
+
     // Insert message
     const { error: msgError, data: message } = await this.supabase
       .from('messages')
@@ -208,13 +221,27 @@ class CommunicationService {
         origin_role,
         direction: 'incoming',
         channel,
-        content,
+        content: processedContent,
         sent_at: new Date().toISOString()
       })
       .select()
       .single();
 
     if (msgError) throw msgError;
+
+    // If image processing was needed and we have a real message ID now, update the processed content
+    if (processedContent !== content) {
+      try {
+        const imageProcessingService = require('./imageProcessingService');
+        const finalContent = await imageProcessingService.processMessageImages(content, message.id);
+        if (finalContent !== processedContent) {
+          await imageProcessingService.updateMessageContent(message.id, finalContent);
+        }
+      } catch (imageError) {
+        console.error('Error reprocessing images with final message ID:', imageError);
+        // Non-critical error, continue
+      }
+    }
 
     // Insert delivery record with database trigger error handling
     try {
@@ -254,8 +281,8 @@ class CommunicationService {
       throw error;
     }
 
-    // Update thread last message info
-    await this.updateThreadLastMessage(thread_id, content);
+    // Update thread last message info (use processed content for preview)
+    await this.updateThreadLastMessage(thread_id, processedContent);
 
     return message;
   }
@@ -756,6 +783,45 @@ class CommunicationService {
 
   // ===== HELPER METHODS =====
 
+  // Auto-reopen closed threads when new messages arrive
+  async autoReopenClosedThread(threadId, originRole = 'guest') {
+    try {
+      // Get current thread status
+      const { data: thread, error } = await this.supabase
+        .from('message_threads')
+        .select('status')
+        .eq('id', threadId)
+        .single();
+
+      if (error) {
+        console.error('Error getting thread status for auto-reopen:', error);
+        return;
+      }
+
+      // Only reopen if thread is closed (not archived)
+      if (thread.status === 'closed') {
+        console.log(`Auto-reopening closed thread ${threadId} due to new ${originRole} message`);
+        
+        const { error: updateError } = await this.supabase
+          .from('message_threads')
+          .update({ 
+            status: 'open',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', threadId);
+
+        if (updateError) {
+          console.error('Error auto-reopening closed thread:', updateError);
+        } else {
+          console.log(`Successfully auto-reopened thread ${threadId}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in autoReopenClosedThread:', error);
+      // Don't throw error - this is a non-critical operation
+    }
+  }
+
   // Find recent outbound message that matches webhook echo
   async findRecentOutboundMessage(threadId, content, webhookTime, timeWindowMinutes = 10) {
     try {
@@ -825,43 +891,103 @@ class CommunicationService {
   async findOrCreateThreadByReservation(reservationId, initialData = {}) {
     console.log(`Finding or creating thread for reservation ${reservationId}`, { initialData });
     
-    // Check if thread exists for this reservation
-    const { data: existing } = await this.supabase
+    // First, try to find thread by reservation_id with any status (not just 'open')
+    const { data: existingByReservation } = await this.supabase
       .from('message_threads')
       .select(`
         *,
         thread_channels(channel, external_thread_id)
       `)
       .eq('reservation_id', reservationId)
-      .eq('status', 'open')
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (existing) {
-      console.log(`Found existing thread ${existing.id} for reservation ${reservationId}`);
+    if (existingByReservation) {
+      console.log(`Found existing thread ${existingByReservation.id} for reservation ${reservationId} (status: ${existingByReservation.status})`);
+      
+      // If thread is closed/archived but we're getting new messages, auto-reopen it
+      if (existingByReservation.status !== 'open') {
+        console.log(`Auto-reopening ${existingByReservation.status} thread ${existingByReservation.id} for new activity`);
+        await this.updateThreadStatus(existingByReservation.id, 'open');
+        existingByReservation.status = 'open';
+      }
       
       // Check if we need to add channel mappings
       if (initialData.channels && Array.isArray(initialData.channels)) {
         for (const channelData of initialData.channels) {
-          const existingChannelMapping = existing.thread_channels?.find(
+          const existingChannelMapping = existingByReservation.thread_channels?.find(
             tc => tc.channel === channelData.channel && tc.external_thread_id === channelData.external_thread_id
           );
           
           if (!existingChannelMapping) {
-            console.log(`Adding missing channel mapping: ${channelData.channel} for thread ${existing.id}`);
+            console.log(`Adding missing channel mapping: ${channelData.channel} for thread ${existingByReservation.id}`);
             try {
-              await this.addThreadChannels(existing.id, [channelData]);
+              await this.addThreadChannels(existingByReservation.id, [channelData]);
               console.log(`Successfully added channel mapping: ${channelData.channel}`);
             } catch (error) {
               console.error(`Error adding channel mapping: ${error.message}`);
-              throw error;
+              // If it's a unique constraint violation, the mapping may have been added by another process
+              if (error.code === '23505') {
+                console.log('Channel mapping already exists (added by another process), continuing...');
+              } else {
+                throw error;
+              }
             }
           } else {
-            console.log(`Channel mapping already exists: ${channelData.channel} for thread ${existing.id}`);
+            console.log(`Channel mapping already exists: ${channelData.channel} for thread ${existingByReservation.id}`);
           }
         }
       }
       
-      return existing;
+      return existingByReservation;
+    }
+
+    // Second, check if there's already a thread_channel with this external_thread_id
+    // This handles cases where the same external conversation spans multiple reservations
+    if (initialData.channels && Array.isArray(initialData.channels)) {
+      for (const channelData of initialData.channels) {
+        const { data: existingChannelThread } = await this.supabase
+          .from('thread_channels')
+          .select(`
+            *,
+            message_threads(*)
+          `)
+          .eq('channel', channelData.channel)
+          .eq('external_thread_id', channelData.external_thread_id)
+          .maybeSingle();
+
+        if (existingChannelThread?.message_threads) {
+          console.log(`Found existing thread ${existingChannelThread.message_threads.id} via channel mapping ${channelData.channel}:${channelData.external_thread_id}`);
+          
+          // Update the thread to associate with this reservation if it's not already
+          if (existingChannelThread.message_threads.reservation_id !== reservationId) {
+            console.log(`Updating thread ${existingChannelThread.message_threads.id} to associate with reservation ${reservationId}`);
+            const { error: updateError } = await this.supabase
+              .from('message_threads')
+              .update({ 
+                reservation_id: reservationId,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingChannelThread.message_threads.id);
+
+            if (updateError) {
+              console.error('Error updating thread reservation_id:', updateError);
+            } else {
+              existingChannelThread.message_threads.reservation_id = reservationId;
+            }
+          }
+
+          // Auto-reopen if closed
+          if (existingChannelThread.message_threads.status !== 'open') {
+            console.log(`Auto-reopening thread ${existingChannelThread.message_threads.id} for new activity`);
+            await this.updateThreadStatus(existingChannelThread.message_threads.id, 'open');
+            existingChannelThread.message_threads.status = 'open';
+          }
+
+          return existingChannelThread.message_threads;
+        }
+      }
     }
 
     console.log(`Creating new thread for reservation ${reservationId}`);

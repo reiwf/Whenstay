@@ -78,15 +78,42 @@ export function useRealtimeCommunication() {
               setThreads(prev => [payload.new, ...prev])
               break
             case 'UPDATE':
-              setThreads(prev => 
-                prev.map(thread => 
+              setThreads(prev => {
+                const updatedThreads = prev.map(thread => 
                   thread.id === payload.new.id ? payload.new : thread
                 )
-              )
+                
+                // If the updated thread is closed or archived, remove it from the list
+                // since InboxPanel only shows 'open' threads by default
+                if (payload.new.status !== 'open') {
+                  console.log(`Removing thread ${payload.new.id} from inbox (status: ${payload.new.status})`)
+                  return updatedThreads.filter(thread => thread.id !== payload.new.id)
+                }
+                
+                return updatedThreads
+              })
+              
               // Update selected thread if it's the one being updated
-              setSelectedThread(prev => 
-                prev?.id === payload.new.id ? payload.new : prev
-              )
+              setSelectedThread(prev => {
+                if (prev?.id === payload.new.id) {
+                  // If the updated thread is closed/archived and it's currently selected, clear selection
+                  if (payload.new.status !== 'open') {
+                    console.log(`Clearing selection for closed/archived thread ${payload.new.id}`)
+                    setMessages([])
+                    setReservation(null)
+                    
+                    // Cleanup subscriptions
+                    if (messagesChannelRef.current) {
+                      supabase.removeChannel(messagesChannelRef.current)
+                      messagesChannelRef.current = null
+                    }
+                    
+                    return null
+                  }
+                  return payload.new
+                }
+                return prev
+              })
               break
             case 'DELETE':
               setThreads(prev => prev.filter(thread => thread.id !== payload.old.id))

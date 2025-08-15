@@ -12,7 +12,7 @@ router.get('/threads', async (req, res) => {
     const { status = 'open', limit = 50, offset = 0 } = req.query;
     const userId = req.user.id;
 
-    // Get threads for properties owned by the user, with unread count
+    // Get basic threads first
     const { data: threads, error } = await supabase
       .from('message_threads')
       .select(`
@@ -47,34 +47,61 @@ router.get('/threads', async (req, res) => {
 
     if (error) throw error;
 
-    // Calculate unread counts for each thread
-    const threadsWithUnread = await Promise.all(
-      threads.map(async (thread) => {
-        const { data: participant } = await supabase
-          .from('message_participants')
-          .select('last_read_at')
-          .eq('thread_id', thread.id)
-          .eq('user_id', userId)
-          .maybeSingle();
+    // Optimized batch query for unread counts
+    const threadIds = threads.map(t => t.id);
+    
+    if (threadIds.length === 0) {
+      return res.json({
+        threads: [],
+        total: 0
+      });
+    }
 
-        const lastReadAt = participant?.last_read_at || '1970-01-01T00:00:00Z';
+    // Get all participants for these threads in one query
+    const { data: participants } = await supabase
+      .from('message_participants')
+      .select('thread_id, last_read_at')
+      .eq('user_id', userId)
+      .in('thread_id', threadIds);
 
-        const { count: unreadCount } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('thread_id', thread.id)
-          .gt('created_at', lastReadAt);
+    // Create a map of thread_id -> last_read_at for quick lookup
+    const participantMap = new Map();
+    participants?.forEach(p => {
+      participantMap.set(p.thread_id, p.last_read_at || '1970-01-01T00:00:00Z');
+    });
 
-        return {
-          ...thread,
-          unread_count: unreadCount || 0
-        };
-      })
-    );
+    // Get unread counts for all threads efficiently by grouping similar queries
+    const unreadCountQueries = threadIds.map(async (threadId) => {
+      const lastReadAt = participantMap.get(threadId) || '1970-01-01T00:00:00Z';
+      
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('thread_id', threadId)
+        .eq('direction', 'incoming')
+        .gt('created_at', lastReadAt);
+
+      return { threadId, unreadCount: count || 0 };
+    });
+
+    // Execute all unread count queries in parallel (still multiple queries but much faster)
+    const unreadResults = await Promise.all(unreadCountQueries);
+
+    // Create map for quick lookup
+    const unreadMap = new Map();
+    unreadResults.forEach(result => {
+      unreadMap.set(result.threadId, result.unreadCount);
+    });
+
+    // Attach unread counts to threads
+    const threadsWithUnread = threads.map(thread => ({
+      ...thread,
+      unread_count: unreadMap.get(thread.id) || 0
+    }));
 
     res.json({
       threads: threadsWithUnread,
-      total: threads.length
+      total: threadsWithUnread.length
     });
 
   } catch (error) {

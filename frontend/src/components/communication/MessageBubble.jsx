@@ -1,12 +1,26 @@
 import React, { useRef, useEffect } from 'react';
 import { Check, CheckCheck, AlertCircle, Clock, RotateCw } from 'lucide-react';
+import airbnbLogo from '../../../shared/airbnblogo.png';
 
 const CHANNEL_ICONS = {
   beds24: '🛏️',
   whatsapp: '🟢',
   inapp: '💬',
   email: '✉️',
-  sms: '📱'
+  sms: '📱',
+  airbnb: airbnbLogo,
+  bookingcom: '🏠'
+};
+
+const renderChannelIcon = (channel) => {
+  const icon = CHANNEL_ICONS[channel];
+  if (!icon) return '📱';
+  
+  if (channel === 'airbnb') {
+    return <img src={icon} alt="Airbnb" className="w-4 h-4 inline" />;
+  }
+  
+  return icon;
 };
 
 // Component to parse and render message content with HTML support
@@ -69,13 +83,15 @@ function MessageContent({ content }) {
             }}
             onClick={() => window.open(imgSrc, '_blank')}
             onError={(e) => {
+              console.error('Image failed to load in production:', imgSrc);
+              console.error('Image error details:', e.target.error);
               // Fallback to showing the URL if image fails to load
               e.target.style.display = 'none';
-              e.target.parentNode.innerHTML = `
-                <div class="text-xs p-2 rounded border bg-gray-100 border-gray-200">
-                  🖼️ Image: ${imgSrc.split('/').pop() || 'Unable to load'}
-                </div>
-              `;
+              const fallbackDiv = document.createElement('div');
+              fallbackDiv.className = 'text-xs p-2 rounded border bg-blue-50 border-blue-200 cursor-pointer hover:bg-blue-100';
+              fallbackDiv.innerHTML = `🖼️ Image: ${imgSrc.split('/').pop() || 'Unable to load'}<br><span class="text-gray-500">Click to try opening directly</span>`;
+              fallbackDiv.onclick = () => window.open(imgSrc, '_blank');
+              e.target.parentNode.appendChild(fallbackDiv);
             }}
           />
         </div>
@@ -295,8 +311,8 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
         </div>
 
        <div className="mt-2 flex items-center justify-center space-x-1 text-xs opacity-70">
-          <span title={`Channel: ${message.channel}`}>
-            {CHANNEL_ICONS[message.channel] || '📱'}
+          <span title={`Channel: ${message.channel}`} className="inline-flex items-center">
+            {renderChannelIcon(message.channel)}
           </span>
 
           {/* Separator */}
