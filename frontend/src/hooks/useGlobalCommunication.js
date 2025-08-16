@@ -59,7 +59,7 @@ export function useGlobalCommunication() {
           console.log('📨 Global thread change received for unread count:', payload.eventType)
           
           // Reload unread count when threads change
-          loadUnreadCount()
+          setTimeout(() => loadUnreadCount(), 100) // Small delay to ensure DB consistency
         }
       )
       .on(
@@ -74,7 +74,7 @@ export function useGlobalCommunication() {
           
           // If it's an incoming message, reload unread count
           if (payload.new.direction === 'incoming') {
-            loadUnreadCount()
+            setTimeout(() => loadUnreadCount(), 100) // Small delay to ensure DB consistency
           }
         }
       )
@@ -90,7 +90,7 @@ export function useGlobalCommunication() {
           
           // If delivery status changes (especially to 'delivered' for new messages), reload unread count
           if (payload.new.status === 'delivered' || payload.new.status === 'read') {
-            loadUnreadCount()
+            setTimeout(() => loadUnreadCount(), 100) // Small delay to ensure DB consistency
           }
         }
       )
@@ -102,11 +102,16 @@ export function useGlobalCommunication() {
           table: 'message_participants'
         },
         (payload) => {
-          console.log('📨 Message participant updated globally:', payload.new.thread_id, 'last_read_at:', payload.new.last_read_at)
+          console.log('📨 Message participant updated globally:', {
+            threadId: payload.new.thread_id, 
+            lastReadAt: payload.new.last_read_at,
+            oldLastReadAt: payload.old?.last_read_at
+          })
           
-          // If last_read_at is updated, reload unread count
-          if (payload.new.last_read_at) {
-            loadUnreadCount()
+          // If last_read_at is updated (messages marked as read), reload unread count
+          if (payload.new.last_read_at && payload.new.last_read_at !== payload.old?.last_read_at) {
+            console.log('🔄 Reloading global unread count due to message participant read status change')
+            setTimeout(() => loadUnreadCount(), 100) // Small delay to ensure DB consistency
           }
         }
       )
@@ -122,11 +127,21 @@ export function useGlobalCommunication() {
     loadUnreadCount()
     setupUnreadCountSubscription()
     
+    // Listen for custom events from the local communication hook
+    const handleThreadMessagesRead = (event) => {
+      console.log('🔄 Received thread-messages-read event:', event.detail)
+      // Immediately refresh the global unread count
+      setTimeout(() => loadUnreadCount(), 50) // Small delay to ensure database update is processed
+    }
+    
+    window.addEventListener('thread-messages-read', handleThreadMessagesRead)
+    
     // Cleanup on unmount
     return () => {
       if (threadsChannelRef.current) {
         supabase.removeChannel(threadsChannelRef.current)
       }
+      window.removeEventListener('thread-messages-read', handleThreadMessagesRead)
     }
   }, [loadUnreadCount, setupUnreadCountSubscription])
 

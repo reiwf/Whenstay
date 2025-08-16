@@ -8,9 +8,8 @@ const { supabaseAdmin } = require('../config/supabase');
 class Beds24Service {
   constructor() {
     this.propKey = process.env.BEDS24_PROPKEY;
-    this.baseURL = 'https://api.beds24.com/v2';
-    this.supabase = supabaseAdmin;
-    
+    this.baseURL = 'https://beds24.com/api/v2';
+    this.supabase = supabaseAdmin;    
     if (!this.propKey) {
       throw new Error('Missing Beds24 PROPKEY credential');
     }
@@ -24,11 +23,7 @@ class Beds24Service {
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
-
-    if (error || !data) {
-      throw new Error('No Beds24 authentication data found in database');
-    }
-
+    if (error || !data) throw new Error('No Beds24 authentication data found in database');
     return data;
   }
 
@@ -37,100 +32,97 @@ class Beds24Service {
     const { error } = await this.supabase
       .from('beds24_auth')
       .upsert({
-        id: 1, // Single row for auth data
-        access_token: authData.access_token,
-        refresh_token: authData.refresh_token,
-        expires_at: authData.expires_at,
-        updated_at: new Date().toISOString()
+        id: 1,
+        access_token: authData.access_token ?? null,
+        refresh_token: authData.refresh_token ?? null,
+        expires_at: authData.expires_at ?? null,
+        updated_at: new Date().toISOString(),
       });
-
     if (error) {
       console.error('Error storing Beds24 auth data:', error);
       throw new Error('Failed to store Beds24 authentication data');
     }
   }
 
-  // Check if access token is expiring within the next hour
+  // Buffer = 6h (your code said "1 hour" but used 6h)
   isTokenExpiring(expiresAt) {
     if (!expiresAt) return true;
-    const expiryTime = new Date(expiresAt);
-    const nowPlusHour = new Date(Date.now() + 6 * 60 * 60 * 1000);// 1 hour from now
-    return expiryTime <= nowPlusHour;
+    const expiryTime = new Date(expiresAt).getTime();
+    const bufferMs = 6 * 60 * 60 * 1000;
+    return expiryTime <= Date.now() + bufferMs;
   }
 
   // Refresh access token using refresh token
+  // ✅ Correct refresh flow: GET with refreshToken header
   async refreshAccessToken() {
     try {
       const auth = await this.getStoredAuth();
-      
-      if (!auth.refresh_token) {
-        throw new Error('No refresh token available');
-      }
+      if (!auth.refresh_token) throw new Error('No refresh token available');
 
       console.log('🔄 Refreshing Beds24 access token...');
-
-      const response = await axios.post(`${this.baseURL}/authentication/token`, {
-        refreshToken: auth.refresh_token
-      }, {
+      const resp = await axios.get(`${this.baseURL}/authentication/token`, {
         headers: {
-          'Content-Type': 'application/json'
-        }
+          accept: 'application/json',
+          refreshToken: auth.refresh_token,
+        },
+        // Beds24 expects GET; no body, no propkey here
       });
 
-      // Process the response based on the format you provided
+      const { token, refreshToken, expiresIn } = resp.data || {};
+      if (!token || !expiresIn) {
+        throw new Error('Malformed refresh response');
+      }
+
       const newAuthData = {
-        access_token: response.data.token,
-        refresh_token: response.data.refreshToken, // New 30-day refresh token
-        expires_at: new Date(Date.now() + (response.data.expiresIn * 1000)) // expiresIn is in seconds
+        access_token: token,
+        // Beds24 may or may not rotate the refresh token; store if present
+        refresh_token: refreshToken || auth.refresh_token,
+        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
       };
 
-      // Store the new tokens
       await this.storeAuth(newAuthData);
 
-      console.log('✅ Beds24 access token refreshed successfully', {
+      console.log('✅ Beds24 access token refreshed', {
         expiresAt: newAuthData.expires_at,
-        expiresIn: response.data.expiresIn
+        expiresIn,
+        rotatedRefresh: Boolean(refreshToken),
       });
 
       return newAuthData.access_token;
-
     } catch (error) {
+      // Surface Beds24’s payload if present
+      const payload = error.response?.data;
       console.error('❌ Failed to refresh Beds24 access token:', {
-        error: error.response?.data || error.message,
-        status: error.response?.status
+        error: payload || error.message,
+        status: error.response?.status,
       });
-      throw new Error(`Failed to refresh Beds24 access token: ${error.message}`);
+      // Helpful hint if refresh token is dead (30 days unused)
+      // Docs: refresh tokens expire if unused for 30 days. :contentReference[oaicite:1]{index=1}
+      if (error.response?.status === 401 || error.response?.status === 403 || error.response?.status === 500) {
+        console.error('💡 If unused >30 days, generate a new invite code and exchange for a new refresh token.');
+      }
+      throw new Error(`Failed to refresh Beds24 access token: ${error.response?.status || ''} ${error.message}`);
     }
   }
 
   // Get valid access token (refresh if needed)
   async getValidAccessToken() {
-    try {
-      const auth = await this.getStoredAuth();
-
-      // Check if we have an access token and it's not expiring soon
-      if (auth.access_token && !this.isTokenExpiring(auth.expires_at)) {
-        return auth.access_token;
-      }
-
-      // Token is missing or expiring, refresh it
-      console.log('🔄 Access token missing or expiring, refreshing...');
-      return await this.refreshAccessToken();
-
-    } catch (error) {
-      console.error('Error getting valid access token:', error);
-      throw error;
+    const auth = await this.getStoredAuth();
+    if (auth.access_token && !this.isTokenExpiring(auth.expires_at)) {
+      return auth.access_token;
     }
+    console.log('🔄 Access token missing/expiring, refreshing…');
+    return this.refreshAccessToken();
   }
 
   // Get headers for Beds24 API requests with valid access token
   async getHeaders() {
     const accessToken = await this.getValidAccessToken();
-    
     return {
       'Content-Type': 'application/json',
-      'token': accessToken, // Now uses access token instead of refresh token
-      'propkey': this.propKey
+      token: accessToken,
+      // propkey isn’t required for v2 endpoints per docs; include only if your endpoint expects it.
+      // 'propkey': this.propKey,
     };
   }
 
@@ -477,112 +469,88 @@ class Beds24Service {
 
 
   // message through Beds24 API to Airbnb -- This is working 
-async sendMessage(beds24BookingId, content, options = {}) {
-  // 1) Validate input early
-  const text = (content ?? '').toString().trim();
-  if (!text) {
-    throw new Error('Bad request: message cannot be empty');
-  }
+  async sendMessage(beds24BookingId, content, options = {}) {
+    // 1) Validate input early
+    const text = (content ?? '').toString().trim();
+    if (!text) {
+      throw new Error('Bad request: message cannot be empty');
+    }
 
-  try {
-    const headers = await this.getHeaders(); // { token, propkey, Content-Type }
-    if (options.messageId) headers['X-Idempotency-Key'] = options.messageId;
+    try {
+      const headers = await this.getHeaders(); // { token, propkey, Content-Type }
+      if (options.messageId) headers['X-Idempotency-Key'] = options.messageId;
 
-    const url = `${this.baseURL}/bookings/messages`;
+      const url = `${this.baseURL}/bookings/messages`;
 
-    // 2) MUST be an array, and MUST use `message` key
-    const body = [
-      {
+      // 2) MUST be an array, and MUST use `message` key
+      const body = [
+        {
+          bookingId: beds24BookingId,
+          message: text,          // <-- key change fixes "no message"
+          // externalId: options.messageId, // optional if Beds24 supports idempotency by item
+        }
+      ];
+
+      const res = await axios.post(url, body, { headers });
+
+      const results = Array.isArray(res.data) ? res.data : [res.data];
+      console.log('Beds24 raw results:\n', JSON.stringify(results, null, 2));
+      const first = results[0] ?? {};
+
+      if (first.success !== true) {
+        const errs = (first.errors || []).map(e => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)));
+        const msg = errs.length ? errs.join('; ') : 'Unknown Beds24 messaging error';
+        console.error('Beds24 messaging failed:', { bookingId: beds24BookingId, messageId: options.messageId, results });
+        const err = new Error(`Beds24 rejected message: ${msg}`);
+        err.code = 'UPSTREAM_REJECTED';
+        err.details = results;
+        throw err;
+      }
+
+      console.log('Message sent successfully via Beds24:', {
         bookingId: beds24BookingId,
-        message: text,          // <-- key change fixes "no message"
-        // externalId: options.messageId, // optional if Beds24 supports idempotency by item
+        messageId: options.messageId,
+        response: results
+      });
+
+      return {
+        success: true,
+        beds24MessageId: first.messageId || first.id,
+        data: results
+      };
+
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log('🔄 Authentication failed when sending message, attempting token refresh...');
+        await this.refreshAccessToken();
+        return this.sendMessage(beds24BookingId, text, options);
       }
-    ];
 
-    const res = await axios.post(url, body, { headers });
+      console.error('Error sending message via Beds24:', {
+        bookingId: beds24BookingId,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        url: error.config?.url
+      });
 
-    const results = Array.isArray(res.data) ? res.data : [res.data];
-    console.log('Beds24 raw results:\n', JSON.stringify(results, null, 2));
-    const first = results[0] ?? {};
+      const status = error.response?.status;
+      const responseData = error.response?.data;
+      let errorMessage = 'Failed to send message via Beds24';
 
-    if (first.success !== true) {
-      const errs = (first.errors || []).map(e => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)));
-      const msg = errs.length ? errs.join('; ') : 'Unknown Beds24 messaging error';
-      console.error('Beds24 messaging failed:', { bookingId: beds24BookingId, messageId: options.messageId, results });
-      const err = new Error(`Beds24 rejected message: ${msg}`);
-      err.code = 'UPSTREAM_REJECTED';
-      err.details = results;
-      throw err;
+      if (status === 400) errorMessage = `Bad request: ${responseData?.message || responseData?.error || 'Invalid message data'}`;
+      else if (status === 401) errorMessage = `401 Unauthorized: ${responseData?.message || 'Authentication failed - token may be invalid'}`;
+      else if (status === 403) errorMessage = `403 Not authorized to send messages for this booking: ${responseData?.message || 'Insufficient permissions'}`;
+      else if (status === 404) errorMessage = `Booking not found in Beds24: ${responseData?.message || 'Invalid bookingId'}`;
+      else if (status === 429) errorMessage = `429 Rate limit exceeded, please try again later: ${responseData?.message || 'Too many requests'}`;
+      else if (status >= 500 && status < 600) errorMessage = `${status} Beds24 server error: ${responseData?.message || responseData?.error || 'Could not process request'}`;
+      else if (responseData?.message) errorMessage = `${status || 'Unknown'} API Error: ${responseData.message}`;
+      else if (responseData?.error) errorMessage = `${status || 'Unknown'} API Error: ${responseData.error}`;
+      else if (error.code === 'UPSTREAM_REJECTED') errorMessage = `Bad request: ${error.message.replace(/^Beds24 rejected message:\s*/, '')}`;
+
+      throw new Error(errorMessage);
     }
-
-    console.log('Message sent successfully via Beds24:', {
-      bookingId: beds24BookingId,
-      messageId: options.messageId,
-      response: results
-    });
-
-    return {
-      success: true,
-      beds24MessageId: first.messageId || first.id,
-      data: results
-    };
-
-  } catch (error) {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      console.log('🔄 Authentication failed when sending message, attempting token refresh...');
-      await this.refreshAccessToken();
-      return this.sendMessage(beds24BookingId, text, options);
-    }
-
-    console.error('Error sending message via Beds24:', {
-      bookingId: beds24BookingId,
-      error: error.response?.data || error.message,
-      status: error.response?.status,
-      headers: error.response?.headers,
-      url: error.config?.url
-    });
-
-    const status = error.response?.status;
-    const responseData = error.response?.data;
-    let errorMessage = 'Failed to send message via Beds24';
-
-    if (status === 400) errorMessage = `Bad request: ${responseData?.message || responseData?.error || 'Invalid message data'}`;
-    else if (status === 401) errorMessage = `401 Unauthorized: ${responseData?.message || 'Authentication failed - token may be invalid'}`;
-    else if (status === 403) errorMessage = `403 Not authorized to send messages for this booking: ${responseData?.message || 'Insufficient permissions'}`;
-    else if (status === 404) errorMessage = `Booking not found in Beds24: ${responseData?.message || 'Invalid bookingId'}`;
-    else if (status === 429) errorMessage = `429 Rate limit exceeded, please try again later: ${responseData?.message || 'Too many requests'}`;
-    else if (status >= 500 && status < 600) errorMessage = `${status} Beds24 server error: ${responseData?.message || responseData?.error || 'Could not process request'}`;
-    else if (responseData?.message) errorMessage = `${status || 'Unknown'} API Error: ${responseData.message}`;
-    else if (responseData?.error) errorMessage = `${status || 'Unknown'} API Error: ${responseData.error}`;
-    else if (error.code === 'UPSTREAM_REJECTED') errorMessage = `Bad request: ${error.message.replace(/^Beds24 rejected message:\s*/, '')}`;
-
-    throw new Error(errorMessage);
-  }
+  } 
 }
-
-
-
-
-    // Sync bookings (fallback method)
-    async syncRecentBookings(daysBack = 7) {
-      try {
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - daysBack);
-        
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30); // Next 30 days
-        
-        const bookings = await this.getBookings({
-          checkIn: startDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' }),
-          checkOut: endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })
-        });
-
-        return bookings.map(booking => this.processWebhookData({ booking }));
-      } catch (error) {
-        console.error('Error syncing recent bookings:', error);
-        throw error;
-      }
-    }
-  }
 
 module.exports = new Beds24Service();

@@ -535,6 +535,12 @@ export function useRealtimeCommunication() {
         )
       )
       
+      // Trigger global unread count update immediately via custom event
+      console.log('🔄 Triggering global unread count update via custom event')
+      window.dispatchEvent(new CustomEvent('thread-messages-read', { 
+        detail: { threadId, lastMessageId }
+      }))
+      
       return true
     } catch (error) {
       console.error('Error marking messages as read:', error)

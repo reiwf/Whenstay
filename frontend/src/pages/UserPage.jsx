@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { 
   RefreshCw, 
   Users,
@@ -20,10 +19,11 @@ import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
 import UserModal from '../components/modals/UserModal'
 import { adminAPI } from '../services/api'
+import { useNavigation } from '../hooks/useNavigation'
 
 export default function UserPage() {
   const { hasAdminAccess, profile } = useAuth()
-  const navigate = useNavigate()
+  const handleSectionChange = useNavigation('users')
   
   // State management
   const [loading, setLoading] = useState(true)
@@ -31,24 +31,6 @@ export default function UserPage() {
   const [userStats, setUserStats] = useState({})
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-
-  // Navigation handler for sidebar
-  const handleSectionChange = (section) => {
-    if (section === 'dashboard') {
-      navigate('/dashboard')
-    } else if (section === 'user-management') {
-      // Already on user page
-      return
-    } else if (section === 'cleaning' || section === 'cleaning-management') {
-      navigate('/cleaning')
-    } else if (section === 'reservation-management') {
-      navigate('/reservation')
-    } else if (section === 'property-management') {
-      navigate('/property')
-    } else {
-      navigate('/dashboard') // Default fallback
-    }
-  }
 
   // Load initial data
   useEffect(() => {

@@ -5,9 +5,11 @@ import MessagePanel from '../components/communication/MessagePanel';
 import ReservationPanel from '../components/communication/ReservationPanel';
 import { useRealtimeCommunication } from '../hooks/useRealtimeCommunication';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '../hooks/useNavigation';
 
 export default function CommunicationPage() {
   const { user } = useAuth();
+  const handleSectionChange = useNavigation('communication');
   const {
     threads,
     selectedThread,
@@ -71,7 +73,10 @@ export default function CommunicationPage() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout
+      activeSection="communication"
+      onSectionChange={handleSectionChange}
+    >
       <div className="h-full flex flex-col bg-primary-25">
         {/* Header */}
         <div className="bg-white border-b border-primary-200 px-4 lg:px-6 py-4 shadow-sm">

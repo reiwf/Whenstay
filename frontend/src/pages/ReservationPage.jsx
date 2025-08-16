@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { 
   RefreshCw, 
   Calendar, 
@@ -23,13 +22,14 @@ import { DateRangePicker } from '../components/ui/date-range-picker'
 import toast from 'react-hot-toast'
 import ReservationModal from '../components/modals/ReservationModal'
 import useReservations from '../hooks/useReservations'
+import { useNavigation } from '../hooks/useNavigation'
 
 const tokyoTodayYMD = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
 
 export default function ReservationPage() {
   const { hasAdminAccess, profile } = useAuth()
-  const navigate = useNavigate()
+  const handleSectionChange = useNavigation('reservation-management')
   
   const {
     loading,
@@ -61,20 +61,6 @@ export default function ReservationPage() {
   const [editingReservation, setEditingReservation] = useState(null)
   const [copiedTokens, setCopiedTokens] = useState({})
   const filterTimeoutRef = useRef(null)
-
-  // Navigation handler for sidebar
-  const handleSectionChange = (section) => {
-    if (section === 'dashboard') {
-      navigate('/dashboard')
-    } else if (section === 'reservation-management') {
-      // Already on reservation page
-      return
-    } else if (section === 'reservations') {
-      navigate('/dashboard') // Go to dashboard reservations tab
-    } else {
-      navigate('/dashboard') // Default fallback
-    }
-  }
 
   // Load initial data
   useEffect(() => {

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { supabase } = require('../config/supabase');
-const { adminOnlyAuth } = require('../middleware/auth');
+const { adminAuth } = require('../middleware/auth');
 
 // Apply authentication middleware to all routes
-router.use(adminOnlyAuth);
+router.use(adminAuth);
 
 // GET /api/communication/threads - List message threads (inbox)
 router.get('/threads', async (req, res) => {

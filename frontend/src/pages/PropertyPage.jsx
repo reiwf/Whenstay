@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { 
   RefreshCw, 
   Building,
@@ -16,32 +15,17 @@ import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
 import PropertyModal from '../components/modals/PropertyModal'
 import { adminAPI } from '../services/api'
+import { useNavigation } from '../hooks/useNavigation'
 
 export default function PropertyPage() {
   const { hasAdminAccess, profile } = useAuth()
-  const navigate = useNavigate()
+  const handleSectionChange = useNavigation('properties')
   
   // State management
   const [loading, setLoading] = useState(true)
   const [properties, setProperties] = useState([])
   const [showPropertyModal, setShowPropertyModal] = useState(false)
   const [editingProperty, setEditingProperty] = useState(null)
-
-  // Navigation handler for sidebar
-  const handleSectionChange = (section) => {
-    if (section === 'dashboard') {
-      navigate('/dashboard')
-    } else if (section === 'properties') {
-      // Already on property page
-      return
-    } else if (section === 'reservation-management') {
-      navigate('/reservations')
-    } else if (section === 'cleaning-management') {
-      navigate('/cleaning')
-    } else {
-      navigate('/dashboard') // Default fallback
-    }
-  }
 
   // Load initial data
   useEffect(() => {

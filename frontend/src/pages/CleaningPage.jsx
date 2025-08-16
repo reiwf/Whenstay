@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { 
   RefreshCw, 
   Calendar, 
@@ -24,13 +23,14 @@ import { DateRangePicker } from '../components/ui/date-range-picker'
 import toast from 'react-hot-toast'
 import CleaningTaskModal from '../components/modals/CleaningTaskModal'
 import { adminAPI } from '../services/api'
+import { useNavigation } from '../hooks/useNavigation'
 
 const tokyoTodayYMD = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
 
 export default function CleaningPage() {
   const { hasAdminAccess, profile } = useAuth()
-  const navigate = useNavigate()
+  const handleSectionChange = useNavigation(profile?.role === 'cleaner' ? 'cleaning-management' : 'cleaning')
   
   // State management
   const [loading, setLoading] = useState(true)
@@ -56,20 +56,6 @@ export default function CleaningPage() {
   }
 
   const filterTimeoutRef = useRef(null)
-
-  // Navigation handler for sidebar
-  const handleSectionChange = (section) => {
-    if (section === 'dashboard') {
-      navigate('/dashboard')
-    } else if (section === 'cleaning' || section === 'cleaning-management') {
-      // Already on cleaning page
-      return
-    } else if (section === 'reservation-management') {
-      navigate('/reservations')
-    } else {
-      navigate('/dashboard') // Default fallback
-    }
-  }
 
   // Load initial data
   useEffect(() => {

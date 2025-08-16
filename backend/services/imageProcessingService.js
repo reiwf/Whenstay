@@ -1,5 +1,4 @@
 const { supabaseAdmin } = require('../config/supabase');
-const fetch = require('node-fetch');
 
 class ImageProcessingService {
   constructor() {
@@ -65,7 +64,8 @@ class ImageProcessingService {
         throw new Error(`Invalid content type: ${contentType}`);
       }
 
-      const buffer = await response.buffer();
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
       
       // Generate filename
       const extension = contentType.split('/')[1] || 'jpg';
