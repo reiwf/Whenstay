@@ -99,7 +99,7 @@ class CommunicationService {
     const channelRows = channels.map(c => ({
       thread_id: threadId,
       channel: c.channel,
-      external_thread_id: c.external_thread_id
+      external_thread_id: c.external_thread_id || threadId // Use threadId as fallback if external_thread_id is null
     }));
 
     console.log('Inserting channel rows:', channelRows);

@@ -169,39 +169,32 @@ class Beds24Service {
     }
   }
 
-  // Get a specific booking by ID
-  async getBooking(bookingId) {
+  // Get a specific booking by ID. Return RAW or PROCESSED booking 
+  async getBooking(bookingId, { process = false } = {}) {
     try {
       const headers = await this.getHeaders();
-      const response = await axios.get(`${this.baseURL}/booking/${bookingId}`, {
-        headers: headers
+      const resp = await axios.get(`${this.baseURL}/bookings`, {
+        headers: { ...headers, accept: 'application/json' },
+        params: { id: bookingId, includeInvoiceItems: true },
       });
+      const booking = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+      if (!process) return booking;
 
-      return response.data;
+      // Reuse your webhook processor by passing a "webhook-like" payload
+      return await this.processWebhookData({
+        booking,
+        body: { timeStamp: booking.modified || booking.bookingTime || new Date().toISOString() }
+      });
     } catch (error) {
-      // Handle authentication errors by attempting token refresh
       if (error.response?.status === 401 || error.response?.status === 403) {
-        try {
-          console.log('🔄 Authentication failed, attempting token refresh...');
-          await this.refreshAccessToken();
-          
-          // Retry the request with new token
-          const headers = await this.getHeaders();
-          const response = await axios.get(`${this.baseURL}/booking/${bookingId}`, {
-            headers: headers
-          });
-
-          return response.data;
-        } catch (retryError) {
-          console.error('Failed to retry after token refresh:', retryError);
-          throw retryError;
-        }
+        console.log('🔄 Authentication failed, attempting token refresh...');
+        await this.refreshAccessToken();
+        return this.getBooking(bookingId, { process });
       }
-
-      console.error('Error fetching booking from Beds24:', error.response?.data || error.message);
-      throw new Error('Failed to fetch booking from Beds24');
+      throw error;
     }
   }
+
 
   // Verify webhook signature (if Beds24 provides one)
   verifyWebhookSignature(payload, signature) {

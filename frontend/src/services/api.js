@@ -256,6 +256,44 @@ export const adminAPI = {
   
   createCommunicationThread: (threadData) => 
     api.post('/communication/threads', threadData),
+  
+  // Automation Management
+  getAutomationRules: (params = {}) => api.get('/automation/rules', { params }),
+  
+  getScheduledMessages: (params = {}) => api.get('/automation/scheduled-messages', { params }),
+  
+  getScheduledMessagesForReservation: (reservationId) => 
+    api.get(`/automation/scheduled-messages/${reservationId}`),
+  
+  getAutomationStats: () => api.get('/automation/stats'),
+  
+  triggerAutomationForReservation: (reservationId, isUpdate = false) => 
+    api.post(`/automation/test-reservation/${reservationId}`, { isUpdate }),
+  
+  cancelScheduledMessagesForReservation: (reservationId, reason = 'Manual cancellation') => 
+    api.post(`/automation/cancel-reservation/${reservationId}`, { reason }),
+  
+  triggerBackfill: (options = {}) => api.post('/automation/backfill', options),
+  
+  processScheduledMessages: () => api.post('/automation/process-scheduled'),
+  
+  getDueMessages: (params = {}) => api.get('/automation/due-messages', { params }),
+  
+  getCronStatus: () => api.get('/automation/cron-status'),
+  
+  // Template Management
+  getAutomationTemplates: (params = {}) => api.get('/automation/templates', { params }),
+  
+  getAutomationTemplateStats: () => api.get('/automation/templates/stats'),
+  
+  toggleAutomationTemplate: (templateId, enabled) => 
+    api.patch(`/automation/templates/${templateId}/toggle`, { enabled }),
+  
+  bulkToggleAutomationTemplates: (templateIds, enabled) => 
+    api.patch('/automation/templates/bulk-toggle', { templateIds, enabled }),
+  
+  getAutomationTemplateUsage: (templateId) => 
+    api.get(`/automation/templates/${templateId}/usage`),
 }
 
 export const reservationAPI = {

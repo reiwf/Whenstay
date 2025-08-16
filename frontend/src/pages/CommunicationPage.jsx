@@ -3,6 +3,7 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import InboxPanel from '../components/communication/InboxPanel';
 import MessagePanel from '../components/communication/MessagePanel';
 import ReservationPanel from '../components/communication/ReservationPanel';
+import TemplateManagementPanel from '../components/communication/TemplateManagementPanel';
 import { useRealtimeCommunication } from '../hooks/useRealtimeCommunication';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../hooks/useNavigation';
@@ -26,7 +27,7 @@ export default function CommunicationPage() {
   } = useRealtimeCommunication();
 
   const [selectedChannel, setSelectedChannel] = useState('inapp');
-  const [activePanel, setActivePanel] = useState('messages'); // 'inbox', 'messages', 'reservation'
+  const [activeTab, setActiveTab] = useState('messages'); // 'messages', 'templates'
   const [showInboxOverlay, setShowInboxOverlay] = useState(false);
   const [showReservationOverlay, setShowReservationOverlay] = useState(false);
 
@@ -84,53 +85,62 @@ export default function CommunicationPage() {
             <div className="flex items-center gap-4">
               {/* Mobile Menu Buttons */}
               <div className="flex lg:hidden gap-2">
-                <button
-                  onClick={() => setShowInboxOverlay(true)}
-                  className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                  title="Show Inbox"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2m0 0V9a2 2 0 012-2h2m4 0h2a2 2 0 012 2v4.01" />
-                  </svg>
-                </button>
-                {selectedThread && (
-                  <button
-                    onClick={() => setShowReservationOverlay(true)}
-                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                    title="Show Reservation Details"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
+                {activeTab === 'messages' && (
+                  <>
+                    <button
+                      onClick={() => setShowInboxOverlay(true)}
+                      className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                      title="Show Inbox"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2M4 13h2m0 0V9a2 2 0 012-2h2m4 0h2a2 2 0 012 2v4.01" />
+                      </svg>
+                    </button>
+                    {selectedThread && (
+                      <button
+                        onClick={() => setShowReservationOverlay(true)}
+                        className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                        title="Show Reservation Details"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 
               <div>
                 <h1 className="text-xl lg:text-2xl font-bold text-primary-900">Communication</h1>
                 <p className="text-sm text-primary-600 mt-1 hidden sm:block">
-                  Manage guest conversations across all channels
+                  {activeTab === 'messages' 
+                    ? 'Manage guest conversations across all channels'
+                    : 'Control automated message templates'
+                  }
                 </p>
               </div>
             </div>
             
             <div className="flex items-center gap-3">
-              <div className={`flex items-center gap-2 px-2 lg:px-3 py-1 rounded-full text-xs font-medium ${
-                connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-100 text-leaf-700' : 
-                connectionStatus === 'CONNECTING' ? 'bg-yellow-100 text-yellow-700' : 
-                'bg-gray-100 text-gray-600'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-500' : 
-                  connectionStatus === 'CONNECTING' ? 'bg-yellow-500' : 'bg-gray-400'
-                }`}></div>
-                <span className="hidden sm:inline">
-                  {connectionStatus === 'SUBSCRIBED' ? 'Connected' : 
-                   connectionStatus === 'CONNECTING' ? 'Connecting' : 'Disconnected'}
-                </span>
-              </div>
+              {activeTab === 'messages' && (
+                <div className={`flex items-center gap-2 px-2 lg:px-3 py-1 rounded-full text-xs font-medium ${
+                  connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-100 text-leaf-700' : 
+                  connectionStatus === 'CONNECTING' ? 'bg-yellow-100 text-yellow-700' : 
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${
+                    connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-500' : 
+                    connectionStatus === 'CONNECTING' ? 'bg-yellow-500' : 'bg-gray-400'
+                  }`}></div>
+                  <span className="hidden sm:inline">
+                    {connectionStatus === 'SUBSCRIBED' ? 'Connected' : 
+                     connectionStatus === 'CONNECTING' ? 'Connecting' : 'Disconnected'}
+                  </span>
+                </div>
+              )}
               <button
-                onClick={loadThreads}
+                onClick={activeTab === 'messages' ? loadThreads : () => window.location.reload()}
                 disabled={loading}
                 className="px-3 lg:px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 disabled:opacity-50 transition-colors"
               >
@@ -141,61 +151,106 @@ export default function CommunicationPage() {
               </button>
             </div>
           </div>
+          
+          {/* Tab Navigation */}
+          <div className="mt-4 border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+              <button
+                onClick={() => setActiveTab('messages')}
+                className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'messages'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Messages
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('templates')}
+                className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'templates'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Templates
+                </div>
+              </button>
+            </nav>
+          </div>
         </div>
 
         {/* Main Communication Interface */}
         <div className="flex-1 flex overflow-hidden bg-primary-25">
-          {/* Desktop Layout */}
-          <div className="hidden lg:flex flex-1">
-            {/* Left Panel - Inbox */}
-            <div className="w-80 border-r border-primary-200 bg-white flex flex-col shadow-sm">
-              <InboxPanel
-                threads={threads}
-                selectedThread={selectedThread}
-                onThreadSelect={handleThreadSelect}
-                loading={loading}
-              />
-            </div>
+          {activeTab === 'messages' ? (
+            <>
+              {/* Desktop Layout */}
+              <div className="hidden lg:flex flex-1">
+                {/* Left Panel - Inbox */}
+                <div className="w-80 border-r border-primary-200 bg-white flex flex-col shadow-sm">
+                  <InboxPanel
+                    threads={threads}
+                    selectedThread={selectedThread}
+                    onThreadSelect={handleThreadSelect}
+                    loading={loading}
+                  />
+                </div>
 
-            {/* Center Panel - Messages */}
-            <div className="flex-1 flex flex-col bg-primary-50">
-              <MessagePanel
-                thread={selectedThread}
-                messages={messages}
-                selectedChannel={selectedChannel}
-                onChannelChange={setSelectedChannel}
-                onSendMessage={handleSendMessage}
-                onThreadAction={handleThreadAction}
-                onMarkAsRead={markMessageAsRead}
-                loading={loading}
-              />
-            </div>
+                {/* Center Panel - Messages */}
+                <div className="flex-1 flex flex-col bg-primary-50">
+                  <MessagePanel
+                    thread={selectedThread}
+                    messages={messages}
+                    selectedChannel={selectedChannel}
+                    onChannelChange={setSelectedChannel}
+                    onSendMessage={handleSendMessage}
+                    onThreadAction={handleThreadAction}
+                    onMarkAsRead={markMessageAsRead}
+                    loading={loading}
+                  />
+                </div>
 
-            {/* Right Panel - Reservation Details */}
-            <div className="w-80 border-l border-primary-200 bg-white shadow-sm">
-              <ReservationPanel
-                thread={selectedThread}
-                reservation={reservation}
-              />
-            </div>
-          </div>
+                {/* Right Panel - Reservation Details */}
+                <div className="w-80 border-l border-primary-200 bg-white shadow-sm">
+                  <ReservationPanel
+                    thread={selectedThread}
+                    reservation={reservation}
+                  />
+                </div>
+              </div>
 
-          {/* Mobile/Tablet Layout */}
-          <div className="flex lg:hidden flex-1 flex-col">
-            {/* Mobile Messages Panel */}
-            <div className="flex-1 flex flex-col bg-primary-50">
-              <MessagePanel
-                thread={selectedThread}
-                messages={messages}
-                selectedChannel={selectedChannel}
-                onChannelChange={setSelectedChannel}
-                onSendMessage={handleSendMessage}
-                onThreadAction={handleThreadAction}
-                onMarkAsRead={markMessageAsRead}
-                loading={loading}
-              />
+              {/* Mobile/Tablet Layout */}
+              <div className="flex lg:hidden flex-1 flex-col">
+                {/* Mobile Messages Panel */}
+                <div className="flex-1 flex flex-col bg-primary-50">
+                  <MessagePanel
+                    thread={selectedThread}
+                    messages={messages}
+                    selectedChannel={selectedChannel}
+                    onChannelChange={setSelectedChannel}
+                    onSendMessage={handleSendMessage}
+                    onThreadAction={handleThreadAction}
+                    onMarkAsRead={markMessageAsRead}
+                    loading={loading}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Template Management Tab */
+            <div className="flex-1 bg-white">
+              <TemplateManagementPanel />
             </div>
-          </div>
+          )}
 
           {/* Mobile Inbox Overlay */}
           {showInboxOverlay && (

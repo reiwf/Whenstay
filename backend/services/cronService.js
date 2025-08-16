@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const beds24Service = require('./beds24Service');
+const communicationService = require('./communicationService');
 
 class CronService {
   constructor() {
@@ -18,6 +19,9 @@ class CronService {
 
     // Start Beds24 token refresh job
     this.startBeds24TokenRefreshJob();
+
+    // Start scheduled message processing job
+    this.startScheduledMessageProcessingJob();
 
     this.isInitialized = true;
     console.log('✅ Cron service initialized successfully');
@@ -49,6 +53,178 @@ class CronService {
     // Log next execution time
     const nextExecution = this.getNextExecutionTime(cronExpression);
     console.log(`⏰ Next execution: ${nextExecution}`);
+  }
+
+  // Start the scheduled message processing cron job
+  startScheduledMessageProcessingJob() {
+    // Run every minute to process due scheduled messages
+    const cronExpression = '* * * * *'; // Every minute
+    
+    const task = cron.schedule(cronExpression, async () => {
+      await this.processScheduledMessages();
+    }, {
+      scheduled: false, // Don't start automatically
+      timezone: 'Asia/Tokyo' // Use JST timezone
+    });
+
+    // Store the task for later management
+    this.cronJobs.set('scheduledMessageProcessing', task);
+
+    // Start the task
+    task.start();
+
+    console.log('✅ Scheduled message processing cron job scheduled');
+    console.log(`📅 Schedule: Every minute (${cronExpression})`);
+    console.log('🌏 Timezone: Asia/Tokyo (JST)');
+  }
+
+  // Process due scheduled messages
+  async processScheduledMessages(forceProcess = false) {
+    try {
+      // Check environment flags before processing (unless forced)
+      if (!forceProcess) {
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        const enableScheduledMessages = process.env.ENABLE_SCHEDULED_MESSAGES === 'true';
+
+        if (isDevelopment && !enableScheduledMessages) {
+          // Log every 10 minutes to avoid spam but inform about disabled state
+          if (Math.floor(Date.now() / 600000) % 1 === 0) {
+            console.log('📭 Scheduled message processing disabled in development mode');
+            console.log('💡 Set ENABLE_SCHEDULED_MESSAGES=true in .env to enable, or use triggerScheduledMessageProcessingForced() for testing');
+          }
+          return;
+        }
+      }
+
+      const startTime = new Date();
+      
+      // Use the Supabase function to claim due messages (up to 50 at a time)
+      const dueMessages = await communicationService.getDueScheduledMessages(50);
+      
+      if (!dueMessages || dueMessages.length === 0) {
+        // Only log every 10th run to avoid log spam
+        if (Math.floor(Date.now() / 60000) % 10 === 0) {
+          const environment = process.env.NODE_ENV || 'unknown';
+          console.log(`📭 No scheduled messages due for processing (${environment} environment)`);
+        }
+        return;
+      }
+
+      console.log(`📨 Processing ${dueMessages.length} due scheduled messages...`);
+
+      const results = { success: 0, failed: 0 };
+
+      // Process each claimed message
+      for (const scheduledMessage of dueMessages) {
+        try {
+          await this.processIndividualScheduledMessage(scheduledMessage);
+          results.success++;
+        } catch (error) {
+          console.error(`Error processing scheduled message ${scheduledMessage.id}:`, error);
+          results.failed++;
+        }
+      }
+
+      const endTime = new Date();
+      const durationMs = endTime.getTime() - startTime.getTime();
+
+      console.log(`✅ Scheduled message processing complete:`, {
+        processed: dueMessages.length,
+        successful: results.success,
+        failed: results.failed,
+        duration: `${durationMs}ms`
+      });
+
+    } catch (error) {
+      console.error('❌ Error in scheduled message processing:', error);
+    }
+  }
+
+  // Process an individual scheduled message
+  async processIndividualScheduledMessage(scheduledMessage) {
+    const { supabaseAdmin } = require('../config/supabase');
+    
+    try {
+      console.log(`Processing scheduled message ${scheduledMessage.id} for template ${scheduledMessage.template_id}`);
+
+      // Render template with variables
+      const rendered = await communicationService.renderTemplate(
+        scheduledMessage.template_id,
+        scheduledMessage.payload || {}
+      );
+
+      // For inapp messages, create the message directly without external routing
+      let message;
+      if (scheduledMessage.channel === 'inapp') {
+        // Create message directly in the database for inapp channel
+        message = await communicationService.receiveMessage({
+          thread_id: scheduledMessage.thread_id,
+          channel: 'inapp',
+          content: rendered.rendered_content,
+          origin_role: 'system', // System-generated automated message
+          direction: 'outgoing'
+        });
+        console.log(`📱 Created inapp scheduled message ${message.id} for thread ${scheduledMessage.thread_id}`);
+      } else {
+        // For external channels, use the normal send flow
+        message = await communicationService.sendMessage({
+          thread_id: scheduledMessage.thread_id,
+          channel: scheduledMessage.channel,
+          content: rendered.rendered_content,
+          origin_role: 'system' // System-generated automated message
+        });
+        console.log(`📤 Sent external scheduled message ${message.id} via ${scheduledMessage.channel}`);
+      }
+
+      // Mark scheduled message as sent
+      const { error: updateError } = await supabaseAdmin
+        .from('scheduled_messages')
+        .update({ 
+          status: 'sent',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', scheduledMessage.id);
+
+      if (updateError) {
+        throw new Error(`Failed to update scheduled message status: ${updateError.message}`);
+      }
+
+      console.log(`✅ Successfully processed scheduled message ${scheduledMessage.id} -> message ${message.id}`);
+      return message;
+
+    } catch (error) {
+      console.error(`❌ Error processing scheduled message ${scheduledMessage.id}:`, error);
+
+      // Mark as failed with error details
+      try {
+        const { supabaseAdmin } = require('../config/supabase');
+        await supabaseAdmin
+          .from('scheduled_messages')
+          .update({ 
+            status: 'failed',
+            last_error: error.message,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scheduledMessage.id);
+      } catch (updateError) {
+        console.error(`Failed to update failed scheduled message ${scheduledMessage.id}:`, updateError);
+      }
+
+      throw error;
+    }
+  }
+
+  // Manually trigger scheduled message processing (useful for testing)
+  async triggerScheduledMessageProcessing() {
+    console.log('🔧 Manual scheduled message processing triggered');
+    await this.processScheduledMessages();
+  }
+
+  // Force scheduled message processing (bypasses environment checks - useful for development testing)
+  async triggerScheduledMessageProcessingForced() {
+    console.log('🔧 FORCED scheduled message processing (bypassing environment checks)');
+    console.log('⚠️  This will process messages even in development mode');
+    await this.processScheduledMessages(true); // true = force processing
   }
 
   // Refresh Beds24 token with comprehensive error handling

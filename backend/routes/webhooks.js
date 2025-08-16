@@ -4,6 +4,7 @@ const beds24Service = require('../services/beds24Service');
 const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
 const communicationService = require('../services/communicationService');
+const automationService = require('../services/automationService');
 const { adminAuth } = require('../middleware/auth');
 
 // Beds24 webhook endpoint
@@ -105,6 +106,7 @@ async function processWebhookEvent(eventType, webhookData) {
       
     case 'booking_modified':
     case 'booking_updated':
+    case 'booking_update':  // Add missing event type from Beds24
       await handleBookingUpdate(webhookData);
       break;
       
@@ -115,8 +117,20 @@ async function processWebhookEvent(eventType, webhookData) {
       
     default:
       console.log(`Unhandled event type: ${eventType}`);
-      // For unknown events, try to process as a new booking
-      await handleNewBooking(webhookData);
+      // For unknown events, try to process as new booking first, 
+      // then check if it's an update to existing reservation
+      const bookingInfo = await beds24Service.processWebhookData(webhookData);
+      const existingReservation = await reservationService.getReservationByBeds24Id(
+        bookingInfo.beds24BookingId
+      );
+      
+      if (existingReservation) {
+        console.log(`Found existing reservation for ${eventType}, processing as booking update`);
+        await handleBookingUpdate(webhookData);
+      } else {
+        console.log(`No existing reservation found for ${eventType}, processing as new booking`);
+        await handleNewBooking(webhookData);
+      }
   }
 
   // Process messages if they exist in the webhook data
@@ -320,6 +334,15 @@ async function handleNewBooking(webhookData) {
     
     console.log(`Created new reservation: ${reservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
+    // Process automation rules for the new reservation
+    try {
+      await automationService.processReservationAutomation(reservation, false);
+      console.log(`Automation processing completed for new reservation: ${reservation.id}`);
+    } catch (automationError) {
+      console.error(`Error processing automation for new reservation ${reservation.id}:`, automationError);
+      // Don't throw error - automation failure shouldn't break webhook processing
+    }
+    
   } catch (error) {
     console.error('Error handling new booking:', error);
     throw error;
@@ -358,6 +381,15 @@ async function handleBookingUpdate(webhookData) {
     
     console.log(`Updated reservation: ${updatedReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
+    // Process automation rules for the updated reservation (will cancel existing and reschedule)
+    try {
+      await automationService.processReservationAutomation(updatedReservation, true);
+      console.log(`Automation processing completed for updated reservation: ${updatedReservation.id}`);
+    } catch (automationError) {
+      console.error(`Error processing automation for updated reservation ${updatedReservation.id}:`, automationError);
+      // Don't throw error - automation failure shouldn't break webhook processing
+    }
+    
   } catch (error) {
     console.error('Error handling booking update:', error);
     throw error;
@@ -383,6 +415,15 @@ async function handleBookingCancellation(webhookData) {
       // Update status to cancelled
       await reservationService.updateReservationStatus(existingReservation.id, 'cancelled');
       console.log(`Cancelled reservation: ${existingReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
+      
+      // Cancel any pending scheduled messages for this reservation
+      try {
+        await automationService.handleReservationCancellation(existingReservation.id);
+        console.log(`Cancelled scheduled messages for reservation: ${existingReservation.id}`);
+      } catch (automationError) {
+        console.error(`Error cancelling scheduled messages for reservation ${existingReservation.id}:`, automationError);
+        // Don't throw error - automation failure shouldn't break webhook processing
+      }
     } else {
       console.log(`Reservation not found for cancellation: ${bookingInfo.beds24BookingId}`);
     }

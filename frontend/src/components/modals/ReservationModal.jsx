@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../LoadingSpinner'
+import ScheduledMessagesPanel from '../communication/ScheduledMessagesPanel'
+import { adminAPI } from '../../services/api'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
   const [formData, setFormData] = useState({
@@ -198,7 +200,8 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     booking: false,
     checkin: false,
     system: false,
-    admin: false
+    admin: false,
+    scheduled: false
   })
 
   // Available status options based on database enum
@@ -452,6 +455,37 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     reservation?.guest_mail ||
     reservation?.passport_url ||
     reservation?.guest_address
+
+  // Automation handlers
+  const handleTriggerAutomation = async (reservationId) => {
+    if (!reservationId) return;
+    
+    try {
+      const response = await adminAPI.triggerAutomationForReservation(reservationId, false);
+      console.log('Automation triggered:', response.data);
+      
+      // Return success to trigger refresh in ScheduledMessagesPanel
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error triggering automation:', error);
+      throw error;
+    }
+  };
+
+  const handleCancelMessages = async (reservationId) => {
+    if (!reservationId) return;
+    
+    try {
+      const response = await adminAPI.cancelScheduledMessagesForReservation(reservationId, 'Manual cancellation via reservation modal');
+      console.log('Messages cancelled:', response.data);
+      
+      // Return success to trigger refresh in ScheduledMessagesPanel
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error cancelling messages:', error);
+      throw error;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1436,6 +1470,40 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
                 </div>
               )}
             </div>
+
+            {/* 5. SCHEDULED MESSAGES SECTION */}
+            {reservation && (
+              <div className="border border-purple-200 rounded-lg overflow-hidden">
+                <div 
+                  className="bg-purple-50 p-4 cursor-pointer"
+                  onClick={() => toggleSection('scheduled')}
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-md font-medium text-purple-900 flex items-center">
+                      <MessageSquare className="w-5 h-5 mr-2 text-purple-600" />
+                      Scheduled Messages
+                      <span className="ml-2 text-sm text-purple-600 font-normal">
+                        (Automation System)
+                      </span>
+                    </h4>
+                    {collapsedSections.scheduled ? 
+                      <ChevronDown className="w-5 h-5 text-purple-600" /> : 
+                      <ChevronUp className="w-5 h-5 text-purple-600" />
+                    }
+                  </div>
+                </div>
+                
+                {!collapsedSections.scheduled && (
+                  <div className="p-4 bg-white">
+                    <ScheduledMessagesPanel
+                      reservationId={reservation.id}
+                      onTriggerAutomation={handleTriggerAutomation}
+                      onCancelMessages={handleCancelMessages}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex justify-end space-x-3 pt-4 border-t">
