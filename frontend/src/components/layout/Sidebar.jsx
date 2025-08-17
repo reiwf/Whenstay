@@ -44,6 +44,7 @@ const Sidebar = ({
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
         { id: 'properties', label: 'Properties', icon: Building },
         { id: 'pricing', label: 'Pricing', icon: DollarSign },
+        { id: 'market-settings', label: 'Market Settings', icon: Settings },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {
@@ -88,6 +89,9 @@ const Sidebar = ({
     } else if (itemId === 'pricing') {
       // Navigate to the dedicated pricing page
       navigate('/pricing')
+    } else if (itemId === 'market-settings') {
+      // Navigate to the dedicated market settings page
+      navigate('/market-settings')
     } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {

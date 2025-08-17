@@ -10,45 +10,59 @@ const api = axios.create({
   },
 })
 
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
+// Create axios instance for long-running operations (like market demand calculations)
+const longRunningApi = axios.create({
+  baseURL: '/api',
+  timeout: 120000, // 2 minutes timeout for intensive operations
+  headers: {
+    'Content-Type': 'application/json',
   },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
+})
 
-// Response interceptor
-api.interceptors.response.use(
-  (response) => {
-    return response
-  },
-  (error) => {
-    // Handle common errors
-    if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      localStorage.removeItem('authToken')
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-        window.location.href = '/login'
-      }
-    }
-    
-    // Show error toast for non-401 errors
-    if (error.response?.status !== 401) {
-      const message = error.response?.data?.error || error.message || 'An error occurred'
-      toast.error(message)
-    }
-    
-    return Promise.reject(error)
+// Request interceptor for both APIs
+const requestInterceptor = (config) => {
+  // Add auth token if available
+  const token = localStorage.getItem('authToken')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
-)
+  return config
+}
+
+const requestErrorInterceptor = (error) => {
+  return Promise.reject(error)
+}
+
+// Response interceptor for both APIs
+const responseInterceptor = (response) => {
+  return response
+}
+
+const responseErrorInterceptor = (error) => {
+  // Handle common errors
+  if (error.response?.status === 401) {
+    // Unauthorized - clear token and redirect to login
+    localStorage.removeItem('authToken')
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+      window.location.href = '/login'
+    }
+  }
+  
+  // Show error toast for non-401 errors
+  if (error.response?.status !== 401) {
+    const message = error.response?.data?.error || error.message || 'An error occurred'
+    toast.error(message)
+  }
+  
+  return Promise.reject(error)
+}
+
+// Apply interceptors to both API instances
+api.interceptors.request.use(requestInterceptor, requestErrorInterceptor)
+api.interceptors.response.use(responseInterceptor, responseErrorInterceptor)
+
+longRunningApi.interceptors.request.use(requestInterceptor, requestErrorInterceptor)
+longRunningApi.interceptors.response.use(responseInterceptor, responseErrorInterceptor)
 
 // API methods
 export const checkinAPI = {
@@ -315,6 +329,57 @@ export const webhookAPI = {
 export const guestAPI = {
   // Validate guest token
   validateToken: (token) => api.get(`/guest/${token}`),
+}
+
+// Market Demand Management - optimized for performance
+export const marketDemandAPI = {
+  // Market factor calculations (uses long-running API to prevent timeouts)
+  triggerCalculateFactors: () => longRunningApi.post('/market-demand/trigger/calculate-factors'),
+  
+  // Market factor breakdown for specific date
+  getFactorBreakdown: (locationId, date) => 
+    api.get(`/market-demand/factors/${locationId}/${date}/breakdown`),
+  
+  // Set manual override for specific date
+  setFactorOverride: (locationId, date, data) => 
+    api.post(`/market-demand/factors/${locationId}/${date}/override`, data),
+  
+  // Calculate factors for specific room type and date range
+  calculateRoomTypeFactors: (roomTypeId, data) => 
+    longRunningApi.post(`/market-demand/factors/${roomTypeId}/calculate`, data),
+  
+  // Market tuning parameters
+  getTuning: (locationId = 'null') => api.get(`/market-demand/tuning/${locationId}`),
+  updateTuning: (locationId = 'null', data) => api.put(`/market-demand/tuning/${locationId}`, data),
+  
+  // Competitor management
+  getCompetitors: (locationId = 'null') => api.get(`/market-demand/competitors/${locationId}`),
+  createCompetitorSet: (locationId, data) => api.post(`/market-demand/competitors/${locationId}/sets`, data),
+  addCompetitor: (setId, data) => api.post(`/market-demand/competitors/sets/${setId}/members`, data),
+  updateCompetitor: (memberId, data) => api.put(`/market-demand/competitors/members/${memberId}`, data),
+  removeCompetitor: (memberId, permanent = false) => 
+    api.delete(`/market-demand/competitors/members/${memberId}`, { params: { permanent } }),
+  
+  // Competitor pricing
+  inputCompetitorPrices: (setId, data) => api.post(`/market-demand/competitors/sets/${setId}/prices`, data),
+  bulkInputCompetitorPrices: (setId, data) => api.post(`/market-demand/competitors/sets/${setId}/prices/bulk`, data),
+  getCompetitorPrices: (setId, params) => api.get(`/market-demand/competitors/sets/${setId}/prices`, { params }),
+  getCompetitorSummary: (locationId = 'null', days = 30) => 
+    api.get(`/market-demand/competitors/${locationId}/summary`, { params: { days } }),
+  getCompetitorPositioning: (setId, roomTypeId, date) => 
+    api.get(`/market-demand/competitors/sets/${setId}/positioning/${roomTypeId}/${date}`),
+  importCompetitorCSV: (setId, data) => api.post(`/market-demand/competitors/sets/${setId}/import/csv`, data),
+  
+  // Events and holidays
+  getHolidays: (locationId = 'null', params = {}) => 
+    api.get(`/market-demand/holidays/${locationId}`, { params }),
+  addHoliday: (data) => api.post('/market-demand/holidays', data),
+  
+  getEvents: (locationId = 'null', params = {}) => 
+    api.get(`/market-demand/events/${locationId}`, { params }),
+  addEvent: (data) => api.post('/market-demand/events', data),
+  updateEvent: (eventId, data) => api.put(`/market-demand/events/${eventId}`, data),
+  deleteEvent: (eventId) => api.delete(`/market-demand/events/${eventId}`),
 }
 
 // Utility functions

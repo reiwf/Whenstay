@@ -161,9 +161,47 @@ export default function PriceDrawer({ data, onClose, onSave, formatPrice, curren
                   <span className="font-mono text-sm">{b.los?.toFixed(3) || '1.000'}</span>
                 </div>
                 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">× Market Demand:</span>
-                  <span className="font-mono text-sm">{b.demand?.toFixed(3) || '1.000'}</span>
+                {/* Smart Market Demand Breakdown */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center py-1 bg-green-50 px-2 rounded">
+                    <span className="text-gray-600 font-medium">× Market Demand:</span>
+                    <span className="font-mono text-sm font-medium text-green-700">{b.demand?.toFixed(3) || '1.000'}</span>
+                  </div>
+                  
+                  {/* Smart Market Demand Details - show if available */}
+                  {(b.pickup_signal !== undefined || b.availability_signal !== undefined || b.events_weight !== undefined || b.competitor_gap !== undefined) && (
+                    <div className="ml-4 pl-3 border-l-2 border-green-200 space-y-1 text-xs">
+                      {b.pickup_signal !== undefined && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">📈 Pickup pace:</span>
+                          <span className="font-mono text-gray-600">{b.pickup_signal?.toFixed(3)}</span>
+                        </div>
+                      )}
+                      {b.availability_signal !== undefined && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">🏠 Availability pressure:</span>
+                          <span className="font-mono text-gray-600">{b.availability_signal?.toFixed(3)}</span>
+                        </div>
+                      )}
+                      {b.events_weight !== undefined && b.events_weight !== 1 && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">🎉 Events impact:</span>
+                          <span className="font-mono text-gray-600">×{b.events_weight?.toFixed(3)}</span>
+                        </div>
+                      )}
+                      {b.competitor_gap !== undefined && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">⚔️ Competitor gap:</span>
+                          <span className="font-mono text-gray-600">{b.competitor_gap > 0 ? '+' : ''}{(b.competitor_gap * 100).toFixed(1)}%</span>
+                        </div>
+                      )}
+                      {b.is_locked && (
+                        <div className="flex items-center text-amber-600 mt-1">
+                          <span className="text-xs">🔒 Manual override active</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex justify-between items-center py-1 bg-blue-50 px-2 rounded">

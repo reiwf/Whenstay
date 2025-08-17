@@ -848,6 +848,105 @@ END $$;
 
 
 --
+-- Name: market_signals_by_date(uuid, uuid, date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.market_signals_by_date(_room_type_id uuid, _location_id uuid, _start date, _end date) RETURNS TABLE(dt date, total_units integer, occupied_units integer, pickup_7d integer, events_weight numeric, comp_price_median numeric)
+    LANGUAGE sql STABLE
+    AS $$
+with dates as (
+  select generate_series(_start, _end, interval '1 day')::date dt
+),
+-- total units (per room_type): prefer room_types.total_units, else count room_units
+units as (
+  select coalesce(nullif(rt.total_units,0),
+         (select count(*) from room_units ru where ru.room_type_id=rt.id and coalesce(ru.is_active,true))
+        ,0)::int as total_units
+  from room_types rt
+  where rt.id = _room_type_id
+),
+-- occupancy (booked units per date)
+occ as (
+  select d.dt, count(*)::int as occupied_units
+  from dates d
+  join reservations r
+    on r.check_in_date <= d.dt
+   and r.check_out_date  > d.dt
+   and r.status in ('new','confirmed','checked_in','completed')
+   and (r.room_type_id = _room_type_id or
+        exists (select 1 from room_units u where u.id=r.room_unit_id and u.room_type_id=_room_type_id))
+  group by d.dt
+),
+-- pickup in last 7 days (new bookings created within last 7 days for that stay date)
+pickup as (
+  select d.dt, count(*)::int as pickup_7d
+  from dates d
+  join reservations r
+    on r.check_in_date <= d.dt
+   and r.check_out_date  > d.dt
+   and r.status in ('new','confirmed','checked_in','completed')
+   and r.created_at >= now() - interval '7 days'
+   and (r.room_type_id = _room_type_id or
+        exists (select 1 from room_units u where u.id=r.room_unit_id and u.room_type_id=_room_type_id))
+  group by d.dt
+),
+-- events weight (multiply holidays & events overlapping)
+holiday_w as (
+  select h.dt, exp(sum(ln(coalesce(nullif(h.weight,0),1))))::numeric as w
+  from holidays h
+  where (h.location_id = _location_id or h.location_id is null)
+    and h.dt between _start and _end
+    and coalesce(h.is_active,true)
+  group by h.dt
+),
+event_w as (
+  select d.dt,
+         exp(sum(ln(coalesce(nullif(e.weight,0),1))))::numeric as w
+  from dates d
+  join events e
+    on e.start_date <= d.dt and e.end_date > d.dt
+   and (e.location_id = _location_id or e.location_id is null)
+   and coalesce(e.is_active,true)
+  group by d.dt
+),
+events_all as (
+  select d.dt,
+         coalesce(hw.w,1) * coalesce(ew.w,1) as events_weight
+  from dates d
+  left join holiday_w hw on hw.dt=d.dt
+  left join event_w   ew on ew.dt=d.dt
+),
+-- competitor median (price-only)
+comp_set as (
+  select id from comp_sets
+  where location_id = _location_id and coalesce(is_active,true)
+  order by created_at asc
+  limit 1
+),
+comp as (
+  select cd.dt, cd.price_median
+  from comp_set cs
+  join comp_daily cd on cd.comp_set_id = cs.id
+  where cd.dt between _start and _end
+)
+select
+  d.dt,
+  u.total_units,
+  coalesce(o.occupied_units,0) as occupied_units,
+  coalesce(p.pickup_7d,0) as pickup_7d,
+  coalesce(e.events_weight,1.0) as events_weight,
+  c.price_median as comp_price_median
+from dates d
+cross join units u
+left join occ o on o.dt=d.dt
+left join pickup p on p.dt=d.dt
+left join events_all e on e.dt=d.dt
+left join comp c on c.dt=d.dt
+order by d.dt;
+$$;
+
+
+--
 -- Name: match_documents(public.vector, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2674,6 +2773,108 @@ CREATE TABLE public.cleaning_tasks (
 
 
 --
+-- Name: comp_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.comp_daily (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    comp_set_id uuid NOT NULL,
+    dt date NOT NULL,
+    lead_days integer,
+    price_median numeric(10,2),
+    price_p25 numeric(10,2),
+    price_p75 numeric(10,2),
+    price_min numeric(10,2),
+    price_max numeric(10,2),
+    sample_size integer DEFAULT 0,
+    availability_pct numeric(5,2),
+    input_method text DEFAULT 'manual'::text,
+    notes text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE comp_daily; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.comp_daily IS 'Daily competitor price data (manual input)';
+
+
+--
+-- Name: comp_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.comp_members (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    comp_set_id uuid NOT NULL,
+    source text NOT NULL,
+    external_id text,
+    label text NOT NULL,
+    property_type text,
+    notes text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE comp_members; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.comp_members IS 'Individual competitors tracked in each set';
+
+
+--
+-- Name: comp_sets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.comp_sets (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    location_id uuid,
+    name text DEFAULT 'Default'::text NOT NULL,
+    description text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE comp_sets; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.comp_sets IS 'Competitor groupings by location or market segment';
+
+
+--
+-- Name: events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.events (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    location_id uuid,
+    title text NOT NULL,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    weight numeric(5,2) DEFAULT 1.10,
+    description text,
+    url text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE events; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.events IS 'Conferences, festivals, and local events affecting demand';
+
+
+--
 -- Name: guest_channel_consents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2686,6 +2887,30 @@ CREATE TABLE public.guest_channel_consents (
     created_at timestamp with time zone DEFAULT now(),
     CONSTRAINT guest_channel_consents_channel_check CHECK ((channel = ANY (ARRAY['whatsapp'::text, 'email'::text, 'sms'::text])))
 );
+
+
+--
+-- Name: holidays; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.holidays (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    location_id uuid,
+    dt date NOT NULL,
+    tag text NOT NULL,
+    weight numeric(5,2) DEFAULT 1.05,
+    title text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE holidays; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.holidays IS 'Admin-managed holidays and special dates affecting demand';
 
 
 --
@@ -2727,7 +2952,18 @@ CREATE TABLE public.market_factors (
     search_interest_index numeric(4,2) DEFAULT 0,
     comp_availability_pct numeric(5,2) DEFAULT 0,
     comp_median_price numeric(10,2) DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    seasonality_auto numeric(5,3),
+    demand_auto numeric(5,3),
+    comp_pressure_auto numeric(5,3) DEFAULT 1.00,
+    manual_multiplier numeric(5,3) DEFAULT 1.00,
+    lock_auto boolean DEFAULT false,
+    manual_notes text,
+    pickup_z numeric(6,3),
+    availability_z numeric(6,3),
+    events_weight numeric(6,3) DEFAULT 1.00,
+    comp_price_z numeric(6,3),
+    updated_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -2736,6 +2972,71 @@ CREATE TABLE public.market_factors (
 --
 
 COMMENT ON TABLE public.market_factors IS 'Market-level seasonality and demand factors';
+
+
+--
+-- Name: COLUMN market_factors.seasonality_auto; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.market_factors.seasonality_auto IS 'Auto-calculated seasonality factor (learned/smoothed)';
+
+
+--
+-- Name: COLUMN market_factors.demand_auto; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.market_factors.demand_auto IS 'Auto-calculated demand factor from pickup/availability/events';
+
+
+--
+-- Name: COLUMN market_factors.comp_pressure_auto; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.market_factors.comp_pressure_auto IS 'Auto-calculated competitor pressure factor';
+
+
+--
+-- Name: COLUMN market_factors.manual_multiplier; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.market_factors.manual_multiplier IS 'Admin manual override multiplier (default 1.0)';
+
+
+--
+-- Name: COLUMN market_factors.lock_auto; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.market_factors.lock_auto IS 'Prevent automatic updates when true';
+
+
+--
+-- Name: market_tuning; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.market_tuning (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    location_id uuid,
+    w_pickup numeric(4,2) DEFAULT 0.40,
+    w_avail numeric(4,2) DEFAULT 0.30,
+    w_event numeric(4,2) DEFAULT 0.30,
+    alpha numeric(4,2) DEFAULT 0.12,
+    beta numeric(4,2) DEFAULT 0.10,
+    demand_min numeric(4,2) DEFAULT 0.80,
+    demand_max numeric(4,2) DEFAULT 1.40,
+    comp_pressure_min numeric(4,2) DEFAULT 0.90,
+    comp_pressure_max numeric(4,2) DEFAULT 1.10,
+    ema_alpha numeric(4,2) DEFAULT 0.30,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE market_tuning; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.market_tuning IS 'Configuration parameters for market demand calculations';
 
 
 --
@@ -2892,7 +3193,13 @@ CREATE TABLE public.pricing_audit (
     final_price numeric(10,2) NOT NULL,
     days_out integer,
     run_id uuid,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    comp_pressure numeric(4,3) DEFAULT 1.0,
+    manual_multiplier numeric(4,3) DEFAULT 1.0,
+    events_weight numeric(4,3) DEFAULT 1.0,
+    pickup_signal numeric(6,3) DEFAULT 0,
+    availability_signal numeric(6,3) DEFAULT 0,
+    comp_price_signal numeric(6,3) DEFAULT 0
 );
 
 
@@ -3742,11 +4049,75 @@ ALTER TABLE ONLY public.cleaning_tasks
 
 
 --
+-- Name: comp_daily comp_daily_comp_set_id_dt_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_daily
+    ADD CONSTRAINT comp_daily_comp_set_id_dt_key UNIQUE (comp_set_id, dt);
+
+
+--
+-- Name: comp_daily comp_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_daily
+    ADD CONSTRAINT comp_daily_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: comp_members comp_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_members
+    ADD CONSTRAINT comp_members_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: comp_sets comp_sets_location_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_sets
+    ADD CONSTRAINT comp_sets_location_id_name_key UNIQUE (location_id, name);
+
+
+--
+-- Name: comp_sets comp_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_sets
+    ADD CONSTRAINT comp_sets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: guest_channel_consents guest_channel_consents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.guest_channel_consents
     ADD CONSTRAINT guest_channel_consents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: holidays holidays_location_id_dt_tag_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holidays
+    ADD CONSTRAINT holidays_location_id_dt_tag_key UNIQUE (location_id, dt, tag);
+
+
+--
+-- Name: holidays holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holidays
+    ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
 
 
 --
@@ -3779,6 +4150,22 @@ ALTER TABLE ONLY public.market_factors
 
 ALTER TABLE ONLY public.market_factors
     ADD CONSTRAINT market_factors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: market_tuning market_tuning_location_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.market_tuning
+    ADD CONSTRAINT market_tuning_location_id_key UNIQUE (location_id);
+
+
+--
+-- Name: market_tuning market_tuning_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.market_tuning
+    ADD CONSTRAINT market_tuning_pkey PRIMARY KEY (id);
 
 
 --
@@ -4493,6 +4880,62 @@ CREATE INDEX idx_cleaning_tasks_status ON public.cleaning_tasks USING btree (sta
 
 
 --
+-- Name: idx_comp_daily_date_range; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_comp_daily_date_range ON public.comp_daily USING btree (dt);
+
+
+--
+-- Name: idx_comp_daily_set_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_comp_daily_set_date ON public.comp_daily USING btree (comp_set_id, dt);
+
+
+--
+-- Name: idx_comp_members_set_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_comp_members_set_active ON public.comp_members USING btree (comp_set_id) WHERE is_active;
+
+
+--
+-- Name: idx_comp_sets_location; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_comp_sets_location ON public.comp_sets USING btree (location_id) WHERE is_active;
+
+
+--
+-- Name: idx_events_daterange; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_events_daterange ON public.events USING btree (start_date, end_date) WHERE is_active;
+
+
+--
+-- Name: idx_events_location_daterange; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_events_location_daterange ON public.events USING btree (location_id, start_date, end_date) WHERE is_active;
+
+
+--
+-- Name: idx_holidays_date_range; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_holidays_date_range ON public.holidays USING btree (dt) WHERE is_active;
+
+
+--
+-- Name: idx_holidays_location_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_holidays_location_date ON public.holidays USING btree (location_id, dt) WHERE is_active;
+
+
+--
 -- Name: idx_listing_prices_date_range; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4518,6 +4961,13 @@ CREATE INDEX idx_market_factors_date ON public.market_factors USING btree (dt);
 --
 
 CREATE INDEX idx_market_factors_location_date ON public.market_factors USING btree (location_id, dt);
+
+
+--
+-- Name: idx_market_factors_updated_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_market_factors_updated_at ON public.market_factors USING btree (updated_at DESC);
 
 
 --
@@ -4731,6 +5181,13 @@ CREATE INDEX idx_reservations_checkin_submitted ON public.reservations USING btr
 
 
 --
+-- Name: idx_reservations_created_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_created_dates ON public.reservations USING btree (created_at, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
+
+
+--
 -- Name: idx_reservations_occupancy_calc; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4752,10 +5209,24 @@ CREATE INDEX idx_reservations_property_id ON public.reservations USING btree (pr
 
 
 --
+-- Name: idx_reservations_room_type_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_room_type_dates ON public.reservations USING btree (room_type_id, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
+
+
+--
 -- Name: idx_reservations_room_type_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reservations_room_type_id ON public.reservations USING btree (room_type_id);
+
+
+--
+-- Name: idx_reservations_room_unit_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_room_unit_dates ON public.reservations USING btree (room_unit_id, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
 
 
 --
@@ -5172,10 +5643,52 @@ CREATE TRIGGER update_cleaning_task_updated_at BEFORE UPDATE ON public.cleaning_
 
 
 --
+-- Name: comp_members update_comp_members_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_comp_members_updated_at BEFORE UPDATE ON public.comp_members FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: comp_sets update_comp_sets_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_comp_sets_updated_at BEFORE UPDATE ON public.comp_sets FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: events update_events_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: holidays update_holidays_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_holidays_updated_at BEFORE UPDATE ON public.holidays FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: listing_prices update_listing_prices_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER update_listing_prices_updated_at BEFORE UPDATE ON public.listing_prices FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: market_factors update_market_factors_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_market_factors_updated_at BEFORE UPDATE ON public.market_factors FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: market_tuning update_market_tuning_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_market_tuning_updated_at BEFORE UPDATE ON public.market_tuning FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -5387,6 +5900,22 @@ ALTER TABLE ONLY public.automation_rules
 
 ALTER TABLE ONLY public.cleaning_tasks
     ADD CONSTRAINT cleaning_tasks_cleaner_id_fkey FOREIGN KEY (cleaner_id) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: comp_daily comp_daily_comp_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_daily
+    ADD CONSTRAINT comp_daily_comp_set_id_fkey FOREIGN KEY (comp_set_id) REFERENCES public.comp_sets(id) ON DELETE CASCADE;
+
+
+--
+-- Name: comp_members comp_members_comp_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.comp_members
+    ADD CONSTRAINT comp_members_comp_set_id_fkey FOREIGN KEY (comp_set_id) REFERENCES public.comp_sets(id) ON DELETE CASCADE;
 
 
 --

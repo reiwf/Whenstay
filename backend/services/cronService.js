@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const beds24Service = require('./beds24Service');
 const { supabaseAdmin } = require('../config/supabase');
 const communicationService = require('./communicationService');
+const smartMarketDemandService = require('./smartMarketDemandService');
 
 class CronService {
   constructor() {
@@ -345,13 +346,112 @@ class CronService {
     console.log(`📅 Pricing queue: Every 5 minutes (${queueCron})`);
   }
 
-  // Update market factors (seasonality, demand, etc.)
+  // Update market factors using smart market demand calculations - OPTIMIZED VERSION
   async updateMarketFactors() {
     try {
-      console.log('🔄 Updating market factors...');
+      console.log('🧠 [OPTIMIZED] Updating smart market factors...');
       const startTime = new Date();
 
-      // Generate market factors for the next 365 days
+      // Get all active room types to calculate smart factors for
+      const { data: roomTypes, error: rtError } = await supabaseAdmin
+        .from('room_types')
+        .select('id, base_price, property_id')
+        .eq('is_active', true)
+        .not('base_price', 'is', null);
+
+      if (rtError) {
+        throw rtError;
+      }
+
+      if (!roomTypes || roomTypes.length === 0) {
+        console.log('📭 No active room types found with base prices');
+        return;
+      }
+
+      // Calculate smart factors for each room type
+      const fromDate = new Date().toISOString().split('T')[0]; // Today
+      const toDate = new Date(Date.now() + (90 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]; // Next 90 days
+      
+      console.log(`📊 Processing ${roomTypes.length} room types from ${fromDate} to ${toDate}`);
+
+      // Process room types in parallel batches to improve performance
+      const batchSize = 3; // Process 3 room types simultaneously to avoid overwhelming the database
+      let totalUpdated = 0;
+      const results = [];
+
+      for (let i = 0; i < roomTypes.length; i += batchSize) {
+        const batch = roomTypes.slice(i, i + batchSize);
+        console.log(`🔄 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(roomTypes.length/batchSize)} (${batch.length} room types)`);
+
+        // Process batch in parallel
+        const batchPromises = batch.map(async (roomType) => {
+          try {
+            // Use property_id as location_id, or null for global
+            const locationId = roomType.property_id || null;
+            
+            const result = await smartMarketDemandService.updateSmartMarketFactors(
+              roomType.id,
+              fromDate,
+              toDate,
+              locationId
+            );
+
+            if (result.success) {
+              console.log(`✅ Room type ${roomType.id}: ${result.updated} records updated`);
+              return { roomTypeId: roomType.id, updated: result.updated, success: true };
+            } else {
+              console.log(`⚠️ Room type ${roomType.id}: No updates`);
+              return { roomTypeId: roomType.id, updated: 0, success: false };
+            }
+
+          } catch (roomTypeError) {
+            console.error(`❌ Error updating factors for room type ${roomType.id}:`, roomTypeError);
+            return { roomTypeId: roomType.id, updated: 0, success: false, error: roomTypeError.message };
+          }
+        });
+
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Add small delay between batches to prevent overwhelming the database
+        if (i + batchSize < roomTypes.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // Calculate totals and summary
+      totalUpdated = results.reduce((sum, r) => sum + r.updated, 0);
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      const endTime = new Date();
+      const duration = endTime.getTime() - startTime.getTime();
+      
+      console.log(`✅ [OPTIMIZED] Smart market factors completed:`);
+      console.log(`   📊 Total records updated: ${totalUpdated}`);
+      console.log(`   🏠 Room types processed: ${roomTypes.length} (${successCount} success, ${failureCount} failed)`);
+      console.log(`   ⏱️  Total duration: ${(duration/1000).toFixed(1)}s`);
+      console.log(`   ⚡ Average performance: ${(totalUpdated/(duration/1000)).toFixed(0)} records/second`);
+
+      // Log any failures for investigation
+      const failures = results.filter(r => !r.success);
+      if (failures.length > 0) {
+        console.log(`⚠️ Failed room types:`, failures.map(f => `${f.roomTypeId}: ${f.error || 'Unknown error'}`));
+      }
+
+      // Also ensure basic market factors exist for dates without specific room type calculations
+      await this.ensureBasicMarketFactors();
+
+    } catch (error) {
+      console.error('❌ Error updating smart market factors:', error);
+    }
+  }
+
+  // Ensure basic market factors exist as fallback (legacy compatibility)
+  async ensureBasicMarketFactors() {
+    try {
+      // Generate basic market factors for the next 365 days where they don't exist
       const fromDate = new Date();
       const toDate = new Date(fromDate.getTime() + (365 * 24 * 60 * 60 * 1000));
       
@@ -362,14 +462,14 @@ class CronService {
         const month = d.getMonth() + 1; // 1-12
         const dayOfWeek = d.getDay(); // 0 = Sunday
 
-        // Simple seasonality curve
+        // Simple seasonality curve (fallback)
         let seasonality;
         if ([12, 1, 2].includes(month)) seasonality = 0.92; // Winter
         else if ([3, 4, 5].includes(month)) seasonality = 0.97; // Spring  
         else if ([6, 7, 8].includes(month)) seasonality = 1.15; // Summer
         else seasonality = 1.05; // Fall
 
-        // Weekend demand boost
+        // Weekend demand boost (fallback)
         let demand = 1.0;
         if (dayOfWeek === 5 || dayOfWeek === 6) demand = 1.08; // Fri, Sat
         else if (dayOfWeek === 0) demand = 1.05; // Sun
@@ -378,26 +478,31 @@ class CronService {
           location_id: null, // Global factors
           dt: dateStr,
           seasonality,
-          demand
+          seasonality_auto: seasonality,
+          demand,
+          demand_auto: demand,
+          comp_pressure_auto: 1.0,
+          manual_multiplier: 1.0,
+          events_weight: 1.0
         });
       }
 
-      // Bulk upsert market factors
+      // Only insert where records don't already exist
       const { error } = await supabaseAdmin
         .from('market_factors')
-        .upsert(factorsToInsert, { onConflict: 'location_id,dt' });
+        .upsert(factorsToInsert, { 
+          onConflict: 'location_id,dt',
+          ignoreDuplicates: true // Don't overwrite existing smart calculations
+        });
 
       if (error) {
-        throw error;
+        console.error('Error ensuring basic market factors:', error);
+      } else {
+        console.log(`📅 Ensured basic market factors exist for ${factorsToInsert.length} dates`);
       }
 
-      const endTime = new Date();
-      const duration = endTime.getTime() - startTime.getTime();
-      
-      console.log(`✅ Market factors updated: ${factorsToInsert.length} records in ${duration}ms`);
-
     } catch (error) {
-      console.error('❌ Error updating market factors:', error);
+      console.error('❌ Error ensuring basic market factors:', error);
     }
   }
 

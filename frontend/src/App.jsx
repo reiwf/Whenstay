@@ -12,6 +12,7 @@ import NotFoundPage from './pages/NotFoundPage'
 import GuestApp from './pages/GuestApp'
 import CommunicationPage from './pages/CommunicationPage'
 import PricingPage from './pages/PricingPage'
+import MarketSettingsPage from './pages/MarketSettingsPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -99,6 +100,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner']}>
                 <PricingPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/market-settings" 
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'owner']}>
+                <MarketSettingsPage />
               </ProtectedRoute>
             } 
           />

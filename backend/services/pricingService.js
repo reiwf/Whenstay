@@ -211,7 +211,7 @@ class PricingService {
   }
 
   /**
-   * Core pricing calculation for a single date
+   * Core pricing calculation for a single date with enhanced smart market factors
    */
   calculatePrice(params) {
     const { 
@@ -222,15 +222,18 @@ class PricingService {
     // Get day of week
     const dowStr = dayjs(date).format('ddd'); // Mon, Tue, etc.
     
-    // Extract factors
+    // Extract basic factors
     const seasonality = factors.seasonality[date] || 1;
     const dowFactor = (rules.dow_adjustments || {})[dowStr] || 1;
-    const demandFactor = factors.demand[date] || 1;
     
-    // Lead time factor
+    // Enhanced smart market demand factors
+    const demandFactor = factors.demand[date] || 1; // This now includes the full smart demand calculation
+    const compPressureFactor = factors.compPressure[date] || 1;
+    const manualMultiplier = factors.manualMultiplier[date] || 1;
+    const eventsWeight = factors.eventsWeight[date] || 1;
+    
+    // Traditional pricing factors
     const leadTimeFactor = this.pickBucketValue(daysOut, rules.lead_time_curve || {});
-    
-    // Length of stay factor
     const losFactor = this.pickBucketValue(los, rules.los_discounts || {});
     
     // Occupancy factor from grid
@@ -243,9 +246,13 @@ class PricingService {
     // Orphan gap factor (default to 1 for now)
     const orphanFactor = 1;
     
-    // Calculate unclamped price
+    // Calculate unclamped price with enhanced smart market factors
+    // Note: demandFactor already includes pickup, availability, and events signals
+    // compPressureFactor adds competitor positioning adjustments
+    // manualMultiplier allows for manual overrides
     const unclamped = basePrice * seasonality * dowFactor * leadTimeFactor * 
-                      losFactor * demandFactor * occAdj.factor * orphanFactor;
+                      losFactor * demandFactor * compPressureFactor * 
+                      manualMultiplier * occAdj.factor * orphanFactor;
     
     // Clamp to min/max
     const final = Math.min(Math.max(unclamped, minPrice), maxPrice);
@@ -259,6 +266,9 @@ class PricingService {
         leadTime: leadTimeFactor,
         los: losFactor,
         demand: demandFactor,
+        compPressure: compPressureFactor,
+        manualMultiplier,
+        eventsWeight, // For audit/transparency
         occupancy: occAdj.factor,
         occupancyPct: parseFloat(occPct.toFixed(2)),
         occupancyPercent: occAdj.percent,
@@ -266,7 +276,11 @@ class PricingService {
         unclamped,
         minPrice,
         maxPrice,
-        daysOut
+        daysOut,
+        // Enhanced breakdown for audit
+        pickupSignal: factors.pickupSignal[date] || 0,
+        availabilitySignal: factors.availabilitySignal[date] || 0,
+        compPriceSignal: factors.compPriceSignal[date] || 0
       }
     };
   }
@@ -274,7 +288,7 @@ class PricingService {
   /**
    * Run pricing calculation for a room type and date range
    */
-  async runPricing(roomTypeId, from, to) {
+  async runPricing(roomTypeId, from, to, locationId = null) {
     try {
       // Start timing
       const startTime = new Date();
@@ -322,22 +336,47 @@ class PricingService {
       // Get pricing rules
       const rules = await this.getRules(roomTypeId);
 
-      // Get market factors for date range
-      const { data: marketFactors, error: mfError } = await supabaseAdmin
+      // Get market factors for date range with proper location handling
+      let marketFactorsQuery = supabaseAdmin
         .from('market_factors')
-        .select('dt, seasonality, demand')
+        .select(`
+          dt, 
+          seasonality, 
+          demand, 
+          comp_pressure_auto,
+          manual_multiplier,
+          events_weight,
+          pickup_z,
+          availability_z,
+          comp_price_z
+        `)
         .gte('dt', from)
         .lte('dt', to)
         .limit(4000);
+
+      // Handle location filtering with proper null checks (like in smartMarketDemandService)
+      if (locationId === null || locationId === 'null') {
+        marketFactorsQuery = marketFactorsQuery.is('location_id', null);
+      } else {
+        marketFactorsQuery = marketFactorsQuery.or(`location_id.is.null,location_id.eq.${locationId}`);
+      }
+
+      const { data: marketFactors, error: mfError } = await marketFactorsQuery;
 
       if (mfError) {
         throw mfError;
       }
 
-      // Convert market factors to lookup objects
+      // Convert market factors to lookup objects with enhanced data
       const factors = {
         seasonality: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.seasonality) || 1])),
-        demand: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.demand) || 1]))
+        demand: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.demand) || 1])),
+        compPressure: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_pressure_auto) || 1])),
+        manualMultiplier: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.manual_multiplier) || 1])),
+        eventsWeight: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.events_weight) || 1])),
+        pickupSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.pickup_z) || 0])),
+        availabilitySignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.availability_z) || 0])),
+        compPriceSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_price_z) || 0]))
       };
 
       // Get occupancy data using RPC
@@ -390,6 +429,9 @@ class PricingService {
           lead_time: breakdown.leadTime,
           los: breakdown.los,
           demand: breakdown.demand,
+          comp_pressure: breakdown.compPressure,
+          manual_multiplier: breakdown.manualMultiplier,
+          events_weight: breakdown.eventsWeight,
           occupancy: breakdown.occupancy,
           occupancy_pct: breakdown.occupancyPct,
           orphan: breakdown.orphan,
@@ -398,6 +440,9 @@ class PricingService {
           max_price: breakdown.maxPrice,
           final_price: Math.round(final),
           days_out: breakdown.daysOut,
+          pickup_signal: breakdown.pickupSignal,
+          availability_signal: breakdown.availabilitySignal,
+          comp_price_signal: breakdown.compPriceSignal,
           run_id: pricingRun.id
         });
       }

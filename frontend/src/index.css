@@ -574,3 +574,126 @@
   color: #54493a;                   /* primary-900 */
   font-weight: 600;
 }
+
+/* Custom Slider Styles for Market Tuning */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #e5e7eb;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s ease-in-out;
+}
+
+.slider:hover {
+  background: #d1d5db;
+}
+
+.slider:focus {
+  background: #d1d5db;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+/* Webkit browsers (Chrome, Safari, newer Edge) */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  background: #2563eb;
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-webkit-slider-thumb:active {
+  background: #1d4ed8;
+  transform: scale(1.15);
+}
+
+/* Firefox */
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.slider::-moz-range-thumb:hover {
+  background: #2563eb;
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-moz-range-thumb:active {
+  background: #1d4ed8;
+  transform: scale(1.15);
+}
+
+.slider::-moz-range-track {
+  background: #e5e7eb;
+  border-radius: 8px;
+  height: 8px;
+  border: none;
+}
+
+/* Color variations for different parameter types */
+.slider.pickup-weight::-webkit-slider-thumb {
+  background: #3b82f6; /* blue */
+}
+
+.slider.availability-weight::-webkit-slider-thumb {
+  background: #10b981; /* green */
+}
+
+.slider.events-weight::-webkit-slider-thumb {
+  background: #8b5cf6; /* purple */
+}
+
+.slider.alpha-sensitivity::-webkit-slider-thumb {
+  background: #f59e0b; /* orange */
+}
+
+.slider.beta-sensitivity::-webkit-slider-thumb {
+  background: #ef4444; /* red */
+}
+
+.slider.demand-bounds::-webkit-slider-thumb {
+  background: #6366f1; /* indigo */
+}
+
+/* Firefox color variations */
+.slider.pickup-weight::-moz-range-thumb {
+  background: #3b82f6;
+}
+
+.slider.availability-weight::-moz-range-thumb {
+  background: #10b981;
+}
+
+.slider.events-weight::-moz-range-thumb {
+  background: #8b5cf6;
+}
+
+.slider.alpha-sensitivity::-moz-range-thumb {
+  background: #f59e0b;
+}
+
+.slider.beta-sensitivity::-moz-range-thumb {
+  background: #ef4444;
+}
+
+.slider.demand-bounds::-moz-range-thumb {
+  background: #6366f1;
+}

@@ -84,6 +84,7 @@ const communicationRoutes = require('./routes/communicationRoutes');
 const automationRoutes = require('./routes/automationRoutes');
 const pricingRoutes = require('./routes/pricingRoutes');
 const roomTypeRoutes = require('./routes/roomTypeRoutes');
+const marketDemandRoutes = require('./routes/marketDemandRoutes');
 
 // API routes
 app.use('/api/webhooks', webhookRoutes);
@@ -101,6 +102,7 @@ app.use('/api/communication', communicationRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/room-types', roomTypeRoutes);
+app.use('/api/market-demand', marketDemandRoutes);
 
 // Serve static files from frontend build
 const frontendPath = path.resolve(__dirname, 'frontend', 'dist');
