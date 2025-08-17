@@ -201,18 +201,18 @@ async function processWebhookMessages(webhookData) {
 
 // Process an individual message from Beds24
 async function processIndividualMessage(message, threadId, channel) {
-  console.log('Processing message:', {
-    id: message.id,
-    source: message.source,
-    time: message.time,
-    read: message.read,
-    channel: channel,
-    content: message.message?.substring(0, 50) + '...'
-  });
+  // console.log('Processing message:', {
+  //   id: message.id,
+  //   source: message.source,
+  //   time: message.time,
+  //   read: message.read,
+  //   channel: channel,
+  //   content: message.message?.substring(0, 50) + '...'
+  // });
 
   // Check if this is an echo of our outbound message (host source)
   if (message.source === 'host') {
-    console.log(`Checking for outbound message echo: ${message.id}`);
+    // console.log(`Checking for outbound message echo: ${message.id}`);
     
     try {
       // Look for recent outbound messages with matching content
@@ -224,7 +224,7 @@ async function processIndividualMessage(message, threadId, channel) {
 
       if (recentOutbound) {
         // This is an echo of our outbound message - backfill the provider_message_id
-        console.log(`Found matching outbound message ${recentOutbound.id} for webhook echo ${message.id}`);
+        // console.log(`Found matching outbound message ${recentOutbound.id} for webhook echo ${message.id}`);
         
         await communicationService.updateDeliveryProviderMessageId(
           recentOutbound.id,
@@ -232,10 +232,10 @@ async function processIndividualMessage(message, threadId, channel) {
           message.id.toString()
         );
 
-        console.log(`Successfully backfilled provider_message_id ${message.id} for outbound message ${recentOutbound.id}, skipping duplicate creation`);
+        // console.log(`Successfully backfilled provider_message_id ${message.id} for outbound message ${recentOutbound.id}, skipping duplicate creation`);
         return; // Skip creating duplicate message
       } else {
-        console.log(`No matching outbound message found for host message ${message.id}, processing as new message`);
+        // console.log(`No matching outbound message found for host message ${message.id}, processing as new message`);
       }
     } catch (echoError) {
       console.error('Error checking for outbound message echo:', echoError);
@@ -265,7 +265,7 @@ async function processIndividualMessage(message, threadId, channel) {
   const result = await communicationService.receiveMessage(messageData);
 
   if (result.duplicate) {
-    console.log(`Message ${message.id} already exists, skipping`);
+    // console.log(`Message ${message.id} already exists, skipping`);
     return;
   }
 
@@ -283,7 +283,7 @@ async function processIndividualMessage(message, threadId, channel) {
     }
   }
 
-  console.log(`Successfully processed message ${message.id} as message ${result.id}`);
+  // console.log(`Successfully processed message ${message.id} as message ${result.id}`);
 }
 
 // Handle new booking webhook

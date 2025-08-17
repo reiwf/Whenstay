@@ -22,6 +22,7 @@ import { DateRangePicker } from '../components/ui/date-range-picker'
 import toast from 'react-hot-toast'
 import ReservationModal from '../components/modals/ReservationModal'
 import useReservations from '../hooks/useReservations'
+import { useProperties } from '../hooks/useProperties'
 import { useNavigation } from '../hooks/useNavigation'
 
 const tokyoTodayYMD = () =>
@@ -41,6 +42,13 @@ export default function ReservationPage() {
     sendInvitation,
     setCurrentPage
   } = useReservations()
+
+  // Properties hook for room assignment data
+  const {
+    properties,
+    loading: propertiesLoading,
+    loadProperties
+  } = useProperties()
 
   
   // Date range state - separate from the problematic DataTableAdvanced component
@@ -66,8 +74,9 @@ export default function ReservationPage() {
   useEffect(() => {
     if (hasAdminAccess()) {
       loadReservationsWithFilters(undefined, 1, { defaultToToday: true });
+      loadProperties(); // Load properties for room assignment
     }
-  }, [hasAdminAccess, loadReservations]);
+  }, [hasAdminAccess, loadReservations, loadProperties]);
 
 
   // Clean helper function to load reservations with date filters
@@ -515,7 +524,7 @@ export default function ReservationPage() {
         {showReservationModal && (
           <ReservationModal
             reservation={editingReservation}
-            properties={[]}
+            properties={properties}
             onSave={handleSaveReservation}
             onClose={() => {
               setShowReservationModal(false)

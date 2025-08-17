@@ -1,34 +1,28 @@
 import { useState, useEffect } from 'react'
 import { 
-  Calendar, 
-  Users, 
-  DollarSign, 
-  MapPin, 
-  Mail, 
-  Phone, 
   Copy, 
   ExternalLink,
   Check,
-  AlertCircle,
-  Clock,
-  FileText,
-  Shield,
-  ChevronDown,
-  ChevronUp,
+  MessageSquare,
+  Building2,
   User,
   UserCheck,
-  Building2,
-  CreditCard,
-  BookImage,
-  UserPlus,
-  Globe,
-  MessageSquare,
-  Hash
+  Phone,
+  Settings,
+  Shield
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../LoadingSpinner'
 import ScheduledMessagesPanel from '../communication/ScheduledMessagesPanel'
 import { adminAPI } from '../../services/api'
+import {
+  BookingInfoSection,
+  GuestInfoSection,
+  CheckinDetailsSection,
+  EmergencyContactSection,
+  SystemInfoSection,
+  AdminSection
+} from './reservation'
 
 export default function ReservationModal({ reservation, properties, onSave, onClose }) {
   const [formData, setFormData] = useState({
@@ -196,13 +190,18 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [errors, setErrors] = useState({})
-  const [collapsedSections, setCollapsedSections] = useState({
-    booking: false,
-    checkin: false,
-    system: false,
-    admin: false,
-    scheduled: false
-  })
+  const [activeTab, setActiveTab] = useState('booking')
+
+  // Define tabs with icons and labels
+  const tabs = [
+    { id: 'booking', label: 'Booking Info', icon: Building2 },
+    { id: 'guest', label: 'Guest Info', icon: User },
+    { id: 'checkin', label: 'Check-in Details', icon: UserCheck },
+    { id: 'emergency', label: 'Emergency Contact', icon: Phone },
+    { id: 'system', label: 'System Info', icon: Settings },
+    { id: 'admin', label: 'Admin', icon: Shield },
+    ...(reservation ? [{ id: 'scheduled', label: 'Scheduled Messages', icon: MessageSquare }] : [])
+  ]
 
   // Available status options based on database enum
   const statusOptions = [
@@ -215,33 +214,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     { value: 'no_show', label: 'No Show' }
   ]
 
-
-  // Get available rooms from properties (V5 structure)
-  const availableRooms = properties.reduce((rooms, property) => {
-    if (property.room_types) {
-      property.room_types.forEach(roomType => {
-        if (roomType.room_units) {
-          roomType.room_units.forEach(roomUnit => {
-            rooms.push({
-              id: roomUnit.id,
-              propertyId: property.id,
-              roomTypeId: roomType.id,
-              roomUnitId: roomUnit.id,
-              label: `${property.name} → ${roomType.name} → Unit ${roomUnit.unit_number}${roomUnit.floor_number ? ` (Floor ${roomUnit.floor_number})` : ''}`,
-              propertyName: property.name,
-              roomTypeName: roomType.name,
-              unitNumber: roomUnit.unit_number,
-              floorNumber: roomUnit.floor_number,
-              maxGuests: roomType.max_guests,
-              basePrice: roomType.base_price
-            })
-          })
-        }
-      })
-    }
-    return rooms
-  }, [])
-
   const validateForm = () => {
     const newErrors = {}
 
@@ -252,9 +224,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     if (!formData.bookingName.trim()) {
       newErrors.bookingName = 'Booking name is required'
     }
-    if (!formData.bookingEmail.trim()) {
-      newErrors.bookingEmail = 'Booking email is required'
-    } else if (!/\S+@\S+\.\S+/.test(formData.bookingEmail)) {
+    if (formData.bookingEmail && !/\S+@\S+\.\S+/.test(formData.bookingEmail)) {
       newErrors.bookingEmail = 'Please enter a valid email address'
     }
     if (!formData.checkInDate) {
@@ -265,6 +235,12 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     }
     
     // Room assignment validation (V5 structure)
+    if (!formData.propertyId) {
+      newErrors.propertyId = 'Property selection is required'
+    }
+    if (!formData.roomTypeId) {
+      newErrors.roomTypeId = 'Room type selection is required'
+    }
     if (!formData.roomUnitId) {
       newErrors.roomUnitId = 'Room unit selection is required'
     }
@@ -388,18 +364,6 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     }
   }
 
-  const handleRoomSelection = (roomUnitId) => {
-    const selectedRoom = availableRooms.find(room => room.roomUnitId === roomUnitId)
-    if (selectedRoom) {
-      setFormData({
-        ...formData,
-        roomUnitId: selectedRoom.roomUnitId,
-        roomTypeId: selectedRoom.roomTypeId,
-        propertyId: selectedRoom.propertyId
-      })
-    }
-  }
-
   const handleCopyCheckinUrl = async () => {
     if (!reservation?.check_in_token) return
     
@@ -435,26 +399,82 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     }
   }
 
-  const calculateNights = () => {
-    if (!formData.checkInDate || !formData.checkOutDate) return 0
-    const checkIn = new Date(formData.checkInDate)
-    const checkOut = new Date(formData.checkOutDate)
-    return Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24))
-  }
-
-  const toggleSection = (section) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
-  }
-
   const hasCheckinData = reservation?.checkin_submitted_at || 
     reservation?.guest_firstname || 
     reservation?.guest_lastname || 
     reservation?.guest_mail ||
     reservation?.passport_url ||
     reservation?.guest_address
+
+  // Render tab content based on activeTab
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'booking':
+        return (
+          <BookingInfoSection
+            formData={formData}
+            setFormData={setFormData}
+            errors={errors}
+            properties={properties}
+            statusOptions={statusOptions}
+            reservation={reservation}
+          />
+        )
+      case 'guest':
+        return (
+          <GuestInfoSection
+            formData={formData}
+            setFormData={setFormData}
+            errors={errors}
+            hasCheckinData={hasCheckinData}
+          />
+        )
+      case 'checkin':
+        return (
+          <CheckinDetailsSection
+            formData={formData}
+            setFormData={setFormData}
+            reservation={reservation}
+          />
+        )
+      case 'emergency':
+        return (
+          <EmergencyContactSection
+            formData={formData}
+            setFormData={setFormData}
+          />
+        )
+      case 'system':
+        return (
+          <SystemInfoSection
+            formData={formData}
+            setFormData={setFormData}
+          />
+        )
+      case 'admin':
+        return (
+          <AdminSection
+            formData={formData}
+            setFormData={setFormData}
+            reservation={reservation}
+            copied={copied}
+            handleCopyCheckinUrl={handleCopyCheckinUrl}
+          />
+        )
+      case 'scheduled':
+        return reservation ? (
+          <div className="bg-white p-6 rounded-lg">
+            <ScheduledMessagesPanel
+              reservationId={reservation.id}
+              onTriggerAutomation={handleTriggerAutomation}
+              onCancelMessages={handleCancelMessages}
+            />
+          </div>
+        ) : null
+      default:
+        return null
+    }
+  }
 
   // Automation handlers
   const handleTriggerAutomation = async (reservationId) => {
@@ -542,983 +562,51 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
             )}
           </div>
           
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-8 overflow-x-auto">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center transition-colors ${
+                      isActive
+                        ? 'border-primary-500 text-primary-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 mr-2 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* 1. BOOKING INFORMATION SECTION */}
-            <div className="border border-blue-200 rounded-lg overflow-hidden">
-              <div 
-                className="bg-blue-50 p-4 cursor-pointer"
-                onClick={() => toggleSection('booking')}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-md font-medium text-blue-900 flex items-center">
-                    <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                    Booking Information
-                    <span className="ml-2 text-sm text-blue-600 font-normal">
-                      (Core reservation data)
-                    </span>
-                  </h4>
-                  {collapsedSections.booking ? 
-                    <ChevronDown className="w-5 h-5 text-blue-600" /> : 
-                    <ChevronUp className="w-5 h-5 text-blue-600" />
-                  }
-                </div>
-              </div>
-              
-              {!collapsedSections.booking && (
-                <div className="p-4 bg-white">
-                  {/* Booking System Information */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <Hash className="w-4 h-4 mr-2" />
-                      System Information
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Beds24 Booking ID *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.beds24BookingId}
-                          readOnly={!!reservation}
-                          onChange={(e) => !reservation && setFormData({ ...formData, beds24BookingId: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none ${reservation ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-blue-500'} ${
-                            errors.beds24BookingId ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="Beds24 booking reference"
-                        />
-                        {errors.beds24BookingId && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.beds24BookingId}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Booking Source
-                        </label>
-                        <select
-                          value={formData.bookingSource}
-                          onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="">Select source</option>
-                          <option value="Airbnb">Airbnb</option>
-                          <option value="Booking.com">Booking.com</option>
-                          <option value="Expedia">Expedia</option>
-                          <option value="Direct">Direct Booking</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Primary Guest Information */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <User className="w-4 h-4 mr-2" />
-                      Primary Guest (Booking Contact)
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Booking Name *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.bookingName}
-                          onChange={(e) => setFormData({ ...formData, bookingName: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.bookingName ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="John Smith"
-                        />
-                        {errors.bookingName && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.bookingName}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Booking Last Name
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.bookingLastname}
-                          onChange={(e) => setFormData({ ...formData, bookingLastname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Smith"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Booking Email *
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={formData.bookingEmail}
-                          onChange={(e) => setFormData({ ...formData, bookingEmail: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.bookingEmail ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="john@example.com"
-                        />
-                        {errors.bookingEmail && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.bookingEmail}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Booking Phone
-                        </label>
-                        <input
-                          type="tel"
-                          value={formData.bookingPhone}
-                          onChange={(e) => setFormData({ ...formData, bookingPhone: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="+1 (555) 123-4567"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dates & Guests */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Stay Details
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Check-in Date *
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.checkInDate}
-                          onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.checkInDate ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        />
-                        {errors.checkInDate && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.checkInDate}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Check-out Date *
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.checkOutDate}
-                          onChange={(e) => setFormData({ ...formData, checkOutDate: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.checkOutDate ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        />
-                        {errors.checkOutDate && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.checkOutDate}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Nights
-                        </label>
-                        <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700">
-                          {calculateNights()} night{calculateNights() !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Total Guests *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          max="20"
-                          value={formData.numGuests}
-                          onChange={(e) => setFormData({ ...formData, numGuests: parseInt(e.target.value) || 1 })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.numGuests ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        />
-                        {errors.numGuests && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.numGuests}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Adults *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          max="20"
-                          value={formData.numAdults}
-                          onChange={(e) => setFormData({ ...formData, numAdults: parseInt(e.target.value) || 1 })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.numAdults ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        />
-                        {errors.numAdults && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.numAdults}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Children
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={formData.numChildren}
-                          onChange={(e) => setFormData({ ...formData, numChildren: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Room Assignment */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      Room Assignment (V5 Structure)
-                    </h5>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Room Unit *
-                      </label>
-                      <select
-                        required
-                        value={formData.roomUnitId}
-                        onChange={(e) => handleRoomSelection(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                          errors.roomUnitId ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                      >
-                        <option value="">Select a room unit</option>
-                        {availableRooms.map((room) => (
-                          <option key={room.roomUnitId} value={room.roomUnitId}>
-                            {room.label} (Max: {room.maxGuests} guests)
-                          </option>
-                        ))}
-                      </select>
-                      {errors.roomUnitId && (
-                        <p className="text-red-500 text-xs mt-1 flex items-center">
-                          <AlertCircle className="w-3 h-3 mr-1" />
-                          {errors.roomUnitId}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Financial Details */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      Financial Details
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Total Amount
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.totalAmount}
-                          onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.totalAmount ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="0.00"
-                        />
-                        {errors.totalAmount && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.totalAmount}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Price
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.price}
-                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.price ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="0.00"
-                        />
-                        {errors.price && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.price}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Commission
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.commission}
-                          onChange={(e) => setFormData({ ...formData, commission: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.commission ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="0.00"
-                        />
-                        {errors.commission && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.commission}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status and Comments */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      Status & Notes
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Status
-                        </label>
-                        <select
-                          value={formData.status}
-                          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          {statusOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Special Requests
-                        </label>
-                        <textarea
-                          value={formData.specialRequests}
-                          onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Any special requests or notes..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Comments
-                        </label>
-                        <textarea
-                          value={formData.comments}
-                          onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Internal comments..."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+            {/* Tab Content */}
+            <div className="min-h-[400px]">
+              {renderTabContent()}
             </div>
-
-            {/* 2. CHECK-IN DETAILS SECTION */}
-            <div className="border border-green-200 rounded-lg overflow-hidden">
-              <div 
-                className="bg-green-50 p-4 cursor-pointer"
-                onClick={() => toggleSection('checkin')}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-md font-medium text-green-900 flex items-center">
-                    <UserPlus className="w-5 h-5 mr-2 text-green-600" />
-                    Check-in Details
-                    <span className="ml-2 text-sm text-green-600 font-normal">
-                      (Guest-Provided Data)
-                    </span>
-                    {hasCheckinData && (
-                      <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        Data Available
-                      </span>
-                    )}
-                  </h4>
-                  {collapsedSections.checkin ? 
-                    <ChevronDown className="w-5 h-5 text-green-600" /> : 
-                    <ChevronUp className="w-5 h-5 text-green-600" />
-                  }
-                </div>
-              </div>
-              
-              {!collapsedSections.checkin && (
-                <div className="p-4 bg-white">
-                  {!hasCheckinData && (
-                    <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <div className="flex items-center">
-                        <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
-                        <span className="text-sm text-yellow-800">
-                          No check-in data submitted yet. Guest information will appear here once they complete online check-in.
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Guest Personal Information */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <User className="w-4 h-4 mr-2" />
-                      Guest Personal Information
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          First Name
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.guestFirstname}
-                          onChange={(e) => setFormData({ ...formData, guestFirstname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="John"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Last Name
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.guestLastname}
-                          onChange={(e) => setFormData({ ...formData, guestLastname: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="Smith"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Personal Email
-                        </label>
-                        <input
-                          type="email"
-                          value={formData.guestMail}
-                          onChange={(e) => setFormData({ ...formData, guestMail: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500 ${
-                            errors.guestMail ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="personal@example.com"
-                        />
-                        {errors.guestMail && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <AlertCircle className="w-3 h-3 mr-1" />
-                            {errors.guestMail}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Number
-                        </label>
-                        <input
-                          type="tel"
-                          value={formData.guestContact}
-                          onChange={(e) => setFormData({ ...formData, guestContact: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="+1 (555) 123-4567"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Address
-                        </label>
-                        <textarea
-                          value={formData.guestAddress}
-                          onChange={(e) => setFormData({ ...formData, guestAddress: e.target.value })}
-                          rows={2}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="123 Main St, City, State, Country"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Check-in Preferences */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      Check-in Preferences
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Estimated Check-in Time
-                        </label>
-                        <input
-                          type="time"
-                          value={formData.estimatedCheckinTime}
-                          onChange={(e) => setFormData({ ...formData, estimatedCheckinTime: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Travel Purpose
-                        </label>
-                        <select
-                          value={formData.travelPurpose}
-                          onChange={(e) => setFormData({ ...formData, travelPurpose: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                        >
-                          <option value="">Select purpose</option>
-                          <option value="Business">Business</option>
-                          <option value="Leisure">Leisure</option>
-                          <option value="Family Visit">Family Visit</option>
-                          <option value="Medical">Medical</option>
-                          <option value="Education">Education</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Document Upload */}
-                  {formData.passportUrl && (
-                    <div className="mb-6">
-                      <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                        <BookImage className="w-4 h-4 mr-2" />
-                        Identity Document
-                      </h5>
-                      <div className="flex items-center space-x-2">
-                        <a
-                          href={formData.passportUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-green-600 hover:text-green-800 text-sm underline flex items-center"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-1" />
-                          View Document
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Emergency Contact */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <Phone className="w-4 h-4 mr-2" />
-                      Emergency Contact
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Emergency Contact Name
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.emergencyContactName}
-                          onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="Emergency contact person"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Emergency Contact Phone
-                        </label>
-                        <input
-                          type="tel"
-                          value={formData.emergencyContactPhone}
-                          onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                          placeholder="+1 (555) 123-4567"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Agreement Status */}
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Agreement Status
-                    </h5>
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        id="agreementAccepted"
-                        checked={formData.agreementAccepted}
-                        onChange={(e) => setFormData({ ...formData, agreementAccepted: e.target.checked })}
-                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                      />
-                      <label htmlFor="agreementAccepted" className="text-sm font-medium text-gray-700">
-                        Guest Agreement Accepted
-                      </label>
-                      {formData.agreementAccepted && (
-                        <Check className="w-4 h-4 text-green-600" />
-                      )}
-                    </div>
-
-                    {reservation?.checkin_submitted_at && (
-                      <div className="mt-3 p-2 bg-green-100 border border-green-200 rounded-md">
-                        <div className="text-sm text-green-800">
-                          <strong>Check-in Submitted:</strong> {new Date(reservation.checkin_submitted_at).toLocaleString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 3. SYSTEM INFORMATION SECTION */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div 
-                className="bg-gray-50 p-4 cursor-pointer"
-                onClick={() => toggleSection('system')}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-md font-medium text-gray-900 flex items-center">
-                    <Globe className="w-5 h-5 mr-2 text-gray-600" />
-                    System Information
-                    <span className="ml-2 text-sm text-gray-600 font-normal">
-                      (Beds24 Webhook Data)
-                    </span>
-                  </h4>
-                  {collapsedSections.system ? 
-                    <ChevronDown className="w-5 h-5 text-gray-600" /> : 
-                    <ChevronUp className="w-5 h-5 text-gray-600" />
-                  }
-                </div>
-              </div>
-              
-              {!collapsedSections.system && (
-                <div className="p-4 bg-white">
-                  {/* Beds24 Webhook Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        API Reference
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.apiReference}
-                        onChange={(e) => setFormData({ ...formData, apiReference: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        placeholder="API reference"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Rate Description
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.rateDescription}
-                        onChange={(e) => setFormData({ ...formData, rateDescription: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        placeholder="Rate description"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Language
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.lang}
-                        onChange={(e) => setFormData({ ...formData, lang: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        placeholder="en"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Booking Time
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={formData.bookingTime}
-                        onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        API Message
-                      </label>
-                      <textarea
-                        value={formData.apiMessage}
-                        onChange={(e) => setFormData({ ...formData, apiMessage: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        placeholder="API message"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 4. ADMINISTRATIVE SECTION */}
-            <div className="border border-red-200 rounded-lg overflow-hidden">
-              <div 
-                className="bg-red-50 p-4 cursor-pointer"
-                onClick={() => toggleSection('admin')}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-md font-medium text-red-900 flex items-center">
-                    <Shield className="w-5 h-5 mr-2 text-red-600" />
-                    Administrative
-                    <span className="ml-2 text-sm text-red-600 font-normal">
-                      (Admin Controls & Verification)
-                    </span>
-                  </h4>
-                  {collapsedSections.admin ? 
-                    <ChevronDown className="w-5 h-5 text-red-600" /> : 
-                    <ChevronUp className="w-5 h-5 text-red-600" />
-                  }
-                </div>
-              </div>
-              
-              {!collapsedSections.admin && reservation && (
-                <div className="p-4 bg-white">
-                  {/* Verification Status */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <UserCheck className="w-4 h-4 mr-2" />
-                      Verification Status
-                    </h5>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="checkbox"
-                          id="adminVerified"
-                          checked={formData.adminVerified}
-                          onChange={(e) => setFormData({ ...formData, adminVerified: e.target.checked })}
-                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                        />
-                        <label htmlFor="adminVerified" className="text-sm font-medium text-gray-700">
-                          Admin Verified
-                        </label>
-                        {formData.adminVerified && (
-                          <Check className="w-4 h-4 text-green-600" />
-                        )}
-                      </div>
-
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="checkbox"
-                          id="accessRead"
-                          checked={formData.accessRead}
-                          onChange={(e) => setFormData({ ...formData, accessRead: e.target.checked })}
-                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                        />
-                        <label htmlFor="accessRead" className="text-sm font-medium text-gray-700">
-                          Access Read
-                        </label>
-                        {formData.accessRead && (
-                          <Check className="w-4 h-4 text-green-600" />
-                        )}
-                      </div>
-
-                      {reservation.verified_at && (
-                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
-                          <div className="text-sm text-blue-800">
-                            <strong>Verified At:</strong> {new Date(reservation.verified_at).toLocaleString()}
-                          </div>
-                          {reservation.verified_by_name && (
-                            <div className="text-sm text-blue-700">
-                              <strong>Verified By:</strong> {reservation.verified_by_name} {reservation.verified_by_lastname}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* System Information */}
-                  <div className="mb-6">
-                    <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      System Information
-                    </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {reservation.created_at && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Created At
-                          </label>
-                          <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-600">
-                            {new Date(reservation.created_at).toLocaleString()}
-                          </div>
-                        </div>
-                      )}
-
-                      {reservation.updated_at && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Last Updated
-                          </label>
-                          <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-600">
-                            {new Date(reservation.updated_at).toLocaleString()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Check-in URL Management */}
-                  {reservation.check_in_token && (
-                    <div>
-                      <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Check-in URL Management
-                      </h5>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Check-in URL
-                          </label>
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={`${window.location.origin}/checkin/${reservation.check_in_token}`}
-                              readOnly
-                              className="flex-1 px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-600"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleCopyCheckinUrl}
-                              className="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
-                            >
-                              {copied ? 'Copied!' : 'Copy'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 5. SCHEDULED MESSAGES SECTION */}
-            {reservation && (
-              <div className="border border-purple-200 rounded-lg overflow-hidden">
-                <div 
-                  className="bg-purple-50 p-4 cursor-pointer"
-                  onClick={() => toggleSection('scheduled')}
-                >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-md font-medium text-purple-900 flex items-center">
-                      <MessageSquare className="w-5 h-5 mr-2 text-purple-600" />
-                      Scheduled Messages
-                      <span className="ml-2 text-sm text-purple-600 font-normal">
-                        (Automation System)
-                      </span>
-                    </h4>
-                    {collapsedSections.scheduled ? 
-                      <ChevronDown className="w-5 h-5 text-purple-600" /> : 
-                      <ChevronUp className="w-5 h-5 text-purple-600" />
-                    }
-                  </div>
-                </div>
-                
-                {!collapsedSections.scheduled && (
-                  <div className="p-4 bg-white">
-                    <ScheduledMessagesPanel
-                      reservationId={reservation.id}
-                      onTriggerAutomation={handleTriggerAutomation}
-                      onCancelMessages={handleCancelMessages}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Actions */}
-            <div className="flex justify-end space-x-3 pt-4 border-t">
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-8">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
+                className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 flex items-center"
+                className="px-6 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md disabled:opacity-50 flex items-center transition-colors"
               >
                 {loading && <LoadingSpinner size="small" className="mr-2" />}
                 {reservation ? 'Update Reservation' : 'Create Reservation'}

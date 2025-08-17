@@ -89,8 +89,8 @@ class CronService {
         if (isDevelopment && !enableScheduledMessages) {
           // Log every 10 minutes to avoid spam but inform about disabled state
           if (Math.floor(Date.now() / 600000) % 1 === 0) {
-            console.log('📭 Scheduled message processing disabled in development mode');
-            console.log('💡 Set ENABLE_SCHEDULED_MESSAGES=true in .env to enable, or use triggerScheduledMessageProcessingForced() for testing');
+            // console.log('📭 Scheduled message processing disabled in development mode');
+            // console.log('💡 Set ENABLE_SCHEDULED_MESSAGES=true in .env to enable, or use triggerScheduledMessageProcessingForced() for testing');
           }
           return;
         }

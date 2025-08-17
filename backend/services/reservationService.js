@@ -1645,7 +1645,7 @@ class ReservationService {
         throw new Error('Failed to fetch cleaning tasks');
       }
 
-      console.log('Cleaning tasks query successful, found', data?.length || 0, 'tasks');
+      // console.log('Cleaning tasks query successful, found', data?.length || 0, 'tasks');
 
       // Transform the data to include calculated fields
       const transformedTasks = (data || []).map(task => {

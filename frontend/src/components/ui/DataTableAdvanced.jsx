@@ -92,17 +92,6 @@ export function DataTableAdvanced({
     return getDateColumns(enhancedColumns)
   }, [enhancedColumns])
 
-  // Custom filter function for date range
-  const dateRangeFilterFn = (row, columnId, value) => {
-    if (!value || (!value.from && !value.to)) return true
-    
-    // Check all date columns
-    return dateColumns.some(col => {
-      const colId = col.accessorKey || col.id
-      const cellValue = row.getValue(colId)
-      return isDateInRange(cellValue, value)
-    })
-  }
 
   // Enhanced global filter function
   const enhancedGlobalFilterFn = (row, columnId, value) => {

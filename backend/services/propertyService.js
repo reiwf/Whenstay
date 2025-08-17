@@ -17,7 +17,19 @@ class PropertyService {
         .from('properties')
         .select(`
           *,
-          room_types (*)
+          room_types (
+            id,
+            name,
+            max_guests,
+            base_price,
+            is_active,
+            room_units (
+              id,
+              unit_number,
+              floor_number,
+              is_active
+            )
+          )
         `)
         .eq('is_active', true);
 
@@ -215,6 +227,7 @@ class PropertyService {
             room_units (
               id,
               unit_number,
+              floor_number,
               is_active,
               reservations (
                 id,

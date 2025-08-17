@@ -7,13 +7,15 @@ import {
   Users,
   Edit,
   Plus,
-  Trash2
+  Trash2,
+  Bed
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
 import PropertyModal from '../components/modals/PropertyModal'
+import RoomTypeModal from '../components/modals/RoomTypeModal'
 import { adminAPI } from '../services/api'
 import { useNavigation } from '../hooks/useNavigation'
 
@@ -26,6 +28,8 @@ export default function PropertyPage() {
   const [properties, setProperties] = useState([])
   const [showPropertyModal, setShowPropertyModal] = useState(false)
   const [editingProperty, setEditingProperty] = useState(null)
+  const [showRoomTypeModal, setShowRoomTypeModal] = useState(false)
+  const [selectedPropertyForRooms, setSelectedPropertyForRooms] = useState(null)
 
   // Load initial data
   useEffect(() => {
@@ -86,6 +90,84 @@ export default function PropertyPage() {
     } catch (error) {
       console.error('Error saving property:', error)
       toast.error(`Failed to ${propertyId ? 'update' : 'create'} property`)
+    }
+  }
+
+  // Room Type Management Handlers
+  const handleManageRoomTypes = (property) => {
+    setSelectedPropertyForRooms(property)
+    setShowRoomTypeModal(true)
+  }
+
+  const handleCreateRoomType = async (roomTypeData) => {
+    try {
+      await adminAPI.createRoomType(selectedPropertyForRooms.id, roomTypeData)
+      toast.success('Room type created successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error creating room type:', error)
+      toast.error('Failed to create room type')
+      throw error
+    }
+  }
+
+  const handleUpdateRoomType = async (roomTypeId, roomTypeData) => {
+    try {
+      await adminAPI.updateRoomType(roomTypeId, roomTypeData)
+      toast.success('Room type updated successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error updating room type:', error)
+      toast.error('Failed to update room type')
+      throw error
+    }
+  }
+
+  const handleDeleteRoomType = async (roomTypeId) => {
+    try {
+      await adminAPI.deleteRoomType(roomTypeId)
+      toast.success('Room type deleted successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error deleting room type:', error)
+      toast.error('Failed to delete room type')
+      throw error
+    }
+  }
+
+  const handleCreateRoomUnit = async (roomTypeId, roomUnitData) => {
+    try {
+      await adminAPI.createRoomUnit(roomTypeId, roomUnitData)
+      toast.success('Room unit created successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error creating room unit:', error)
+      toast.error('Failed to create room unit')
+      throw error
+    }
+  }
+
+  const handleUpdateRoomUnit = async (roomUnitId, roomUnitData) => {
+    try {
+      await adminAPI.updateRoomUnit(roomUnitId, roomUnitData)
+      toast.success('Room unit updated successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error updating room unit:', error)
+      toast.error('Failed to update room unit')
+      throw error
+    }
+  }
+
+  const handleDeleteRoomUnit = async (roomUnitId) => {
+    try {
+      await adminAPI.deleteRoomUnit(roomUnitId)
+      toast.success('Room unit deleted successfully')
+      await loadProperties() // Refresh to update stats
+    } catch (error) {
+      console.error('Error deleting room unit:', error)
+      toast.error('Failed to delete room unit')
+      throw error
     }
   }
 
@@ -169,6 +251,14 @@ export default function PropertyPage() {
         const property = row.original
         return (
           <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleManageRoomTypes(property)}
+              className="text-gray-500 hover:text-primary-600"
+              title="Manage Room Types & Units"
+            >
+              <Bed className="w-4 h-4" />
+            </button>
+
             <button
               onClick={() => handleEditProperty(property)}
               className="text-gray-500 hover:text-primary-600"
@@ -272,6 +362,23 @@ export default function PropertyPage() {
               setEditingProperty(null)
               loadProperties()
             }}
+          />
+        )}
+
+        {/* Room Type Modal */}
+        {showRoomTypeModal && selectedPropertyForRooms && (
+          <RoomTypeModal
+            propertyId={selectedPropertyForRooms.id}
+            onClose={() => {
+              setShowRoomTypeModal(false)
+              setSelectedPropertyForRooms(null)
+            }}
+            onCreateRoomType={handleCreateRoomType}
+            onUpdateRoomType={handleUpdateRoomType}
+            onDeleteRoomType={handleDeleteRoomType}
+            onCreateRoomUnit={handleCreateRoomUnit}
+            onUpdateRoomUnit={handleUpdateRoomUnit}
+            onDeleteRoomUnit={handleDeleteRoomUnit}
           />
         )}
       </div>
