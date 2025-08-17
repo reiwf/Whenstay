@@ -9,7 +9,8 @@ import {
   FileText, 
   Settings,
   MessageCircle,
-  X
+  X,
+  DollarSign
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -42,6 +43,7 @@ const Sidebar = ({
         { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
         { id: 'properties', label: 'Properties', icon: Building },
+        { id: 'pricing', label: 'Pricing', icon: DollarSign },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {
@@ -83,6 +85,9 @@ const Sidebar = ({
     } else if (itemId === 'communication') {
       // Navigate to the dedicated communication page
       navigate('/communication')
+    } else if (itemId === 'pricing') {
+      // Navigate to the dedicated pricing page
+      navigate('/pricing')
     } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {

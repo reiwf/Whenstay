@@ -11,6 +11,7 @@ import HomePage from './pages/HomePage'
 import NotFoundPage from './pages/NotFoundPage'
 import GuestApp from './pages/GuestApp'
 import CommunicationPage from './pages/CommunicationPage'
+import PricingPage from './pages/PricingPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -80,6 +81,24 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner']}>
                 <CommunicationPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/pricing" 
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'owner']}>
+                <PricingPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/pricing/:roomTypeId" 
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'owner']}>
+                <PricingPage />
               </ProtectedRoute>
             } 
           />

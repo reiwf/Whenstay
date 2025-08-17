@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Home, Box, Settings, Bed, Wifi, Plus, X, Edit, Trash2, Check } from 'lucide-react'
+import { Home, Box, Settings, Bed, Wifi, Plus, X, Edit, Trash2, Check, DollarSign } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../LoadingSpinner'
 import { adminAPI } from '../../services/api'
@@ -44,6 +45,7 @@ export default function RoomTypeModal({
   onDeleteRoomUnit,
   onDeleteRoomType 
 }) {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('basic')
   const [loading, setLoading] = useState(false)
   const [loadingUnits, setLoadingUnits] = useState(false)
@@ -847,17 +849,33 @@ export default function RoomTypeModal({
                 {propertyRoomTypes.map((rt) => (
                   <div
                     key={rt.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`rounded-lg border transition-colors ${
                       selectedRoomType?.id === rt.id
                         ? 'border-primary-500 bg-primary-50'
                         : 'border-gray-200 hover:border-gray-300 bg-white'
                     }`}
-                    onClick={() => handleSelectRoomType(rt)}
                   >
-                    <div className="flex-1 min-w-0">
+                    <div 
+                      className="p-3 cursor-pointer"
+                      onClick={() => handleSelectRoomType(rt)}
+                    >
                       <h5 className="text-sm font-medium text-gray-900 truncate">
                         {rt.name}
                       </h5>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/pricing/${rt.id}`)
+                          onClose()
+                        }}
+                        className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                        title={`Manage pricing for ${rt.name}`}
+                      >
+                        <DollarSign className="w-3 h-3 mr-1" />
+                        Pricing
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -1,0 +1,6002 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 17.4
+-- Dumped by pg_dump version 17.5
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: auth; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA auth;
+
+
+--
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA public;
+
+
+--
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- Name: storage; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA storage;
+
+
+--
+-- Name: aal_level; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.aal_level AS ENUM (
+    'aal1',
+    'aal2',
+    'aal3'
+);
+
+
+--
+-- Name: code_challenge_method; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.code_challenge_method AS ENUM (
+    's256',
+    'plain'
+);
+
+
+--
+-- Name: factor_status; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.factor_status AS ENUM (
+    'unverified',
+    'verified'
+);
+
+
+--
+-- Name: factor_type; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.factor_type AS ENUM (
+    'totp',
+    'webauthn',
+    'phone'
+);
+
+
+--
+-- Name: one_time_token_type; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.one_time_token_type AS ENUM (
+    'confirmation_token',
+    'reauthentication_token',
+    'recovery_token',
+    'email_change_token_new',
+    'email_change_token_current',
+    'phone_change_token'
+);
+
+
+--
+-- Name: cleaning_priority; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cleaning_priority AS ENUM (
+    'normal',
+    'high'
+);
+
+
+--
+-- Name: cleaning_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cleaning_status AS ENUM (
+    'pending',
+    'in_progress',
+    'completed',
+    'cancelled'
+);
+
+
+--
+-- Name: cleaning_task_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cleaning_task_type AS ENUM (
+    'checkout',
+    'eco',
+    'deep_clean'
+);
+
+
+--
+-- Name: reservation_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.reservation_status AS ENUM (
+    'pending',
+    'invited',
+    'completed',
+    'cancelled',
+    'confirmed',
+    'checked_in',
+    'checked_out',
+    'no_show',
+    'new'
+);
+
+
+--
+-- Name: user_role; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.user_role AS ENUM (
+    'admin',
+    'owner',
+    'guest',
+    'cleaner'
+);
+
+
+--
+-- Name: buckettype; Type: TYPE; Schema: storage; Owner: -
+--
+
+CREATE TYPE storage.buckettype AS ENUM (
+    'STANDARD',
+    'ANALYTICS'
+);
+
+
+--
+-- Name: email(); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.email() RETURNS text
+    LANGUAGE sql STABLE
+    AS $$
+  select 
+  coalesce(
+    nullif(current_setting('request.jwt.claim.email', true), ''),
+    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')
+  )::text
+$$;
+
+
+--
+-- Name: FUNCTION email(); Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON FUNCTION auth.email() IS 'Deprecated. Use auth.jwt() -> ''email'' instead.';
+
+
+--
+-- Name: jwt(); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.jwt() RETURNS jsonb
+    LANGUAGE sql STABLE
+    AS $$
+  select 
+    coalesce(
+        nullif(current_setting('request.jwt.claim', true), ''),
+        nullif(current_setting('request.jwt.claims', true), '')
+    )::jsonb
+$$;
+
+
+--
+-- Name: role(); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.role() RETURNS text
+    LANGUAGE sql STABLE
+    AS $$
+  select 
+  coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
+  )::text
+$$;
+
+
+--
+-- Name: FUNCTION role(); Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON FUNCTION auth.role() IS 'Deprecated. Use auth.jwt() -> ''role'' instead.';
+
+
+--
+-- Name: uid(); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.uid() RETURNS uuid
+    LANGUAGE sql STABLE
+    AS $$
+  select 
+  coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+  )::uuid
+$$;
+
+
+--
+-- Name: FUNCTION uid(); Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON FUNCTION auth.uid() IS 'Deprecated. Use auth.jwt() -> ''sub'' instead.';
+
+
+--
+-- Name: cancel_cleaning_task_if_res_cancelled(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cancel_cleaning_task_if_res_cancelled() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.status = 'cancelled' AND OLD.status IS DISTINCT FROM 'cancelled' THEN
+    UPDATE cleaning_tasks
+    SET status = 'cancelled'
+    WHERE reservation_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: check_same_day_checkin(date, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.check_same_day_checkin(checkout_date date, unit_id uuid) RETURNS boolean
+    LANGUAGE plpgsql
+    AS $$
+       DECLARE
+         same_day_checkin_count integer;
+       BEGIN
+         SELECT COUNT(*) INTO same_day_checkin_count
+         FROM reservations 
+         WHERE room_unit_id = unit_id 
+           AND check_in_date = checkout_date
+           AND status IN ('confirmed', 'checked_in');
+           
+         RETURN same_day_checkin_count > 0;
+       END;
+       $$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: scheduled_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.scheduled_messages (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    template_id uuid NOT NULL,
+    reservation_id uuid,
+    rule_id uuid,
+    channel text NOT NULL,
+    run_at timestamp with time zone NOT NULL,
+    payload jsonb,
+    status text DEFAULT 'queued'::text NOT NULL,
+    last_error text,
+    locked_at timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    cancellation_reason text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT scheduled_messages_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
+    CONSTRAINT scheduled_messages_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'sent'::text, 'canceled'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: claim_due_scheduled_messages(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_due_scheduled_messages(p_limit integer DEFAULT 50) RETURNS SETOF public.scheduled_messages
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    WITH c AS (
+        SELECT id FROM public.scheduled_messages
+        WHERE status='queued'
+          AND run_at <= now()
+          AND (locked_at IS NULL OR locked_at < now() - interval '5 minutes')
+        ORDER BY run_at ASC
+        LIMIT p_limit
+        FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.scheduled_messages sm
+    SET locked_at = now(), attempts = sm.attempts + 1
+    FROM c
+    WHERE sm.id = c.id
+    RETURNING sm.*;
+END $$;
+
+
+--
+-- Name: clamp_price(uuid, numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.clamp_price(_room_type_id uuid, _price numeric) RETURNS numeric
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE 
+    lo NUMERIC; 
+    hi NUMERIC;
+BEGIN
+    SELECT min_price, max_price INTO lo, hi 
+    FROM room_types 
+    WHERE id = _room_type_id;
+    
+    -- If no min/max set, return original price
+    IF lo IS NULL AND hi IS NULL THEN
+        RETURN _price;
+    END IF;
+    
+    -- Apply clamping with proper NULL handling
+    RETURN GREATEST(COALESCE(lo, _price), LEAST(COALESCE(hi, _price), _price));
+END; 
+$$;
+
+
+--
+-- Name: cleanup_pricing_queue(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cleanup_pricing_queue() RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    deleted_count INT;
+BEGIN
+    DELETE FROM pricing_recalc_queue 
+    WHERE status = 'completed' 
+    AND processed_at < NOW() - INTERVAL '24 hours';
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$;
+
+
+--
+-- Name: create_cleaning_task_for_reservation(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_cleaning_task_for_reservation(reservation_uuid uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+       DECLARE
+         res_record RECORD;
+         default_cleaner_id uuid;
+         is_priority boolean;
+       BEGIN
+         SELECT * INTO res_record FROM reservations WHERE id = reservation_uuid;
+         
+         IF res_record.room_unit_id IS NULL THEN
+           RETURN;
+         END IF;
+         
+         SELECT get_property_default_cleaner(res_record.room_unit_id) INTO default_cleaner_id;
+         SELECT check_same_day_checkin(res_record.check_out_date, res_record.room_unit_id) INTO is_priority;
+         
+         IF EXISTS (SELECT 1 FROM cleaning_tasks WHERE reservation_id = reservation_uuid) THEN
+           RETURN;
+         END IF;
+         
+         INSERT INTO cleaning_tasks (
+           reservation_id,
+           room_unit_id,
+           task_date,
+           task_type,
+           priority,
+           assigned_cleaner_id
+         ) VALUES (
+           reservation_uuid,
+           res_record.room_unit_id,
+           res_record.check_out_date,
+           'checkout',
+           is_priority,
+           default_cleaner_id
+         );
+       END;
+       $$;
+
+
+--
+-- Name: create_message_thread(uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_message_thread(p_reservation_id uuid, p_subject text DEFAULT NULL::text, p_guest_external_address text DEFAULT NULL::text, p_guest_display_name text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE 
+    v_thread_id uuid;
+BEGIN
+    -- Create the thread
+    INSERT INTO public.message_threads (reservation_id, subject)
+    VALUES (p_reservation_id, p_subject)
+    RETURNING id INTO v_thread_id;
+
+    -- Add guest participant if provided
+    IF p_guest_external_address IS NOT NULL THEN
+        INSERT INTO public.message_participants (
+            thread_id, participant_type, external_address, display_name
+        ) VALUES (
+            v_thread_id, 'guest', p_guest_external_address, p_guest_display_name
+        );
+    END IF;
+
+    RETURN v_thread_id;
+END $$;
+
+
+--
+-- Name: enforce_cleaner_role(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_cleaner_role() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+    user_role text;
+begin
+    -- Skip if cleaner_id is null
+    if new.cleaner_id is null then
+        return new;
+    end if;
+
+    -- Check if this user has cleaner role
+    select role into user_role
+    from user_profiles
+    where id = new.cleaner_id;
+
+    if user_role is distinct from 'cleaner' then
+        raise exception 'User % is not a cleaner', new.cleaner_id;
+    end if;
+
+    return new;
+end;
+$$;
+
+
+--
+-- Name: execute(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.execute(query text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  EXECUTE query;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
+END;
+$$;
+
+
+--
+-- Name: generate_checkin_token(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.generate_checkin_token() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    token TEXT;
+BEGIN
+    LOOP
+        -- Generate random 8-digit number
+        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
+        -- Check if it exists
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
+    END LOOP;
+    NEW.check_in_token := token;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: get_dashboard_stats(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_dashboard_stats() RETURNS json
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'totalReservations', (SELECT COUNT(*) FROM reservations),
+        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
+        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
+        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
+        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
+        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
+        'totalProperties', (SELECT COUNT(*) FROM properties),
+        'totalRooms', (SELECT COUNT(*) FROM rooms),
+        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
+        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
+        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
+    ) INTO result;
+    
+    RETURN result;
+END;
+$$;
+
+
+--
+-- Name: get_guest_dashboard_data(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_guest_dashboard_data(reservation_token uuid) RETURNS json
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'reservation', json_build_object(
+            'id', r.id,
+            'guest_name', r.guest_name,
+            'check_in_date', r.check_in_date,
+            'check_out_date', r.check_out_date,
+            'num_guests', r.num_guests,
+            'status', r.status
+        ),
+        'property', json_build_object(
+            'name', p.name,
+            'address', p.address,
+            'wifi_name', p.wifi_name,
+            'wifi_password', p.wifi_password,
+            'house_rules', p.house_rules,
+            'check_in_instructions', p.check_in_instructions,
+            'emergency_contact', p.emergency_contact,
+            'amenities', p.property_amenities
+        ),
+        'room', json_build_object(
+            'room_number', rm.room_number,
+            'room_name', rm.room_name,
+            'access_code', rm.access_code,
+            'access_instructions', rm.access_instructions,
+            'amenities', rm.room_amenities,
+            'max_guests', rm.max_guests,
+            'bed_configuration', rm.bed_configuration
+        ),
+        'checkin_status', CASE 
+            WHEN gc.id IS NOT NULL THEN 'completed'
+            ELSE 'pending'
+        END
+    ) INTO result
+    FROM reservations r
+    LEFT JOIN rooms rm ON r.room_id = rm.id
+    LEFT JOIN properties p ON rm.property_id = p.id
+    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
+    WHERE r.check_in_token = reservation_token;
+    
+    RETURN result;
+END;
+$$;
+
+
+--
+-- Name: get_owner_stats(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_owner_stats(owner_uuid uuid) RETURNS json
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    result JSON;
+    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
+    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
+BEGIN
+    SELECT json_build_object(
+        'monthlyRevenue', COALESCE(SUM(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'occupancyRate', ROUND(
+            (COUNT(CASE 
+                WHEN r.check_in_date >= start_date 
+                AND r.check_in_date <= end_date 
+                THEN 1 
+            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
+        ),
+        'averageDailyRate', COALESCE(AVG(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'upcomingReservations', COUNT(CASE 
+            WHEN r.check_in_date > CURRENT_DATE 
+            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
+            THEN 1 
+        END),
+        'totalProperties', COUNT(DISTINCT p.id),
+        'totalRooms', COUNT(DISTINCT rm.id),
+        'pendingCleaningTasks', COUNT(CASE 
+            WHEN ct.status = 'pending' 
+            THEN 1 
+        END)
+    ) INTO result
+    FROM properties p
+    LEFT JOIN rooms rm ON p.id = rm.property_id
+    LEFT JOIN reservations r ON rm.id = r.room_id
+    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
+    WHERE p.owner_id = owner_uuid;
+    
+    RETURN result;
+END;
+$$;
+
+
+--
+-- Name: get_property_default_cleaner(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_property_default_cleaner(unit_id uuid) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+       DECLARE
+         default_cleaner_id uuid;
+       BEGIN
+         SELECT p.default_cleaner_id INTO default_cleaner_id
+         FROM properties p
+         JOIN room_types rt ON p.id = rt.property_id
+         JOIN room_units ru ON rt.id = ru.room_type_id
+         WHERE ru.id = unit_id;
+         
+         RETURN default_cleaner_id;
+       END;
+       $$;
+
+
+--
+-- Name: handle_reservation_cleaning_task(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.handle_reservation_cleaning_task() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+      BEGIN
+        IF TG_OP = 'INSERT' THEN
+          IF NEW.room_unit_id IS NOT NULL AND NEW.status IN ('confirmed', 'checked_in') THEN
+            PERFORM create_cleaning_task_for_reservation(NEW.id);
+            PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+          END IF;
+          RETURN NEW;
+        END IF;
+        
+        IF TG_OP = 'UPDATE' THEN
+          IF OLD.status != 'confirmed' AND NEW.status = 'confirmed' AND NEW.room_unit_id IS NOT NULL THEN
+            PERFORM create_cleaning_task_for_reservation(NEW.id);
+            PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+          END IF;
+          
+          IF OLD.check_out_date != NEW.check_out_date AND NEW.room_unit_id IS NOT NULL THEN
+            UPDATE cleaning_tasks 
+            SET task_date = NEW.check_out_date,
+                priority = check_same_day_checkin(NEW.check_out_date, NEW.room_unit_id)
+            WHERE reservation_id = NEW.id;
+            
+            PERFORM update_cleaning_task_priorities(OLD.check_out_date, COALESCE(NEW.room_unit_id, OLD.room_unit_id));
+            PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+          END IF;
+          
+          IF OLD.room_unit_id != NEW.room_unit_id AND NEW.room_unit_id IS NOT NULL THEN
+            UPDATE cleaning_tasks 
+            SET room_unit_id = NEW.room_unit_id,
+                priority = check_same_day_checkin(NEW.check_out_date, NEW.room_unit_id),
+                assigned_cleaner_id = get_property_default_cleaner(NEW.room_unit_id)
+            WHERE reservation_id = NEW.id;
+            
+            IF OLD.room_unit_id IS NOT NULL THEN
+              PERFORM update_cleaning_task_priorities(NEW.check_out_date, OLD.room_unit_id);
+            END IF;
+            PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+          END IF;
+          
+          IF NEW.status = 'cancelled' THEN
+            UPDATE cleaning_tasks 
+            SET status = 'cancelled'
+            WHERE reservation_id = NEW.id AND status = 'pending';
+          END IF;
+          
+          RETURN NEW;
+        END IF;
+        
+        IF TG_OP = 'DELETE' THEN
+          IF OLD.room_unit_id IS NOT NULL THEN
+            PERFORM update_cleaning_task_priorities(OLD.check_out_date, OLD.room_unit_id);
+          END IF;
+          RETURN OLD;
+        END IF;
+        
+        RETURN NULL;
+      END;
+      $$;
+
+
+--
+-- Name: manage_cleaning_task(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.manage_cleaning_task() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- 1. Delete old cleaning task if room or checkout date changed
+    DELETE FROM cleaning_tasks
+    WHERE reservation_id = NEW.id;
+
+    -- 2. Insert new cleaning task
+    INSERT INTO cleaning_tasks (
+        property_id,
+        room_unit_id,
+        reservation_id,
+        cleaner_id,
+        task_date,
+        task_type,
+        status,
+        priority,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        NEW.property_id,
+        NEW.room_unit_id,
+        NEW.id,
+        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
+        NEW.check_out_date,
+        'checkout',
+        'pending',
+        'normal', -- temporary, will recalc below
+        now(),
+        now()
+    );
+
+    -- 3. Recalculate priority for all tasks of this room & date
+    UPDATE cleaning_tasks ct
+    SET priority = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.room_unit_id = ct.room_unit_id
+              AND r.check_in_date = ct.task_date
+              AND r.id <> ct.reservation_id
+        )
+        THEN 'high'
+        ELSE 'normal'
+    END,
+    updated_at = now()
+    WHERE ct.room_unit_id = NEW.room_unit_id
+      AND ct.task_date = NEW.check_out_date;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: mark_messages_read(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_messages_read(p_thread_id uuid, p_user_id uuid, p_last_message_id uuid DEFAULT NULL::uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    UPDATE public.message_participants
+    SET last_read_message_id = COALESCE(p_last_message_id, (
+        SELECT id FROM public.messages 
+        WHERE thread_id = p_thread_id 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    )),
+    last_read_at = now()
+    WHERE thread_id = p_thread_id 
+      AND user_id = p_user_id;
+      
+    -- If no participant record exists, create one
+    IF NOT FOUND THEN
+        INSERT INTO public.message_participants (
+            thread_id, participant_type, user_id, last_read_message_id, last_read_at
+        ) VALUES (
+            p_thread_id, 'host', p_user_id, p_last_message_id, now()
+        );
+    END IF;
+END $$;
+
+
+--
+-- Name: match_documents(public.vector, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.match_documents(query_embedding public.vector, match_count integer DEFAULT NULL::integer, filter jsonb DEFAULT '{}'::jsonb) RETURNS TABLE(id bigint, content text, metadata jsonb, similarity double precision)
+    LANGUAGE plpgsql
+    AS $$
+#variable_conflict use_column
+begin
+  return query
+  select
+    id,
+    content,
+    metadata,
+    1 - (documents.embedding <=> query_embedding) as similarity
+  from documents
+  where metadata @> filter
+  order by documents.embedding <=> query_embedding
+  limit match_count;
+end;
+$$;
+
+
+--
+-- Name: message_deliveries_status_trigger(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.message_deliveries_status_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Handle INSERT operations
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status = 'queued' AND NEW.queued_at IS NULL THEN 
+      NEW.queued_at := now(); 
+    END IF;
+    IF NEW.status = 'sent' AND NEW.sent_at IS NULL THEN 
+      NEW.sent_at := now(); 
+    END IF;
+    IF NEW.status = 'delivered' AND NEW.delivered_at IS NULL THEN 
+      NEW.delivered_at := now(); 
+    END IF;
+    IF NEW.status = 'read' AND NEW.read_at IS NULL THEN 
+      NEW.read_at := now(); 
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- Handle UPDATE operations when status changes
+  IF TG_OP = 'UPDATE' AND COALESCE(OLD.status, '') <> NEW.status THEN
+    CASE NEW.status
+      WHEN 'queued' THEN 
+        IF NEW.queued_at IS NULL THEN 
+          NEW.queued_at := now(); 
+        END IF;
+      WHEN 'sent' THEN 
+        IF NEW.sent_at IS NULL THEN 
+          NEW.sent_at := now(); 
+        END IF;
+      WHEN 'delivered' THEN 
+        IF NEW.delivered_at IS NULL THEN 
+          NEW.delivered_at := now(); 
+        END IF;
+      WHEN 'read' THEN 
+        IF NEW.read_at IS NULL THEN 
+          NEW.read_at := now(); 
+        END IF;
+      WHEN 'failed' THEN
+        -- Failed status doesn't get a timestamp, but we could log when it failed
+        -- No timestamp update needed
+        NULL;
+      ELSE
+        -- Unknown status, log a warning but don't fail
+        RAISE WARNING 'Unknown message delivery status: %', NEW.status;
+    END CASE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION message_deliveries_status_trigger(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.message_deliveries_status_trigger() IS 'Trigger function to automatically set timestamp fields based on message delivery status transitions';
+
+
+--
+-- Name: message_deliveries_status_ts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.message_deliveries_status_ts() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    if new.status = 'queued'    and new.queued_at    is null then new.queued_at    := now(); end if;
+    if new.status = 'sent'      and new.sent_at      is null then new.sent_at      := now(); end if;
+    if new.status = 'delivered' and new.delivered_at is null then new.delivered_at := now(); end if;
+    if new.status = 'read'      and new.read_at      is null then new.read_at      := now(); end if;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and coalesce(old.status,'') <> new.status then
+    case new.status
+      when 'queued'    then if new.queued_at    is null then new.queued_at    := now(); end if;
+      when 'sent'      then if new.sent_at      is null then new.sent_at      := now(); end if;
+      when 'delivered' then if new.delivered_at is null then new.delivered_at := now(); end if;
+      when 'read'      then if new.read_at      is null then new.read_at      := now(); end if;
+      else
+        -- Handle 'failed' and any other statuses gracefully
+        null;
+    end case;
+  end if;
+
+  return new;
+end 
+$$;
+
+
+--
+-- Name: occupancy_by_date(uuid, date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.occupancy_by_date(_room_type_id uuid, _start date, _end date) RETURNS TABLE(dt date, total_units integer, occupied_units integer, occupancy_pct numeric)
+    LANGUAGE sql STABLE
+    AS $$
+WITH dates AS (
+  SELECT generate_series(_start, _end, interval '1 day')::date AS dt
+),
+units AS (
+  SELECT
+    rt.total_units AS total_units_rt,
+    (SELECT count(*) FROM room_units ru
+      WHERE ru.room_type_id = rt.id AND coalesce(ru.is_active, true)) AS total_units_rows
+  FROM room_types rt
+  WHERE rt.id = _room_type_id
+),
+total AS (
+  SELECT coalesce(nullif(u.total_units_rt,0), u.total_units_rows, 0) AS total_units
+  FROM units u
+),
+stays AS (
+  -- A) reservations linked by room_type_id
+  SELECT d.dt
+  FROM dates d
+  JOIN reservations r
+    ON r.room_type_id = _room_type_id
+   AND r.check_in_date <= d.dt
+   AND r.check_out_date > d.dt
+   AND r.status IN ('new','confirmed','checked_in','completed')
+  UNION ALL
+  -- B) reservations linked by room_unit_id -> room_units -> room_type_id
+  SELECT d.dt
+  FROM dates d
+  JOIN reservations r
+    ON r.check_in_date <= d.dt
+   AND r.check_out_date > d.dt
+   AND r.status IN ('new','confirmed','checked_in','completed')
+  JOIN room_units u ON u.id = r.room_unit_id AND u.room_type_id = _room_type_id
+),
+agg AS (
+  SELECT dt, count(*) AS occupied_units
+  FROM stays
+  GROUP BY dt
+)
+SELECT
+  d.dt,
+  t.total_units,
+  coalesce(a.occupied_units,0) AS occupied_units,
+  CASE WHEN t.total_units > 0
+       THEN round(100.0 * coalesce(a.occupied_units,0) / t.total_units, 2)
+       ELSE 0 END AS occupancy_pct
+FROM dates d
+CROSS JOIN total t
+LEFT JOIN agg a ON a.dt = d.dt
+ORDER BY d.dt;
+$$;
+
+
+--
+-- Name: process_pricing_queue(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.process_pricing_queue() RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    queue_item RECORD;
+    processed_count INT := 0;
+BEGIN
+    -- Process up to 10 items at a time
+    FOR queue_item IN 
+        SELECT * FROM pricing_recalc_queue 
+        WHERE status = 'pending'
+        ORDER BY created_at
+        LIMIT 10
+    LOOP
+        BEGIN
+            -- Mark as processing
+            UPDATE pricing_recalc_queue 
+            SET status = 'processing', processed_at = NOW()
+            WHERE id = queue_item.id;
+            
+            -- Here we would normally call the pricing service
+            -- For now, we'll just mark as completed
+            -- In a real implementation, you'd make an HTTP call to /api/pricing/run
+            
+            -- Mark as completed
+            UPDATE pricing_recalc_queue 
+            SET status = 'completed', updated_at = NOW()
+            WHERE id = queue_item.id;
+            
+            processed_count := processed_count + 1;
+            
+        EXCEPTION WHEN OTHERS THEN
+            -- Mark as failed with error message
+            UPDATE pricing_recalc_queue 
+            SET status = 'failed', error_message = SQLERRM, updated_at = NOW()
+            WHERE id = queue_item.id;
+        END;
+    END LOOP;
+    
+    RETURN processed_count;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION process_pricing_queue(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.process_pricing_queue() IS 'Processes pending pricing recalculation jobs';
+
+
+--
+-- Name: propagate_booking_name_to_ct(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.propagate_booking_name_to_ct() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE public.cleaning_tasks
+     SET booking_name = NEW.booking_name,
+         updated_at   = NOW()
+   WHERE reservation_id = NEW.id;
+
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: refresh_room_type_total_units(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.refresh_room_type_total_units(_rt uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+  UPDATE room_types rt
+  SET total_units = (
+    SELECT count(*) FROM room_units ru
+    WHERE ru.room_type_id = rt.id AND coalesce(ru.is_active, true)
+  )
+  WHERE rt.id = _rt;
+$$;
+
+
+--
+-- Name: schedule_message(uuid, uuid, text, timestamp with time zone, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_message(p_thread_id uuid, p_template_id uuid, p_channel text, p_run_at timestamp with time zone, p_payload jsonb DEFAULT NULL::jsonb) RETURNS uuid
+    LANGUAGE sql
+    AS $$
+    INSERT INTO public.scheduled_messages (thread_id, template_id, channel, run_at, payload)
+    VALUES (p_thread_id, p_template_id, p_channel, p_run_at, p_payload)
+    RETURNING id;
+$$;
+
+
+--
+-- Name: send_message(uuid, text, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.send_message(p_thread_id uuid, p_channel text, p_content text, p_origin_role text DEFAULT 'host'::text, p_parent_message_id uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE 
+    v_message_id uuid;
+BEGIN
+    INSERT INTO public.messages (thread_id, origin_role, direction, channel, content, parent_message_id)
+    VALUES (p_thread_id, p_origin_role, 'outgoing', p_channel, p_content, p_parent_message_id)
+    RETURNING id INTO v_message_id;
+
+    INSERT INTO public.message_deliveries (message_id, channel, status, queued_at)
+    VALUES (v_message_id, p_channel, 'queued', now());
+
+    UPDATE public.message_threads
+    SET last_message_at = now(), 
+        last_message_preview = left(p_content, 160),
+        updated_at = now()
+    WHERE id = p_thread_id;
+
+    RETURN v_message_id;
+END $$;
+
+
+--
+-- Name: set_cleaning_status_on_insert_if_cancelled(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_cleaning_status_on_insert_if_cancelled() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM reservations
+    WHERE id = NEW.reservation_id
+      AND status = 'cancelled'
+  ) THEN
+    NEW.status := 'cancelled';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_ct_booking_name(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_ct_booking_name() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.reservation_id IS NOT NULL THEN
+    SELECT r.booking_name
+      INTO NEW.booking_name
+    FROM public.reservations r
+    WHERE r.id = NEW.reservation_id;
+  ELSE
+    NEW.booking_name := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_default_name_en(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_default_name_en() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- If name_en is NULL, set it to the value of name
+  IF NEW.name_en IS NULL THEN
+    NEW.name_en := NEW.name;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_default_thread_subject(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_default_thread_subject() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_subject text;
+BEGIN
+  -- Only fill when subject is empty/null AND we have a reservation_id
+  IF (coalesce(trim(NEW.subject), '') = '' AND NEW.reservation_id IS NOT NULL) THEN
+    SELECT nullif(trim(concat_ws(' ', r.booking_name, r.booking_lastname)), '')
+      INTO v_subject
+    FROM public.reservations r
+    WHERE r.id = NEW.reservation_id;
+
+    IF v_subject IS NOT NULL THEN
+      NEW.subject := v_subject;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+
+
+--
+-- Name: sync_cleaning_status_from_reservation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sync_cleaning_status_from_reservation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Only do work when status actually changes
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    UPDATE cleaning_tasks
+    SET status = NEW.status
+    WHERE reservation_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: trg_sync_room_type_total_units(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trg_sync_room_type_total_units() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  target uuid := coalesce(NEW.room_type_id, OLD.room_type_id);
+BEGIN
+  PERFORM public.refresh_room_type_total_units(target);
+  RETURN COALESCE(NEW, OLD);
+END; $$;
+
+
+--
+-- Name: trigger_pricing_recalculation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trigger_pricing_recalculation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  op        text := TG_OP;
+  -- Put all "sellable" statuses you want to count here:
+  sellable  text[] := ARRAY['new','confirmed','checked_in','completed','paid','booked'];
+  rt_id     uuid;
+  sdate     date;
+  edate     date;
+  today     date := CURRENT_DATE;
+  horizon   date := (CURRENT_DATE + INTERVAL '540 days')::date;  -- cap ~18 months
+BEGIN
+  IF op = 'INSERT' THEN
+    IF NEW.status = ANY(sellable) THEN
+      rt_id := NEW.room_type_id;
+      sdate := NEW.check_in_date;
+      edate := (NEW.check_out_date - INTERVAL '1 day')::date; -- checkout exclusive
+    ELSE
+      RETURN NEW;
+    END IF;
+
+  ELSIF op = 'UPDATE' THEN
+    IF (OLD.room_type_id, OLD.check_in_date, OLD.check_out_date, OLD.status)
+       IS DISTINCT FROM
+       (NEW.room_type_id, NEW.check_in_date, NEW.check_out_date, NEW.status) THEN
+
+      -- Requeue OLD window if it used to count
+      IF OLD.status = ANY(sellable) THEN
+        INSERT INTO pricing_recalc_queue (room_type_id, start_date, end_date, triggered_by)
+        VALUES (OLD.room_type_id,
+                GREATEST(OLD.check_in_date, today),
+                LEAST((OLD.check_out_date - INTERVAL '1 day')::date, horizon),
+                'reservation_trigger')
+        ON CONFLICT (room_type_id, start_date, end_date) DO UPDATE
+          SET updated_at = NOW();
+      END IF;
+
+      -- Queue NEW window if it now counts
+      IF NEW.status = ANY(sellable) THEN
+        rt_id := NEW.room_type_id;
+        sdate := NEW.check_in_date;
+        edate := (NEW.check_out_date - INTERVAL '1 day')::date;
+      ELSE
+        RETURN NEW;
+      END IF;
+    ELSE
+      RETURN NEW;
+    END IF;
+
+  ELSIF op = 'DELETE' THEN
+    IF OLD.status = ANY(sellable) THEN
+      rt_id := OLD.room_type_id;
+      sdate := OLD.check_in_date;
+      edate := (OLD.check_out_date - INTERVAL '1 day')::date;
+    ELSE
+      RETURN OLD;
+    END IF;
+  END IF;
+
+  -- Clamp window and enqueue
+  IF rt_id IS NOT NULL THEN
+    sdate := GREATEST(sdate, today);
+    edate := LEAST(edate, horizon);
+    IF sdate <= edate THEN
+      INSERT INTO pricing_recalc_queue (room_type_id, start_date, end_date, triggered_by)
+      VALUES (rt_id, sdate, edate, 'reservation_trigger')
+      ON CONFLICT (room_type_id, start_date, end_date) DO UPDATE
+        SET updated_at = NOW();
+    END IF;
+  END IF;
+
+  RETURN CASE WHEN op = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION trigger_pricing_recalculation(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.trigger_pricing_recalculation() IS 'Automatically queues pricing recalculation when reservations change';
+
+
+--
+-- Name: update_beds24_auth_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_beds24_auth_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_cleaning_status_on_res_cancel(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_cleaning_status_on_res_cancel() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.status = 'cancelled' THEN
+    UPDATE cleaning_tasks
+    SET status = 'cancelled'
+    WHERE reservation_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_cleaning_task_priorities(date, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+       DECLARE
+         is_priority boolean;
+       BEGIN
+         SELECT check_same_day_checkin(task_date, unit_id) INTO is_priority;
+         
+         UPDATE cleaning_tasks 
+         SET priority = is_priority
+         WHERE task_date = task_date AND room_unit_id = unit_id;
+       END;
+       $$;
+
+
+--
+-- Name: update_cleaning_task_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_cleaning_task_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+
+--
+-- Name: update_thread_metadata(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_thread_metadata() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Update the thread with latest message info
+    UPDATE message_threads 
+    SET 
+        last_message_at = NEW.created_at,
+        last_message_preview = LEFT(NEW.content, 160),
+        updated_at = NOW()
+    WHERE id = NEW.thread_id;
+    
+    -- Return the new record
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_verified_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_verified_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.admin_verified = TRUE AND OLD.admin_verified = FALSE THEN
+        NEW.verified_at = NOW();
+        NEW.status = 'completed';
+    ELSIF NEW.admin_verified = FALSE THEN
+        NEW.verified_at = NULL;
+        -- Don't auto-change status back, admin might want to keep it submitted
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: add_prefixes(text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.add_prefixes(_bucket_id text, _name text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    prefixes text[];
+BEGIN
+    prefixes := "storage"."get_prefixes"("_name");
+
+    IF array_length(prefixes, 1) > 0 THEN
+        INSERT INTO storage.prefixes (name, bucket_id)
+        SELECT UNNEST(prefixes) as name, "_bucket_id" ON CONFLICT DO NOTHING;
+    END IF;
+END;
+$$;
+
+
+--
+-- Name: can_insert_object(text, text, uuid, jsonb); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.can_insert_object(bucketid text, name text, owner uuid, metadata jsonb) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO "storage"."objects" ("bucket_id", "name", "owner", "metadata") VALUES (bucketid, name, owner, metadata);
+  -- hack to rollback the successful insert
+  RAISE sqlstate 'PT200' using
+  message = 'ROLLBACK',
+  detail = 'rollback successful insert';
+END
+$$;
+
+
+--
+-- Name: delete_prefix(text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.delete_prefix(_bucket_id text, _name text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+    -- Check if we can delete the prefix
+    IF EXISTS(
+        SELECT FROM "storage"."prefixes"
+        WHERE "prefixes"."bucket_id" = "_bucket_id"
+          AND level = "storage"."get_level"("_name") + 1
+          AND "prefixes"."name" COLLATE "C" LIKE "_name" || '/%'
+        LIMIT 1
+    )
+    OR EXISTS(
+        SELECT FROM "storage"."objects"
+        WHERE "objects"."bucket_id" = "_bucket_id"
+          AND "storage"."get_level"("objects"."name") = "storage"."get_level"("_name") + 1
+          AND "objects"."name" COLLATE "C" LIKE "_name" || '/%'
+        LIMIT 1
+    ) THEN
+    -- There are sub-objects, skip deletion
+    RETURN false;
+    ELSE
+        DELETE FROM "storage"."prefixes"
+        WHERE "prefixes"."bucket_id" = "_bucket_id"
+          AND level = "storage"."get_level"("_name")
+          AND "prefixes"."name" = "_name";
+        RETURN true;
+    END IF;
+END;
+$$;
+
+
+--
+-- Name: delete_prefix_hierarchy_trigger(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.delete_prefix_hierarchy_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    prefix text;
+BEGIN
+    prefix := "storage"."get_prefix"(OLD."name");
+
+    IF coalesce(prefix, '') != '' THEN
+        PERFORM "storage"."delete_prefix"(OLD."bucket_id", prefix);
+    END IF;
+
+    RETURN OLD;
+END;
+$$;
+
+
+--
+-- Name: enforce_bucket_name_length(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.enforce_bucket_name_length() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+    if length(new.name) > 100 then
+        raise exception 'bucket name "%" is too long (% characters). Max is 100.', new.name, length(new.name);
+    end if;
+    return new;
+end;
+$$;
+
+
+--
+-- Name: extension(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.extension(name text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    _parts text[];
+    _filename text;
+BEGIN
+    SELECT string_to_array(name, '/') INTO _parts;
+    SELECT _parts[array_length(_parts,1)] INTO _filename;
+    RETURN reverse(split_part(reverse(_filename), '.', 1));
+END
+$$;
+
+
+--
+-- Name: filename(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.filename(name text) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+_parts text[];
+BEGIN
+	select string_to_array(name, '/') into _parts;
+	return _parts[array_length(_parts,1)];
+END
+$$;
+
+
+--
+-- Name: foldername(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.foldername(name text) RETURNS text[]
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    _parts text[];
+BEGIN
+    -- Split on "/" to get path segments
+    SELECT string_to_array(name, '/') INTO _parts;
+    -- Return everything except the last segment
+    RETURN _parts[1 : array_length(_parts,1) - 1];
+END
+$$;
+
+
+--
+-- Name: get_level(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.get_level(name text) RETURNS integer
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+SELECT array_length(string_to_array("name", '/'), 1);
+$$;
+
+
+--
+-- Name: get_prefix(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.get_prefix(name text) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $_$
+SELECT
+    CASE WHEN strpos("name", '/') > 0 THEN
+             regexp_replace("name", '[\/]{1}[^\/]+\/?$', '')
+         ELSE
+             ''
+        END;
+$_$;
+
+
+--
+-- Name: get_prefixes(text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.get_prefixes(name text) RETURNS text[]
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $$
+DECLARE
+    parts text[];
+    prefixes text[];
+    prefix text;
+BEGIN
+    -- Split the name into parts by '/'
+    parts := string_to_array("name", '/');
+    prefixes := '{}';
+
+    -- Construct the prefixes, stopping one level below the last part
+    FOR i IN 1..array_length(parts, 1) - 1 LOOP
+            prefix := array_to_string(parts[1:i], '/');
+            prefixes := array_append(prefixes, prefix);
+    END LOOP;
+
+    RETURN prefixes;
+END;
+$$;
+
+
+--
+-- Name: get_size_by_bucket(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.get_size_by_bucket() RETURNS TABLE(size bigint, bucket_id text)
+    LANGUAGE plpgsql STABLE
+    AS $$
+BEGIN
+    return query
+        select sum((metadata->>'size')::bigint) as size, obj.bucket_id
+        from "storage".objects as obj
+        group by obj.bucket_id;
+END
+$$;
+
+
+--
+-- Name: list_multipart_uploads_with_delimiter(text, text, text, integer, text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, next_key_token text DEFAULT ''::text, next_upload_token text DEFAULT ''::text) RETURNS TABLE(key text, id text, created_at timestamp with time zone)
+    LANGUAGE plpgsql
+    AS $_$
+BEGIN
+    RETURN QUERY EXECUTE
+        'SELECT DISTINCT ON(key COLLATE "C") * from (
+            SELECT
+                CASE
+                    WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN
+                        substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1)))
+                    ELSE
+                        key
+                END AS key, id, created_at
+            FROM
+                storage.s3_multipart_uploads
+            WHERE
+                bucket_id = $5 AND
+                key ILIKE $1 || ''%'' AND
+                CASE
+                    WHEN $4 != '''' AND $6 = '''' THEN
+                        CASE
+                            WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN
+                                substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1))) COLLATE "C" > $4
+                            ELSE
+                                key COLLATE "C" > $4
+                            END
+                    ELSE
+                        true
+                END AND
+                CASE
+                    WHEN $6 != '''' THEN
+                        id COLLATE "C" > $6
+                    ELSE
+                        true
+                    END
+            ORDER BY
+                key COLLATE "C" ASC, created_at ASC) as e order by key COLLATE "C" LIMIT $3'
+        USING prefix_param, delimiter_param, max_keys, next_key_token, bucket_id, next_upload_token;
+END;
+$_$;
+
+
+--
+-- Name: list_objects_with_delimiter(text, text, text, integer, text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.list_objects_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, start_after text DEFAULT ''::text, next_token text DEFAULT ''::text) RETURNS TABLE(name text, id uuid, metadata jsonb, updated_at timestamp with time zone)
+    LANGUAGE plpgsql
+    AS $_$
+BEGIN
+    RETURN QUERY EXECUTE
+        'SELECT DISTINCT ON(name COLLATE "C") * from (
+            SELECT
+                CASE
+                    WHEN position($2 IN substring(name from length($1) + 1)) > 0 THEN
+                        substring(name from 1 for length($1) + position($2 IN substring(name from length($1) + 1)))
+                    ELSE
+                        name
+                END AS name, id, metadata, updated_at
+            FROM
+                storage.objects
+            WHERE
+                bucket_id = $5 AND
+                name ILIKE $1 || ''%'' AND
+                CASE
+                    WHEN $6 != '''' THEN
+                    name COLLATE "C" > $6
+                ELSE true END
+                AND CASE
+                    WHEN $4 != '''' THEN
+                        CASE
+                            WHEN position($2 IN substring(name from length($1) + 1)) > 0 THEN
+                                substring(name from 1 for length($1) + position($2 IN substring(name from length($1) + 1))) COLLATE "C" > $4
+                            ELSE
+                                name COLLATE "C" > $4
+                            END
+                    ELSE
+                        true
+                END
+            ORDER BY
+                name COLLATE "C" ASC) as e order by name COLLATE "C" LIMIT $3'
+        USING prefix_param, delimiter_param, max_keys, next_token, bucket_id, start_after;
+END;
+$_$;
+
+
+--
+-- Name: objects_insert_prefix_trigger(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.objects_insert_prefix_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM "storage"."add_prefixes"(NEW."bucket_id", NEW."name");
+    NEW.level := "storage"."get_level"(NEW."name");
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: objects_update_prefix_trigger(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.objects_update_prefix_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_prefixes TEXT[];
+BEGIN
+    -- Ensure this is an update operation and the name has changed
+    IF TG_OP = 'UPDATE' AND (NEW."name" <> OLD."name" OR NEW."bucket_id" <> OLD."bucket_id") THEN
+        -- Retrieve old prefixes
+        old_prefixes := "storage"."get_prefixes"(OLD."name");
+
+        -- Remove old prefixes that are only used by this object
+        WITH all_prefixes as (
+            SELECT unnest(old_prefixes) as prefix
+        ),
+        can_delete_prefixes as (
+             SELECT prefix
+             FROM all_prefixes
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM "storage"."objects"
+                 WHERE "bucket_id" = OLD."bucket_id"
+                   AND "name" <> OLD."name"
+                   AND "name" LIKE (prefix || '%')
+             )
+         )
+        DELETE FROM "storage"."prefixes" WHERE name IN (SELECT prefix FROM can_delete_prefixes);
+
+        -- Add new prefixes
+        PERFORM "storage"."add_prefixes"(NEW."bucket_id", NEW."name");
+    END IF;
+    -- Set the new level
+    NEW."level" := "storage"."get_level"(NEW."name");
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: operation(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.operation() RETURNS text
+    LANGUAGE plpgsql STABLE
+    AS $$
+BEGIN
+    RETURN current_setting('storage.operation', true);
+END;
+$$;
+
+
+--
+-- Name: prefixes_insert_trigger(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.prefixes_insert_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM "storage"."add_prefixes"(NEW."bucket_id", NEW."name");
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: search(text, text, integer, integer, integer, text, text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.search(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)
+    LANGUAGE plpgsql
+    AS $$
+declare
+    can_bypass_rls BOOLEAN;
+begin
+    SELECT rolbypassrls
+    INTO can_bypass_rls
+    FROM pg_roles
+    WHERE rolname = coalesce(nullif(current_setting('role', true), 'none'), current_user);
+
+    IF can_bypass_rls THEN
+        RETURN QUERY SELECT * FROM storage.search_v1_optimised(prefix, bucketname, limits, levels, offsets, search, sortcolumn, sortorder);
+    ELSE
+        RETURN QUERY SELECT * FROM storage.search_legacy_v1(prefix, bucketname, limits, levels, offsets, search, sortcolumn, sortorder);
+    END IF;
+end;
+$$;
+
+
+--
+-- Name: search_legacy_v1(text, text, integer, integer, integer, text, text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.search_legacy_v1(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)
+    LANGUAGE plpgsql STABLE
+    AS $_$
+declare
+    v_order_by text;
+    v_sort_order text;
+begin
+    case
+        when sortcolumn = 'name' then
+            v_order_by = 'name';
+        when sortcolumn = 'updated_at' then
+            v_order_by = 'updated_at';
+        when sortcolumn = 'created_at' then
+            v_order_by = 'created_at';
+        when sortcolumn = 'last_accessed_at' then
+            v_order_by = 'last_accessed_at';
+        else
+            v_order_by = 'name';
+        end case;
+
+    case
+        when sortorder = 'asc' then
+            v_sort_order = 'asc';
+        when sortorder = 'desc' then
+            v_sort_order = 'desc';
+        else
+            v_sort_order = 'asc';
+        end case;
+
+    v_order_by = v_order_by || ' ' || v_sort_order;
+
+    return query execute
+        'with folders as (
+           select path_tokens[$1] as folder
+           from storage.objects
+             where objects.name ilike $2 || $3 || ''%''
+               and bucket_id = $4
+               and array_length(objects.path_tokens, 1) <> $1
+           group by folder
+           order by folder ' || v_sort_order || '
+     )
+     (select folder as "name",
+            null as id,
+            null as updated_at,
+            null as created_at,
+            null as last_accessed_at,
+            null as metadata from folders)
+     union all
+     (select path_tokens[$1] as "name",
+            id,
+            updated_at,
+            created_at,
+            last_accessed_at,
+            metadata
+     from storage.objects
+     where objects.name ilike $2 || $3 || ''%''
+       and bucket_id = $4
+       and array_length(objects.path_tokens, 1) = $1
+     order by ' || v_order_by || ')
+     limit $5
+     offset $6' using levels, prefix, search, bucketname, limits, offsets;
+end;
+$_$;
+
+
+--
+-- Name: search_v1_optimised(text, text, integer, integer, integer, text, text, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.search_v1_optimised(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)
+    LANGUAGE plpgsql STABLE
+    AS $_$
+declare
+    v_order_by text;
+    v_sort_order text;
+begin
+    case
+        when sortcolumn = 'name' then
+            v_order_by = 'name';
+        when sortcolumn = 'updated_at' then
+            v_order_by = 'updated_at';
+        when sortcolumn = 'created_at' then
+            v_order_by = 'created_at';
+        when sortcolumn = 'last_accessed_at' then
+            v_order_by = 'last_accessed_at';
+        else
+            v_order_by = 'name';
+        end case;
+
+    case
+        when sortorder = 'asc' then
+            v_sort_order = 'asc';
+        when sortorder = 'desc' then
+            v_sort_order = 'desc';
+        else
+            v_sort_order = 'asc';
+        end case;
+
+    v_order_by = v_order_by || ' ' || v_sort_order;
+
+    return query execute
+        'with folders as (
+           select (string_to_array(name, ''/''))[level] as name
+           from storage.prefixes
+             where lower(prefixes.name) like lower($2 || $3) || ''%''
+               and bucket_id = $4
+               and level = $1
+           order by name ' || v_sort_order || '
+     )
+     (select name,
+            null as id,
+            null as updated_at,
+            null as created_at,
+            null as last_accessed_at,
+            null as metadata from folders)
+     union all
+     (select path_tokens[level] as "name",
+            id,
+            updated_at,
+            created_at,
+            last_accessed_at,
+            metadata
+     from storage.objects
+     where lower(objects.name) like lower($2 || $3) || ''%''
+       and bucket_id = $4
+       and level = $1
+     order by ' || v_order_by || ')
+     limit $5
+     offset $6' using levels, prefix, search, bucketname, limits, offsets;
+end;
+$_$;
+
+
+--
+-- Name: search_v2(text, text, integer, integer, text); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.search_v2(prefix text, bucket_name text, limits integer DEFAULT 100, levels integer DEFAULT 1, start_after text DEFAULT ''::text) RETURNS TABLE(key text, name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, metadata jsonb)
+    LANGUAGE plpgsql STABLE
+    AS $_$
+BEGIN
+    RETURN query EXECUTE
+        $sql$
+        SELECT * FROM (
+            (
+                SELECT
+                    split_part(name, '/', $4) AS key,
+                    name || '/' AS name,
+                    NULL::uuid AS id,
+                    NULL::timestamptz AS updated_at,
+                    NULL::timestamptz AS created_at,
+                    NULL::jsonb AS metadata
+                FROM storage.prefixes
+                WHERE name COLLATE "C" LIKE $1 || '%'
+                AND bucket_id = $2
+                AND level = $4
+                AND name COLLATE "C" > $5
+                ORDER BY prefixes.name COLLATE "C" LIMIT $3
+            )
+            UNION ALL
+            (SELECT split_part(name, '/', $4) AS key,
+                name,
+                id,
+                updated_at,
+                created_at,
+                metadata
+            FROM storage.objects
+            WHERE name COLLATE "C" LIKE $1 || '%'
+                AND bucket_id = $2
+                AND level = $4
+                AND name COLLATE "C" > $5
+            ORDER BY name COLLATE "C" LIMIT $3)
+        ) obj
+        ORDER BY name COLLATE "C" LIMIT $3;
+        $sql$
+        USING prefix, bucket_name, limits, levels, start_after;
+END;
+$_$;
+
+
+--
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: storage; Owner: -
+--
+
+CREATE FUNCTION storage.update_updated_at_column() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW; 
+END;
+$$;
+
+
+--
+-- Name: audit_log_entries; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.audit_log_entries (
+    instance_id uuid,
+    id uuid NOT NULL,
+    payload json,
+    created_at timestamp with time zone,
+    ip_address character varying(64) DEFAULT ''::character varying NOT NULL
+);
+
+
+--
+-- Name: TABLE audit_log_entries; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.audit_log_entries IS 'Auth: Audit trail for user actions.';
+
+
+--
+-- Name: flow_state; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.flow_state (
+    id uuid NOT NULL,
+    user_id uuid,
+    auth_code text NOT NULL,
+    code_challenge_method auth.code_challenge_method NOT NULL,
+    code_challenge text NOT NULL,
+    provider_type text NOT NULL,
+    provider_access_token text,
+    provider_refresh_token text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    authentication_method text NOT NULL,
+    auth_code_issued_at timestamp with time zone
+);
+
+
+--
+-- Name: TABLE flow_state; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.flow_state IS 'stores metadata for pkce logins';
+
+
+--
+-- Name: identities; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.identities (
+    provider_id text NOT NULL,
+    user_id uuid NOT NULL,
+    identity_data jsonb NOT NULL,
+    provider text NOT NULL,
+    last_sign_in_at timestamp with time zone,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    email text GENERATED ALWAYS AS (lower((identity_data ->> 'email'::text))) STORED,
+    id uuid DEFAULT gen_random_uuid() NOT NULL
+);
+
+
+--
+-- Name: TABLE identities; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.identities IS 'Auth: Stores identities associated to a user.';
+
+
+--
+-- Name: COLUMN identities.email; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON COLUMN auth.identities.email IS 'Auth: Email is a generated column that references the optional email property in the identity_data';
+
+
+--
+-- Name: instances; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.instances (
+    id uuid NOT NULL,
+    uuid uuid,
+    raw_base_config text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+--
+-- Name: TABLE instances; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.instances IS 'Auth: Manages users across multiple sites.';
+
+
+--
+-- Name: mfa_amr_claims; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.mfa_amr_claims (
+    session_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    authentication_method text NOT NULL,
+    id uuid NOT NULL
+);
+
+
+--
+-- Name: TABLE mfa_amr_claims; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.mfa_amr_claims IS 'auth: stores authenticator method reference claims for multi factor authentication';
+
+
+--
+-- Name: mfa_challenges; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.mfa_challenges (
+    id uuid NOT NULL,
+    factor_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    verified_at timestamp with time zone,
+    ip_address inet NOT NULL,
+    otp_code text,
+    web_authn_session_data jsonb
+);
+
+
+--
+-- Name: TABLE mfa_challenges; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.mfa_challenges IS 'auth: stores metadata about challenge requests made';
+
+
+--
+-- Name: mfa_factors; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.mfa_factors (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    friendly_name text,
+    factor_type auth.factor_type NOT NULL,
+    status auth.factor_status NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    secret text,
+    phone text,
+    last_challenged_at timestamp with time zone,
+    web_authn_credential jsonb,
+    web_authn_aaguid uuid
+);
+
+
+--
+-- Name: TABLE mfa_factors; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.mfa_factors IS 'auth: stores metadata about factors';
+
+
+--
+-- Name: one_time_tokens; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.one_time_tokens (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    token_type auth.one_time_token_type NOT NULL,
+    token_hash text NOT NULL,
+    relates_to text NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    CONSTRAINT one_time_tokens_token_hash_check CHECK ((char_length(token_hash) > 0))
+);
+
+
+--
+-- Name: refresh_tokens; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.refresh_tokens (
+    instance_id uuid,
+    id bigint NOT NULL,
+    token character varying(255),
+    user_id character varying(255),
+    revoked boolean,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    parent character varying(255),
+    session_id uuid
+);
+
+
+--
+-- Name: TABLE refresh_tokens; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.refresh_tokens IS 'Auth: Store of tokens used to refresh JWT tokens once they expire.';
+
+
+--
+-- Name: refresh_tokens_id_seq; Type: SEQUENCE; Schema: auth; Owner: -
+--
+
+CREATE SEQUENCE auth.refresh_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: refresh_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: auth; Owner: -
+--
+
+ALTER SEQUENCE auth.refresh_tokens_id_seq OWNED BY auth.refresh_tokens.id;
+
+
+--
+-- Name: saml_providers; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.saml_providers (
+    id uuid NOT NULL,
+    sso_provider_id uuid NOT NULL,
+    entity_id text NOT NULL,
+    metadata_xml text NOT NULL,
+    metadata_url text,
+    attribute_mapping jsonb,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    name_id_format text,
+    CONSTRAINT "entity_id not empty" CHECK ((char_length(entity_id) > 0)),
+    CONSTRAINT "metadata_url not empty" CHECK (((metadata_url = NULL::text) OR (char_length(metadata_url) > 0))),
+    CONSTRAINT "metadata_xml not empty" CHECK ((char_length(metadata_xml) > 0))
+);
+
+
+--
+-- Name: TABLE saml_providers; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.saml_providers IS 'Auth: Manages SAML Identity Provider connections.';
+
+
+--
+-- Name: saml_relay_states; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.saml_relay_states (
+    id uuid NOT NULL,
+    sso_provider_id uuid NOT NULL,
+    request_id text NOT NULL,
+    for_email text,
+    redirect_to text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    flow_state_id uuid,
+    CONSTRAINT "request_id not empty" CHECK ((char_length(request_id) > 0))
+);
+
+
+--
+-- Name: TABLE saml_relay_states; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.saml_relay_states IS 'Auth: Contains SAML Relay State information for each Service Provider initiated login.';
+
+
+--
+-- Name: schema_migrations; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.schema_migrations (
+    version character varying(255) NOT NULL
+);
+
+
+--
+-- Name: TABLE schema_migrations; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.schema_migrations IS 'Auth: Manages updates to the auth system.';
+
+
+--
+-- Name: sessions; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.sessions (
+    id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    factor_id uuid,
+    aal auth.aal_level,
+    not_after timestamp with time zone,
+    refreshed_at timestamp without time zone,
+    user_agent text,
+    ip inet,
+    tag text
+);
+
+
+--
+-- Name: TABLE sessions; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.sessions IS 'Auth: Stores session data associated to a user.';
+
+
+--
+-- Name: COLUMN sessions.not_after; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON COLUMN auth.sessions.not_after IS 'Auth: Not after is a nullable column that contains a timestamp after which the session should be regarded as expired.';
+
+
+--
+-- Name: sso_domains; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.sso_domains (
+    id uuid NOT NULL,
+    sso_provider_id uuid NOT NULL,
+    domain text NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    CONSTRAINT "domain not empty" CHECK ((char_length(domain) > 0))
+);
+
+
+--
+-- Name: TABLE sso_domains; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.sso_domains IS 'Auth: Manages SSO email address domain mapping to an SSO Identity Provider.';
+
+
+--
+-- Name: sso_providers; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.sso_providers (
+    id uuid NOT NULL,
+    resource_id text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    CONSTRAINT "resource_id not empty" CHECK (((resource_id = NULL::text) OR (char_length(resource_id) > 0)))
+);
+
+
+--
+-- Name: TABLE sso_providers; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.sso_providers IS 'Auth: Manages SSO identity provider information; see saml_providers for SAML.';
+
+
+--
+-- Name: COLUMN sso_providers.resource_id; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON COLUMN auth.sso_providers.resource_id IS 'Auth: Uniquely identifies a SSO provider according to a user-chosen resource ID (case insensitive), useful in infrastructure as code.';
+
+
+--
+-- Name: users; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.users (
+    instance_id uuid,
+    id uuid NOT NULL,
+    aud character varying(255),
+    role character varying(255),
+    email character varying(255),
+    encrypted_password character varying(255),
+    email_confirmed_at timestamp with time zone,
+    invited_at timestamp with time zone,
+    confirmation_token character varying(255),
+    confirmation_sent_at timestamp with time zone,
+    recovery_token character varying(255),
+    recovery_sent_at timestamp with time zone,
+    email_change_token_new character varying(255),
+    email_change character varying(255),
+    email_change_sent_at timestamp with time zone,
+    last_sign_in_at timestamp with time zone,
+    raw_app_meta_data jsonb,
+    raw_user_meta_data jsonb,
+    is_super_admin boolean,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    phone text DEFAULT NULL::character varying,
+    phone_confirmed_at timestamp with time zone,
+    phone_change text DEFAULT ''::character varying,
+    phone_change_token character varying(255) DEFAULT ''::character varying,
+    phone_change_sent_at timestamp with time zone,
+    confirmed_at timestamp with time zone GENERATED ALWAYS AS (LEAST(email_confirmed_at, phone_confirmed_at)) STORED,
+    email_change_token_current character varying(255) DEFAULT ''::character varying,
+    email_change_confirm_status smallint DEFAULT 0,
+    banned_until timestamp with time zone,
+    reauthentication_token character varying(255) DEFAULT ''::character varying,
+    reauthentication_sent_at timestamp with time zone,
+    is_sso_user boolean DEFAULT false NOT NULL,
+    deleted_at timestamp with time zone,
+    is_anonymous boolean DEFAULT false NOT NULL,
+    CONSTRAINT users_email_change_confirm_status_check CHECK (((email_change_confirm_status >= 0) AND (email_change_confirm_status <= 2)))
+);
+
+
+--
+-- Name: TABLE users; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON TABLE auth.users IS 'Auth: Stores user login data within a secure schema.';
+
+
+--
+-- Name: COLUMN users.is_sso_user; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON COLUMN auth.users.is_sso_user IS 'Auth: Set this column to true when the account comes from SSO. These accounts can have duplicate emails.';
+
+
+--
+-- Name: automation_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.automation_rules (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    name text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    trigger_type text NOT NULL,
+    event text,
+    offset_json jsonb,
+    property_id uuid,
+    template_id uuid NOT NULL,
+    channel text NOT NULL,
+    filters jsonb,
+    options jsonb,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT automation_rules_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
+    CONSTRAINT automation_rules_event_check CHECK ((event = ANY (ARRAY['booking_created'::text, 'check_in'::text, 'check_out'::text, 'payment_due'::text]))),
+    CONSTRAINT automation_rules_trigger_type_check CHECK ((trigger_type = ANY (ARRAY['relative_to_reservation'::text, 'absolute_time'::text])))
+);
+
+
+--
+-- Name: beds24_auth; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.beds24_auth (
+    id integer NOT NULL,
+    access_token text,
+    refresh_token text NOT NULL,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE beds24_auth; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.beds24_auth IS 'Stores Beds24 API authentication tokens with automatic refresh capability';
+
+
+--
+-- Name: COLUMN beds24_auth.access_token; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.beds24_auth.access_token IS '24-hour access token for Beds24 API calls';
+
+
+--
+-- Name: COLUMN beds24_auth.refresh_token; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.beds24_auth.refresh_token IS '30-day refresh token for generating new access tokens';
+
+
+--
+-- Name: COLUMN beds24_auth.expires_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.beds24_auth.expires_at IS 'Timestamp when the current access token expires';
+
+
+--
+-- Name: beds24_auth_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.beds24_auth_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: beds24_auth_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.beds24_auth_id_seq OWNED BY public.beds24_auth.id;
+
+
+--
+-- Name: cleaning_tasks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cleaning_tasks (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    property_id uuid NOT NULL,
+    room_unit_id uuid,
+    reservation_id uuid,
+    cleaner_id uuid,
+    task_date date NOT NULL,
+    task_type text DEFAULT 'checkout'::text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    priority text DEFAULT 'normal'::text NOT NULL,
+    estimated_duration integer,
+    special_notes text,
+    assigned_at timestamp with time zone,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    booking_name text
+);
+
+
+--
+-- Name: guest_channel_consents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guest_channel_consents (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    channel text NOT NULL,
+    consent_given boolean DEFAULT false NOT NULL,
+    consent_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT guest_channel_consents_channel_check CHECK ((channel = ANY (ARRAY['whatsapp'::text, 'email'::text, 'sms'::text])))
+);
+
+
+--
+-- Name: listing_prices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.listing_prices (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    dt date NOT NULL,
+    suggested_price numeric(10,2) NOT NULL,
+    override_price numeric(10,2),
+    locked boolean DEFAULT false,
+    source_run_id uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE listing_prices; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.listing_prices IS 'Daily computed prices with override capability';
+
+
+--
+-- Name: market_factors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.market_factors (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    location_id uuid,
+    dt date NOT NULL,
+    seasonality numeric(4,3) DEFAULT 1.0,
+    demand numeric(4,3) DEFAULT 1.0,
+    event_score numeric(4,2) DEFAULT 0,
+    holiday boolean DEFAULT false,
+    search_interest_index numeric(4,2) DEFAULT 0,
+    comp_availability_pct numeric(5,2) DEFAULT 0,
+    comp_median_price numeric(10,2) DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE market_factors; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.market_factors IS 'Market-level seasonality and demand factors';
+
+
+--
+-- Name: message_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_attachments (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    message_id uuid NOT NULL,
+    storage_bucket text DEFAULT 'message-attachments'::text NOT NULL,
+    path text NOT NULL,
+    content_type text,
+    size_bytes integer,
+    width integer,
+    height integer,
+    duration_seconds numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: message_deliveries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_deliveries (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    message_id uuid NOT NULL,
+    channel text NOT NULL,
+    provider_message_id text,
+    status text DEFAULT 'queued'::text NOT NULL,
+    error_code text,
+    error_message text,
+    queued_at timestamp with time zone DEFAULT now(),
+    sent_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    read_at timestamp with time zone,
+    body_rendered text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_deliveries_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
+    CONSTRAINT message_deliveries_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'sent'::text, 'delivered'::text, 'read'::text, 'failed'::text]))),
+    CONSTRAINT message_deliveries_time_order CHECK ((((delivered_at IS NULL) OR (sent_at IS NULL) OR (delivered_at >= sent_at)) AND ((read_at IS NULL) OR (delivered_at IS NULL) OR (read_at >= delivered_at))))
+);
+
+
+--
+-- Name: message_participants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_participants (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    participant_type text NOT NULL,
+    user_id uuid,
+    external_address text,
+    display_name text,
+    is_active boolean DEFAULT true NOT NULL,
+    last_read_message_id uuid,
+    last_read_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_participants_participant_type_check CHECK ((participant_type = ANY (ARRAY['guest'::text, 'host'::text, 'assistant'::text, 'cleaner'::text, 'support'::text, 'system'::text])))
+);
+
+
+--
+-- Name: message_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_templates (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    name text NOT NULL,
+    channel text NOT NULL,
+    language text,
+    content text NOT NULL,
+    variables jsonb,
+    external_template_id text,
+    property_id uuid,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    enabled boolean DEFAULT true NOT NULL,
+    CONSTRAINT message_templates_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text])))
+);
+
+
+--
+-- Name: COLUMN message_templates.enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_templates.enabled IS 'Controls whether this template is active for automation scheduling. When false, templates are completely skipped during automation processing.';
+
+
+--
+-- Name: message_threads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_threads (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid,
+    subject text,
+    status text DEFAULT 'open'::text NOT NULL,
+    assignee_user_id uuid,
+    priority text DEFAULT 'normal'::text,
+    last_message_at timestamp with time zone,
+    last_message_preview text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_threads_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]))),
+    CONSTRAINT message_threads_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text, 'archived'::text])))
+);
+
+
+--
+-- Name: messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.messages (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    parent_message_id uuid,
+    origin_role text NOT NULL,
+    direction text NOT NULL,
+    channel text NOT NULL,
+    content text NOT NULL,
+    sent_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, COALESCE(content, ''::text))) STORED,
+    CONSTRAINT messages_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
+    CONSTRAINT messages_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text]))),
+    CONSTRAINT messages_origin_role_check CHECK ((origin_role = ANY (ARRAY['guest'::text, 'host'::text, 'assistant'::text, 'system'::text])))
+);
+
+
+--
+-- Name: pricing_audit; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pricing_audit (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    dt date NOT NULL,
+    base_price numeric(10,2) NOT NULL,
+    seasonality numeric(4,3) NOT NULL,
+    dow numeric(4,3) NOT NULL,
+    lead_time numeric(4,3) NOT NULL,
+    los numeric(4,3) NOT NULL,
+    demand numeric(4,3) NOT NULL,
+    occupancy numeric(4,3) NOT NULL,
+    occupancy_pct numeric(5,2) NOT NULL,
+    orphan numeric(4,3) DEFAULT 1.0,
+    unclamped numeric(10,2) NOT NULL,
+    min_price numeric(10,2) NOT NULL,
+    max_price numeric(10,2) NOT NULL,
+    final_price numeric(10,2) NOT NULL,
+    days_out integer,
+    run_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE pricing_audit; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.pricing_audit IS 'Detailed breakdown of price calculations for transparency';
+
+
+--
+-- Name: pricing_recalc_queue; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pricing_recalc_queue (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    triggered_by character varying(50) DEFAULT 'manual'::character varying NOT NULL,
+    status character varying(20) DEFAULT 'pending'::character varying,
+    processed_at timestamp with time zone,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE pricing_recalc_queue; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.pricing_recalc_queue IS 'Queue for automatic pricing recalculation jobs';
+
+
+--
+-- Name: pricing_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pricing_rules (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    dow_adjustments jsonb DEFAULT '{"Fri": 1.1, "Mon": 0.95, "Sat": 1.2, "Sun": 1.0, "Thu": 1.0, "Tue": 0.95, "Wed": 0.98}'::jsonb,
+    lead_time_curve jsonb DEFAULT '{"0-3": 0.9, "4-7": 0.95, "61+": 1.1, "8-14": 1.0, "15-30": 1.05, "31-60": 1.08}'::jsonb,
+    los_discounts jsonb DEFAULT '{"1": 1.05, "2-3": 1.0, "28+": 0.9, "4-6": 0.98, "7-27": 0.95}'::jsonb,
+    orphan_gaps jsonb DEFAULT '{"1": 0.9, "2": 0.85, "3-4": 0.8}'::jsonb,
+    occupancy_grid jsonb DEFAULT '{"mode": "percent", "leadBuckets": {"61+": {"0-100": 0}, "0-15": {"0-10": -15, "11-20": -15, "21-30": -10, "31-40": -5, "41-50": -5, "51-60": 0, "61-100": 0}, "16-30": {"0-10": -10, "11-20": -10, "21-30": -5, "31-40": -5, "41-50": 0, "51-60": 0, "61-100": 0}, "31-60": {"0-10": -5, "11-20": -5, "21-30": -5, "31-40": 0, "41-50": 0, "51-60": 0, "61-100": 0}}}'::jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE pricing_rules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.pricing_rules IS 'Pricing rules and curves per room type';
+
+
+--
+-- Name: pricing_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pricing_runs (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    started_at timestamp with time zone DEFAULT now(),
+    finished_at timestamp with time zone,
+    algorithm_version character varying(50) DEFAULT 'v1.0'::character varying,
+    notes text,
+    room_type_id uuid,
+    date_range_start date,
+    date_range_end date
+);
+
+
+--
+-- Name: properties; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.properties (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    name character varying(255) NOT NULL,
+    address text NOT NULL,
+    owner_id uuid,
+    description text,
+    property_type character varying(100) DEFAULT 'apartment'::character varying,
+    wifi_name character varying(255),
+    wifi_password character varying(255),
+    house_rules text,
+    check_in_instructions text,
+    emergency_contact character varying(255),
+    property_amenities jsonb,
+    location_info jsonb,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    access_time time without time zone,
+    default_cleaner_id uuid,
+    beds24_property_id bigint,
+    departure_time time without time zone
+);
+
+
+--
+-- Name: TABLE properties; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.properties IS 'Properties/buildings owned by users';
+
+
+--
+-- Name: property_images; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.property_images (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    property_id uuid,
+    image_url text NOT NULL,
+    image_type character varying(50) DEFAULT 'general'::character varying,
+    caption character varying(255),
+    display_order integer DEFAULT 0,
+    is_primary boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    room_type_id uuid,
+    room_unit_id uuid
+);
+
+
+--
+-- Name: TABLE property_images; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.property_images IS 'Images for properties and rooms';
+
+
+--
+-- Name: room_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_types (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    property_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    description text,
+    max_guests integer DEFAULT 2 NOT NULL,
+    base_price numeric(10,2),
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    room_amenities jsonb,
+    bed_configuration character varying(255),
+    room_size_sqm integer,
+    has_balcony boolean DEFAULT false,
+    has_kitchen boolean DEFAULT false,
+    is_accessible boolean DEFAULT false,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    beds24_roomtype_id bigint,
+    min_price numeric(10,2),
+    max_price numeric(10,2),
+    total_units integer
+);
+
+
+--
+-- Name: room_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_units (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    unit_number character varying(50) NOT NULL,
+    floor_number integer,
+    access_code character varying(50),
+    access_instructions text,
+    wifi_name character varying(255),
+    wifi_password character varying(255),
+    unit_amenities jsonb,
+    maintenance_notes text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    beds24_unit_id bigint
+);
+
+
+--
+-- Name: user_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_profiles (
+    id uuid NOT NULL,
+    role public.user_role NOT NULL,
+    first_name character varying(255) NOT NULL,
+    last_name character varying(255) NOT NULL,
+    phone character varying(50),
+    company_name character varying(255),
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE user_profiles; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.user_profiles IS 'User profiles linked to Supabase Auth users';
+
+
+--
+-- Name: property_summary; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.property_summary AS
+ SELECT p.id,
+    p.name,
+    p.address,
+    p.property_type,
+    p.is_active,
+    p.default_cleaner_id,
+    cleaner.first_name AS default_cleaner_first_name,
+    cleaner.last_name AS default_cleaner_last_name,
+    count(DISTINCT rt.id) AS total_room_types,
+    count(DISTINCT ru.id) AS total_room_units,
+    count(DISTINCT
+        CASE
+            WHEN (ru.is_active = true) THEN ru.id
+            ELSE NULL::uuid
+        END) AS active_room_units,
+    min(rt.base_price) AS min_price,
+    max(rt.base_price) AS max_price,
+    sum(rt.max_guests) AS total_capacity
+   FROM (((public.properties p
+     LEFT JOIN public.room_types rt ON (((p.id = rt.property_id) AND (rt.is_active = true))))
+     LEFT JOIN public.room_units ru ON ((rt.id = ru.room_type_id)))
+     LEFT JOIN public.user_profiles cleaner ON ((p.default_cleaner_id = cleaner.id)))
+  GROUP BY p.id, p.name, p.address, p.property_type, p.is_active, p.default_cleaner_id, cleaner.first_name, cleaner.last_name;
+
+
+--
+-- Name: reservation_webhook_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservation_webhook_logs (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    beds24_booking_id text,
+    webhook_payload jsonb,
+    processed_at timestamp with time zone DEFAULT now(),
+    processed boolean DEFAULT false,
+    received_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservations (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    beds24_booking_id character varying(255) NOT NULL,
+    booking_name character varying(255) NOT NULL,
+    booking_email character varying(255) NOT NULL,
+    booking_phone character varying(50),
+    check_in_date date NOT NULL,
+    check_out_date date NOT NULL,
+    num_guests integer DEFAULT 1,
+    total_amount numeric(10,2),
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    status public.reservation_status DEFAULT 'pending'::public.reservation_status,
+    check_in_token character varying(8),
+    guest_lastname character varying(255),
+    guest_firstname character varying(255),
+    guest_contact character varying(50),
+    guest_mail character varying(255),
+    passport_url text,
+    guest_address text,
+    estimated_checkin_time time without time zone,
+    travel_purpose character varying(255),
+    emergency_contact_name character varying(255),
+    emergency_contact_phone character varying(50),
+    agreement_accepted boolean DEFAULT false,
+    checkin_submitted_at timestamp with time zone,
+    admin_verified boolean DEFAULT false,
+    verified_at timestamp with time zone,
+    verified_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    booking_source text,
+    num_adults integer,
+    num_children integer,
+    special_requests text,
+    property_id uuid,
+    room_type_id uuid,
+    room_unit_id uuid,
+    "apiReference" text,
+    booking_lastname text,
+    "rateDescription" text,
+    commission numeric,
+    "apiMessage" text,
+    "bookingTime" timestamp with time zone,
+    comments text,
+    price numeric,
+    "timeStamp" timestamp with time zone,
+    lang text,
+    access_read boolean DEFAULT false
+);
+
+
+--
+-- Name: reservations_details; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.reservations_details AS
+ SELECT r.id,
+    r.beds24_booking_id,
+    r.property_id,
+    r.room_type_id,
+    r.room_unit_id,
+    r.booking_name,
+    r.booking_email,
+    r.booking_phone,
+    r.check_in_date,
+    r.check_out_date,
+    r.num_guests,
+    r.total_amount,
+    r.currency,
+    r.status,
+    r.booking_source,
+    r.num_adults,
+    r.num_children,
+    r.special_requests,
+    r.check_in_token,
+    r.guest_lastname,
+    r.guest_firstname,
+    r.guest_contact,
+    r.guest_mail,
+    r.passport_url,
+    r.guest_address,
+    r.estimated_checkin_time,
+    r.travel_purpose,
+    r.emergency_contact_name,
+    r.emergency_contact_phone,
+    r.agreement_accepted,
+    r.checkin_submitted_at,
+    r.admin_verified,
+    r.verified_at,
+    r.verified_by,
+    r.created_at,
+    r.updated_at,
+    r."apiReference",
+    r.booking_lastname,
+    r."rateDescription",
+    r.commission,
+    r."apiMessage",
+    r."bookingTime",
+    r.comments,
+    r.price,
+    r."timeStamp",
+    r.lang,
+    r.access_read,
+    p.name AS property_name,
+    p.address AS property_address,
+    p.owner_id AS property_owner_id,
+    p.description AS property_description,
+    p.property_type,
+    p.wifi_name AS property_wifi_name,
+    p.wifi_password AS property_wifi_password,
+    p.house_rules,
+    p.check_in_instructions,
+    p.emergency_contact AS property_emergency_contact,
+    p.property_amenities,
+    p.location_info,
+    p.is_active AS property_is_active,
+    p.created_at AS property_created_at,
+    p.updated_at AS property_updated_at,
+    p.access_time,
+    p.default_cleaner_id,
+    p.beds24_property_id,
+    rt.name AS room_type_name,
+    rt.description AS room_type_description,
+    rt.max_guests AS room_type_max_guests,
+    rt.base_price,
+    rt.currency AS room_type_currency,
+    rt.room_amenities AS room_type_amenities,
+    rt.bed_configuration,
+    rt.room_size_sqm,
+    rt.has_balcony AS room_type_has_balcony,
+    rt.has_kitchen AS room_type_has_kitchen,
+    rt.is_accessible AS room_type_is_accessible,
+    rt.is_active AS room_type_is_active,
+    rt.created_at AS room_type_created_at,
+    rt.updated_at AS room_type_updated_at,
+    rt.beds24_roomtype_id,
+    ru.unit_number,
+    ru.floor_number,
+    ru.access_code,
+    ru.access_instructions,
+    ru.wifi_name AS unit_wifi_name,
+    ru.wifi_password AS unit_wifi_password,
+    ru.unit_amenities,
+    ru.maintenance_notes,
+    ru.is_active AS unit_is_active,
+    ru.created_at AS unit_created_at,
+    ru.updated_at AS unit_updated_at,
+    ru.beds24_unit_id,
+    up.first_name AS verified_by_name,
+    up.last_name AS verified_by_lastname
+   FROM ((((public.reservations r
+     LEFT JOIN public.properties p ON ((r.property_id = p.id)))
+     LEFT JOIN public.room_types rt ON ((r.room_type_id = rt.id)))
+     LEFT JOIN public.room_units ru ON ((r.room_unit_id = ru.id)))
+     LEFT JOIN public.user_profiles up ON ((r.verified_by = up.id)));
+
+
+--
+-- Name: room_availability; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.room_availability AS
+ SELECT p.id AS property_id,
+    p.name AS property_name,
+    rt.id AS room_type_id,
+    rt.name AS room_type_name,
+    rt.base_price,
+    rt.max_guests,
+    ru.id AS room_unit_id,
+    ru.unit_number,
+    ru.is_active AS unit_active,
+    rt.is_active AS room_type_active,
+    p.is_active AS property_active,
+    count(r.id) AS current_reservations
+   FROM (((public.properties p
+     LEFT JOIN public.room_types rt ON ((p.id = rt.property_id)))
+     LEFT JOIN public.room_units ru ON ((rt.id = ru.room_type_id)))
+     LEFT JOIN public.reservations r ON (((ru.id = r.room_unit_id) AND (r.status = ANY (ARRAY['confirmed'::public.reservation_status, 'checked_in'::public.reservation_status])) AND (r.check_in_date <= CURRENT_DATE) AND (r.check_out_date > CURRENT_DATE))))
+  WHERE (p.is_active = true)
+  GROUP BY p.id, p.name, rt.id, rt.name, rt.base_price, rt.max_guests, ru.id, ru.unit_number, ru.is_active, rt.is_active, p.is_active;
+
+
+--
+-- Name: thread_channels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.thread_channels (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    channel text NOT NULL,
+    external_thread_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT thread_channels_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text])))
+);
+
+
+--
+-- Name: thread_labels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.thread_labels (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    label text NOT NULL,
+    color text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    email character varying(255) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    role public.user_role NOT NULL,
+    first_name character varying(255) NOT NULL,
+    last_name character varying(255) NOT NULL,
+    phone character varying(50),
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: webhook_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.webhook_events (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    event_type character varying(100) NOT NULL,
+    beds24_event_id character varying(255) NOT NULL,
+    payload jsonb NOT NULL,
+    processed boolean DEFAULT false,
+    processed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: buckets; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.buckets (
+    id text NOT NULL,
+    name text NOT NULL,
+    owner uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    public boolean DEFAULT false,
+    avif_autodetection boolean DEFAULT false,
+    file_size_limit bigint,
+    allowed_mime_types text[],
+    owner_id text,
+    type storage.buckettype DEFAULT 'STANDARD'::storage.buckettype NOT NULL
+);
+
+
+--
+-- Name: COLUMN buckets.owner; Type: COMMENT; Schema: storage; Owner: -
+--
+
+COMMENT ON COLUMN storage.buckets.owner IS 'Field is deprecated, use owner_id instead';
+
+
+--
+-- Name: buckets_analytics; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.buckets_analytics (
+    id text NOT NULL,
+    type storage.buckettype DEFAULT 'ANALYTICS'::storage.buckettype NOT NULL,
+    format text DEFAULT 'ICEBERG'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: migrations; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.migrations (
+    id integer NOT NULL,
+    name character varying(100) NOT NULL,
+    hash character varying(40) NOT NULL,
+    executed_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: objects; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.objects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    bucket_id text,
+    name text,
+    owner uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    last_accessed_at timestamp with time zone DEFAULT now(),
+    metadata jsonb,
+    path_tokens text[] GENERATED ALWAYS AS (string_to_array(name, '/'::text)) STORED,
+    version text,
+    owner_id text,
+    user_metadata jsonb,
+    level integer
+);
+
+
+--
+-- Name: COLUMN objects.owner; Type: COMMENT; Schema: storage; Owner: -
+--
+
+COMMENT ON COLUMN storage.objects.owner IS 'Field is deprecated, use owner_id instead';
+
+
+--
+-- Name: prefixes; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.prefixes (
+    bucket_id text NOT NULL,
+    name text NOT NULL COLLATE pg_catalog."C",
+    level integer GENERATED ALWAYS AS (storage.get_level(name)) STORED NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: s3_multipart_uploads; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.s3_multipart_uploads (
+    id text NOT NULL,
+    in_progress_size bigint DEFAULT 0 NOT NULL,
+    upload_signature text NOT NULL,
+    bucket_id text NOT NULL,
+    key text NOT NULL COLLATE pg_catalog."C",
+    version text NOT NULL,
+    owner_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    user_metadata jsonb
+);
+
+
+--
+-- Name: s3_multipart_uploads_parts; Type: TABLE; Schema: storage; Owner: -
+--
+
+CREATE TABLE storage.s3_multipart_uploads_parts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    upload_id text NOT NULL,
+    size bigint DEFAULT 0 NOT NULL,
+    part_number integer NOT NULL,
+    bucket_id text NOT NULL,
+    key text NOT NULL COLLATE pg_catalog."C",
+    etag text NOT NULL,
+    owner_id text,
+    version text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: refresh_tokens id; Type: DEFAULT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.refresh_tokens ALTER COLUMN id SET DEFAULT nextval('auth.refresh_tokens_id_seq'::regclass);
+
+
+--
+-- Name: beds24_auth id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.beds24_auth ALTER COLUMN id SET DEFAULT nextval('public.beds24_auth_id_seq'::regclass);
+
+
+--
+-- Name: mfa_amr_claims amr_id_pk; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_amr_claims
+    ADD CONSTRAINT amr_id_pk PRIMARY KEY (id);
+
+
+--
+-- Name: audit_log_entries audit_log_entries_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.audit_log_entries
+    ADD CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: flow_state flow_state_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.flow_state
+    ADD CONSTRAINT flow_state_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: identities identities_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.identities
+    ADD CONSTRAINT identities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: identities identities_provider_id_provider_unique; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.identities
+    ADD CONSTRAINT identities_provider_id_provider_unique UNIQUE (provider_id, provider);
+
+
+--
+-- Name: instances instances_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.instances
+    ADD CONSTRAINT instances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mfa_amr_claims mfa_amr_claims_session_id_authentication_method_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_amr_claims
+    ADD CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey UNIQUE (session_id, authentication_method);
+
+
+--
+-- Name: mfa_challenges mfa_challenges_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_challenges
+    ADD CONSTRAINT mfa_challenges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mfa_factors mfa_factors_last_challenged_at_key; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_factors
+    ADD CONSTRAINT mfa_factors_last_challenged_at_key UNIQUE (last_challenged_at);
+
+
+--
+-- Name: mfa_factors mfa_factors_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_factors
+    ADD CONSTRAINT mfa_factors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: one_time_tokens one_time_tokens_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.one_time_tokens
+    ADD CONSTRAINT one_time_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: refresh_tokens refresh_tokens_token_unique; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_token_unique UNIQUE (token);
+
+
+--
+-- Name: saml_providers saml_providers_entity_id_key; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_providers
+    ADD CONSTRAINT saml_providers_entity_id_key UNIQUE (entity_id);
+
+
+--
+-- Name: saml_providers saml_providers_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_providers
+    ADD CONSTRAINT saml_providers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: saml_relay_states saml_relay_states_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_relay_states
+    ADD CONSTRAINT saml_relay_states_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.schema_migrations
+    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: sessions sessions_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.sessions
+    ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sso_domains sso_domains_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.sso_domains
+    ADD CONSTRAINT sso_domains_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sso_providers sso_providers_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.sso_providers
+    ADD CONSTRAINT sso_providers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_phone_key; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.users
+    ADD CONSTRAINT users_phone_key UNIQUE (phone);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: automation_rules automation_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_rules
+    ADD CONSTRAINT automation_rules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: beds24_auth beds24_auth_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.beds24_auth
+    ADD CONSTRAINT beds24_auth_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cleaning_tasks cleaning_tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT cleaning_tasks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cleaning_tasks cleaning_tasks_reservation_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT cleaning_tasks_reservation_id_key UNIQUE (reservation_id);
+
+
+--
+-- Name: guest_channel_consents guest_channel_consents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_channel_consents
+    ADD CONSTRAINT guest_channel_consents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: listing_prices listing_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listing_prices
+    ADD CONSTRAINT listing_prices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: listing_prices listing_prices_room_type_id_dt_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listing_prices
+    ADD CONSTRAINT listing_prices_room_type_id_dt_key UNIQUE (room_type_id, dt);
+
+
+--
+-- Name: market_factors market_factors_location_id_dt_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.market_factors
+    ADD CONSTRAINT market_factors_location_id_dt_key UNIQUE (location_id, dt);
+
+
+--
+-- Name: market_factors market_factors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.market_factors
+    ADD CONSTRAINT market_factors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_attachments message_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_attachments
+    ADD CONSTRAINT message_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_deliveries message_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_deliveries
+    ADD CONSTRAINT message_deliveries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_participants message_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_participants
+    ADD CONSTRAINT message_participants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_templates message_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_templates
+    ADD CONSTRAINT message_templates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_threads message_threads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pricing_audit pricing_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_audit
+    ADD CONSTRAINT pricing_audit_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pricing_recalc_queue pricing_recalc_queue_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_recalc_queue
+    ADD CONSTRAINT pricing_recalc_queue_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pricing_recalc_queue pricing_recalc_queue_room_type_id_start_date_end_date_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_recalc_queue
+    ADD CONSTRAINT pricing_recalc_queue_room_type_id_start_date_end_date_key UNIQUE (room_type_id, start_date, end_date);
+
+
+--
+-- Name: pricing_rules pricing_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_rules
+    ADD CONSTRAINT pricing_rules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pricing_rules pricing_rules_room_type_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_rules
+    ADD CONSTRAINT pricing_rules_room_type_id_key UNIQUE (room_type_id);
+
+
+--
+-- Name: pricing_runs pricing_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_runs
+    ADD CONSTRAINT pricing_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: properties properties_beds24_property_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.properties
+    ADD CONSTRAINT properties_beds24_property_id_key UNIQUE (beds24_property_id);
+
+
+--
+-- Name: properties properties_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.properties
+    ADD CONSTRAINT properties_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: property_images property_images_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_images
+    ADD CONSTRAINT property_images_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: reservation_webhook_logs reservation_webhook_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_webhook_logs
+    ADD CONSTRAINT reservation_webhook_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: reservations reservations_beds24_booking_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_beds24_booking_id_key UNIQUE (beds24_booking_id);
+
+
+--
+-- Name: reservations reservations_check_in_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_check_in_token_key UNIQUE (check_in_token);
+
+
+--
+-- Name: reservations reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_types room_types_beds24_roomtype_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_types
+    ADD CONSTRAINT room_types_beds24_roomtype_id_key UNIQUE (beds24_roomtype_id);
+
+
+--
+-- Name: room_types room_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_types
+    ADD CONSTRAINT room_types_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_types room_types_property_name_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_types
+    ADD CONSTRAINT room_types_property_name_unique UNIQUE (property_id, name);
+
+
+--
+-- Name: room_units room_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_units
+    ADD CONSTRAINT room_units_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_units room_units_type_unit_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_units
+    ADD CONSTRAINT room_units_type_unit_unique UNIQUE (room_type_id, unit_number);
+
+
+--
+-- Name: scheduled_messages scheduled_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thread_channels thread_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_channels
+    ADD CONSTRAINT thread_channels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thread_labels thread_labels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_labels
+    ADD CONSTRAINT thread_labels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: thread_channels unique_channel_external_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_channels
+    ADD CONSTRAINT unique_channel_external_id UNIQUE (channel, external_thread_id);
+
+
+--
+-- Name: message_deliveries unique_message_channel; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_deliveries
+    ADD CONSTRAINT unique_message_channel UNIQUE (message_id, channel);
+
+
+--
+-- Name: guest_channel_consents unique_reservation_channel; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_channel_consents
+    ADD CONSTRAINT unique_reservation_channel UNIQUE (reservation_id, channel);
+
+
+--
+-- Name: thread_channels unique_thread_channel; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_channels
+    ADD CONSTRAINT unique_thread_channel UNIQUE (thread_id, channel);
+
+
+--
+-- Name: thread_labels unique_thread_label; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_labels
+    ADD CONSTRAINT unique_thread_label UNIQUE (thread_id, label);
+
+
+--
+-- Name: scheduled_messages unique_thread_template_runtime; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT unique_thread_template_runtime UNIQUE (thread_id, template_id, run_at);
+
+
+--
+-- Name: user_profiles user_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_profiles
+    ADD CONSTRAINT user_profiles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: webhook_events webhook_events_beds24_event_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.webhook_events
+    ADD CONSTRAINT webhook_events_beds24_event_id_key UNIQUE (beds24_event_id);
+
+
+--
+-- Name: webhook_events webhook_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.webhook_events
+    ADD CONSTRAINT webhook_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: buckets_analytics buckets_analytics_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.buckets_analytics
+    ADD CONSTRAINT buckets_analytics_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: buckets buckets_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.buckets
+    ADD CONSTRAINT buckets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: migrations migrations_name_key; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.migrations
+    ADD CONSTRAINT migrations_name_key UNIQUE (name);
+
+
+--
+-- Name: migrations migrations_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.migrations
+    ADD CONSTRAINT migrations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: objects objects_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.objects
+    ADD CONSTRAINT objects_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: prefixes prefixes_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.prefixes
+    ADD CONSTRAINT prefixes_pkey PRIMARY KEY (bucket_id, level, name);
+
+
+--
+-- Name: s3_multipart_uploads_parts s3_multipart_uploads_parts_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.s3_multipart_uploads_parts
+    ADD CONSTRAINT s3_multipart_uploads_parts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: s3_multipart_uploads s3_multipart_uploads_pkey; Type: CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.s3_multipart_uploads
+    ADD CONSTRAINT s3_multipart_uploads_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: audit_logs_instance_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
+
+
+--
+-- Name: confirmation_token_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX confirmation_token_idx ON auth.users USING btree (confirmation_token) WHERE ((confirmation_token)::text !~ '^[0-9 ]*$'::text);
+
+
+--
+-- Name: email_change_token_current_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX email_change_token_current_idx ON auth.users USING btree (email_change_token_current) WHERE ((email_change_token_current)::text !~ '^[0-9 ]*$'::text);
+
+
+--
+-- Name: email_change_token_new_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX email_change_token_new_idx ON auth.users USING btree (email_change_token_new) WHERE ((email_change_token_new)::text !~ '^[0-9 ]*$'::text);
+
+
+--
+-- Name: factor_id_created_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX factor_id_created_at_idx ON auth.mfa_factors USING btree (user_id, created_at);
+
+
+--
+-- Name: flow_state_created_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX flow_state_created_at_idx ON auth.flow_state USING btree (created_at DESC);
+
+
+--
+-- Name: identities_email_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX identities_email_idx ON auth.identities USING btree (email text_pattern_ops);
+
+
+--
+-- Name: INDEX identities_email_idx; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON INDEX auth.identities_email_idx IS 'Auth: Ensures indexed queries on the email column';
+
+
+--
+-- Name: identities_user_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX identities_user_id_idx ON auth.identities USING btree (user_id);
+
+
+--
+-- Name: idx_auth_code; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX idx_auth_code ON auth.flow_state USING btree (auth_code);
+
+
+--
+-- Name: idx_user_id_auth_method; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX idx_user_id_auth_method ON auth.flow_state USING btree (user_id, authentication_method);
+
+
+--
+-- Name: mfa_challenge_created_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX mfa_challenge_created_at_idx ON auth.mfa_challenges USING btree (created_at DESC);
+
+
+--
+-- Name: mfa_factors_user_friendly_name_unique; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX mfa_factors_user_friendly_name_unique ON auth.mfa_factors USING btree (friendly_name, user_id) WHERE (TRIM(BOTH FROM friendly_name) <> ''::text);
+
+
+--
+-- Name: mfa_factors_user_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX mfa_factors_user_id_idx ON auth.mfa_factors USING btree (user_id);
+
+
+--
+-- Name: one_time_tokens_relates_to_hash_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX one_time_tokens_relates_to_hash_idx ON auth.one_time_tokens USING hash (relates_to);
+
+
+--
+-- Name: one_time_tokens_token_hash_hash_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX one_time_tokens_token_hash_hash_idx ON auth.one_time_tokens USING hash (token_hash);
+
+
+--
+-- Name: one_time_tokens_user_id_token_type_key; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX one_time_tokens_user_id_token_type_key ON auth.one_time_tokens USING btree (user_id, token_type);
+
+
+--
+-- Name: reauthentication_token_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX reauthentication_token_idx ON auth.users USING btree (reauthentication_token) WHERE ((reauthentication_token)::text !~ '^[0-9 ]*$'::text);
+
+
+--
+-- Name: recovery_token_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX recovery_token_idx ON auth.users USING btree (recovery_token) WHERE ((recovery_token)::text !~ '^[0-9 ]*$'::text);
+
+
+--
+-- Name: refresh_tokens_instance_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX refresh_tokens_instance_id_idx ON auth.refresh_tokens USING btree (instance_id);
+
+
+--
+-- Name: refresh_tokens_instance_id_user_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX refresh_tokens_instance_id_user_id_idx ON auth.refresh_tokens USING btree (instance_id, user_id);
+
+
+--
+-- Name: refresh_tokens_parent_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX refresh_tokens_parent_idx ON auth.refresh_tokens USING btree (parent);
+
+
+--
+-- Name: refresh_tokens_session_id_revoked_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX refresh_tokens_session_id_revoked_idx ON auth.refresh_tokens USING btree (session_id, revoked);
+
+
+--
+-- Name: refresh_tokens_updated_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX refresh_tokens_updated_at_idx ON auth.refresh_tokens USING btree (updated_at DESC);
+
+
+--
+-- Name: saml_providers_sso_provider_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX saml_providers_sso_provider_id_idx ON auth.saml_providers USING btree (sso_provider_id);
+
+
+--
+-- Name: saml_relay_states_created_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX saml_relay_states_created_at_idx ON auth.saml_relay_states USING btree (created_at DESC);
+
+
+--
+-- Name: saml_relay_states_for_email_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX saml_relay_states_for_email_idx ON auth.saml_relay_states USING btree (for_email);
+
+
+--
+-- Name: saml_relay_states_sso_provider_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX saml_relay_states_sso_provider_id_idx ON auth.saml_relay_states USING btree (sso_provider_id);
+
+
+--
+-- Name: sessions_not_after_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX sessions_not_after_idx ON auth.sessions USING btree (not_after DESC);
+
+
+--
+-- Name: sessions_user_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX sessions_user_id_idx ON auth.sessions USING btree (user_id);
+
+
+--
+-- Name: sso_domains_domain_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX sso_domains_domain_idx ON auth.sso_domains USING btree (lower(domain));
+
+
+--
+-- Name: sso_domains_sso_provider_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX sso_domains_sso_provider_id_idx ON auth.sso_domains USING btree (sso_provider_id);
+
+
+--
+-- Name: sso_providers_resource_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX sso_providers_resource_id_idx ON auth.sso_providers USING btree (lower(resource_id));
+
+
+--
+-- Name: unique_phone_factor_per_user; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX unique_phone_factor_per_user ON auth.mfa_factors USING btree (user_id, phone);
+
+
+--
+-- Name: user_id_created_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX user_id_created_at_idx ON auth.sessions USING btree (user_id, created_at);
+
+
+--
+-- Name: users_email_partial_key; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE UNIQUE INDEX users_email_partial_key ON auth.users USING btree (email) WHERE (is_sso_user = false);
+
+
+--
+-- Name: INDEX users_email_partial_key; Type: COMMENT; Schema: auth; Owner: -
+--
+
+COMMENT ON INDEX auth.users_email_partial_key IS 'Auth: A partial unique index that applies only when is_sso_user is false';
+
+
+--
+-- Name: users_instance_id_email_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX users_instance_id_email_idx ON auth.users USING btree (instance_id, lower((email)::text));
+
+
+--
+-- Name: users_instance_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX users_instance_id_idx ON auth.users USING btree (instance_id);
+
+
+--
+-- Name: users_is_anonymous_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX users_is_anonymous_idx ON auth.users USING btree (is_anonymous);
+
+
+--
+-- Name: idx_automation_rules_enabled_property; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_automation_rules_enabled_property ON public.automation_rules USING btree (enabled, property_id) WHERE (enabled = true);
+
+
+--
+-- Name: idx_automation_rules_trigger_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_automation_rules_trigger_type ON public.automation_rules USING btree (trigger_type);
+
+
+--
+-- Name: idx_beds24_auth_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_beds24_auth_expires_at ON public.beds24_auth USING btree (expires_at);
+
+
+--
+-- Name: idx_cleaning_tasks_cleaner_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_cleaner_id ON public.cleaning_tasks USING btree (cleaner_id);
+
+
+--
+-- Name: idx_cleaning_tasks_priority; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_priority ON public.cleaning_tasks USING btree (priority);
+
+
+--
+-- Name: idx_cleaning_tasks_property_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_property_id ON public.cleaning_tasks USING btree (property_id);
+
+
+--
+-- Name: idx_cleaning_tasks_reservation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_reservation_id ON public.cleaning_tasks USING btree (reservation_id);
+
+
+--
+-- Name: idx_cleaning_tasks_room_unit_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_room_unit_date ON public.cleaning_tasks USING btree (room_unit_id, task_date);
+
+
+--
+-- Name: idx_cleaning_tasks_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cleaning_tasks_status ON public.cleaning_tasks USING btree (status);
+
+
+--
+-- Name: idx_listing_prices_date_range; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_listing_prices_date_range ON public.listing_prices USING btree (dt);
+
+
+--
+-- Name: idx_listing_prices_room_type_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_listing_prices_room_type_date ON public.listing_prices USING btree (room_type_id, dt);
+
+
+--
+-- Name: idx_market_factors_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_market_factors_date ON public.market_factors USING btree (dt);
+
+
+--
+-- Name: idx_market_factors_location_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_market_factors_location_date ON public.market_factors USING btree (location_id, dt);
+
+
+--
+-- Name: idx_message_attachments_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_attachments_message_id ON public.message_attachments USING btree (message_id);
+
+
+--
+-- Name: idx_message_deliveries_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_deliveries_message_id ON public.message_deliveries USING btree (message_id);
+
+
+--
+-- Name: idx_message_deliveries_status_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_deliveries_status_channel ON public.message_deliveries USING btree (status, channel);
+
+
+--
+-- Name: idx_message_participants_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_participants_thread_id ON public.message_participants USING btree (thread_id);
+
+
+--
+-- Name: idx_message_participants_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_participants_user_id ON public.message_participants USING btree (user_id);
+
+
+--
+-- Name: idx_message_templates_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_templates_channel ON public.message_templates USING btree (channel);
+
+
+--
+-- Name: idx_message_templates_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_templates_enabled ON public.message_templates USING btree (enabled);
+
+
+--
+-- Name: idx_message_templates_property_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_templates_property_id ON public.message_templates USING btree (property_id);
+
+
+--
+-- Name: idx_message_threads_assignee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_threads_assignee ON public.message_threads USING btree (assignee_user_id);
+
+
+--
+-- Name: idx_message_threads_reservation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_threads_reservation_id ON public.message_threads USING btree (reservation_id);
+
+
+--
+-- Name: idx_message_threads_status_last_message; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_threads_status_last_message ON public.message_threads USING btree (status, last_message_at DESC);
+
+
+--
+-- Name: idx_messages_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_channel ON public.messages USING btree (channel);
+
+
+--
+-- Name: idx_messages_origin_role; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_origin_role ON public.messages USING btree (origin_role);
+
+
+--
+-- Name: idx_messages_thread_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_thread_created ON public.messages USING btree (thread_id, created_at DESC);
+
+
+--
+-- Name: idx_pricing_audit_latest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pricing_audit_latest ON public.pricing_audit USING btree (room_type_id, dt, created_at DESC);
+
+
+--
+-- Name: idx_pricing_audit_room_type_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pricing_audit_room_type_date ON public.pricing_audit USING btree (room_type_id, dt);
+
+
+--
+-- Name: idx_pricing_recalc_queue_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pricing_recalc_queue_pending ON public.pricing_recalc_queue USING btree (status, created_at);
+
+
+--
+-- Name: idx_pricing_rules_room_type_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pricing_rules_room_type_id ON public.pricing_rules USING btree (room_type_id);
+
+
+--
+-- Name: idx_properties_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_properties_active ON public.properties USING btree (is_active);
+
+
+--
+-- Name: idx_properties_default_cleaner_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_properties_default_cleaner_id ON public.properties USING btree (default_cleaner_id);
+
+
+--
+-- Name: idx_properties_owner_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_properties_owner_id ON public.properties USING btree (owner_id);
+
+
+--
+-- Name: idx_property_images_property_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_images_property_id ON public.property_images USING btree (property_id);
+
+
+--
+-- Name: idx_property_images_room_type_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_images_room_type_id ON public.property_images USING btree (room_type_id);
+
+
+--
+-- Name: idx_property_images_room_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_images_room_unit_id ON public.property_images USING btree (room_unit_id);
+
+
+--
+-- Name: idx_reservations_admin_verified; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_admin_verified ON public.reservations USING btree (admin_verified);
+
+
+--
+-- Name: idx_reservations_beds24_booking_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_beds24_booking_id ON public.reservations USING btree (beds24_booking_id);
+
+
+--
+-- Name: idx_reservations_booking_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_booking_email ON public.reservations USING btree (booking_email);
+
+
+--
+-- Name: idx_reservations_check_in_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_check_in_date ON public.reservations USING btree (check_in_date);
+
+
+--
+-- Name: idx_reservations_check_in_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_check_in_token ON public.reservations USING btree (check_in_token);
+
+
+--
+-- Name: idx_reservations_checkin_submitted; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_checkin_submitted ON public.reservations USING btree (checkin_submitted_at);
+
+
+--
+-- Name: idx_reservations_occupancy_calc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_occupancy_calc ON public.reservations USING btree (room_type_id, check_in_date, check_out_date, status);
+
+
+--
+-- Name: idx_reservations_property_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_property_date ON public.reservations USING btree (property_id, check_in_date);
+
+
+--
+-- Name: idx_reservations_property_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_property_id ON public.reservations USING btree (property_id);
+
+
+--
+-- Name: idx_reservations_room_type_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_room_type_id ON public.reservations USING btree (room_type_id);
+
+
+--
+-- Name: idx_reservations_room_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_room_unit_id ON public.reservations USING btree (room_unit_id);
+
+
+--
+-- Name: idx_reservations_room_unit_occupancy; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_room_unit_occupancy ON public.reservations USING btree (room_unit_id, check_in_date, check_out_date, status);
+
+
+--
+-- Name: idx_reservations_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_status ON public.reservations USING btree (status);
+
+
+--
+-- Name: idx_reservations_status_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_status_date ON public.reservations USING btree (status, check_in_date);
+
+
+--
+-- Name: idx_room_types_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_types_active ON public.room_types USING btree (is_active);
+
+
+--
+-- Name: idx_room_types_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_types_name ON public.room_types USING btree (name);
+
+
+--
+-- Name: idx_room_types_property_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_types_property_id ON public.room_types USING btree (property_id);
+
+
+--
+-- Name: idx_room_units_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_units_active ON public.room_units USING btree (is_active);
+
+
+--
+-- Name: idx_room_units_floor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_units_floor ON public.room_units USING btree (floor_number);
+
+
+--
+-- Name: idx_room_units_room_type_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_units_room_type_active ON public.room_units USING btree (room_type_id, is_active);
+
+
+--
+-- Name: idx_room_units_room_type_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_units_room_type_id ON public.room_units USING btree (room_type_id);
+
+
+--
+-- Name: idx_room_units_unit_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_units_unit_number ON public.room_units USING btree (unit_number);
+
+
+--
+-- Name: idx_scheduled_messages_reservation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_reservation_id ON public.scheduled_messages USING btree (reservation_id);
+
+
+--
+-- Name: idx_scheduled_messages_rule_reservation_queued; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_scheduled_messages_rule_reservation_queued ON public.scheduled_messages USING btree (rule_id, reservation_id) WHERE (status = 'queued'::text);
+
+
+--
+-- Name: idx_scheduled_messages_status_run_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_status_run_at ON public.scheduled_messages USING btree (status, run_at);
+
+
+--
+-- Name: idx_scheduled_messages_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_thread_id ON public.scheduled_messages USING btree (thread_id);
+
+
+--
+-- Name: idx_thread_channels_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_thread_channels_channel ON public.thread_channels USING btree (channel);
+
+
+--
+-- Name: idx_thread_channels_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_thread_channels_thread_id ON public.thread_channels USING btree (thread_id);
+
+
+--
+-- Name: idx_user_profiles_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_profiles_active ON public.user_profiles USING btree (is_active);
+
+
+--
+-- Name: idx_user_profiles_role; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_profiles_role ON public.user_profiles USING btree (role);
+
+
+--
+-- Name: idx_webhook_events_beds24_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_webhook_events_beds24_event_id ON public.webhook_events USING btree (beds24_event_id);
+
+
+--
+-- Name: idx_webhook_events_processed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_webhook_events_processed ON public.webhook_events USING btree (processed);
+
+
+--
+-- Name: messages_content_tsv_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX messages_content_tsv_idx ON public.messages USING gin (content_tsv);
+
+
+--
+-- Name: unique_channel_provider_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX unique_channel_provider_id ON public.message_deliveries USING btree (channel, provider_message_id) WHERE (provider_message_id IS NOT NULL);
+
+
+--
+-- Name: unique_participant_external; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX unique_participant_external ON public.message_participants USING btree (thread_id, participant_type, external_address) WHERE (external_address IS NOT NULL);
+
+
+--
+-- Name: unique_participant_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX unique_participant_user ON public.message_participants USING btree (thread_id, participant_type, user_id) WHERE (user_id IS NOT NULL);
+
+
+--
+-- Name: bname; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE UNIQUE INDEX bname ON storage.buckets USING btree (name);
+
+
+--
+-- Name: bucketid_objname; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE UNIQUE INDEX bucketid_objname ON storage.objects USING btree (bucket_id, name);
+
+
+--
+-- Name: idx_multipart_uploads_list; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE INDEX idx_multipart_uploads_list ON storage.s3_multipart_uploads USING btree (bucket_id, key, created_at);
+
+
+--
+-- Name: idx_name_bucket_level_unique; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_name_bucket_level_unique ON storage.objects USING btree (name COLLATE "C", bucket_id, level);
+
+
+--
+-- Name: idx_objects_bucket_id_name; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE INDEX idx_objects_bucket_id_name ON storage.objects USING btree (bucket_id, name COLLATE "C");
+
+
+--
+-- Name: idx_objects_lower_name; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE INDEX idx_objects_lower_name ON storage.objects USING btree ((path_tokens[level]), lower(name) text_pattern_ops, bucket_id, level);
+
+
+--
+-- Name: idx_prefixes_lower_name; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE INDEX idx_prefixes_lower_name ON storage.prefixes USING btree (bucket_id, level, ((string_to_array(name, '/'::text))[level]), lower(name) text_pattern_ops);
+
+
+--
+-- Name: name_prefix_search; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE INDEX name_prefix_search ON storage.objects USING btree (name text_pattern_ops);
+
+
+--
+-- Name: objects_bucket_id_level_idx; Type: INDEX; Schema: storage; Owner: -
+--
+
+CREATE UNIQUE INDEX objects_bucket_id_level_idx ON storage.objects USING btree (bucket_id, level, name COLLATE "C");
+
+
+--
+-- Name: reservations auto_manage_cleaning_task; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auto_manage_cleaning_task AFTER INSERT OR UPDATE OF room_unit_id, check_out_date ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
+
+
+--
+-- Name: cleaning_tasks check_cleaner_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER check_cleaner_role BEFORE INSERT OR UPDATE OF cleaner_id ON public.cleaning_tasks FOR EACH ROW EXECUTE FUNCTION public.enforce_cleaner_role();
+
+
+--
+-- Name: reservations manage_cleaning_task_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER manage_cleaning_task_trigger AFTER INSERT OR UPDATE OF check_out_date, room_unit_id, property_id ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
+
+
+--
+-- Name: reservations manage_cleaning_tasks_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER manage_cleaning_tasks_trigger AFTER INSERT OR UPDATE OF room_unit_id, check_out_date ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
+
+
+--
+-- Name: message_deliveries message_deliveries_status_ts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER message_deliveries_status_ts BEFORE INSERT OR UPDATE ON public.message_deliveries FOR EACH ROW EXECUTE FUNCTION public.message_deliveries_status_trigger();
+
+
+--
+-- Name: TRIGGER message_deliveries_status_ts ON message_deliveries; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TRIGGER message_deliveries_status_ts ON public.message_deliveries IS 'Automatically updates timestamp fields (queued_at, sent_at, delivered_at, read_at) when status changes';
+
+
+--
+-- Name: reservations propagate_booking_name_to_ct; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER propagate_booking_name_to_ct AFTER UPDATE OF booking_name ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.propagate_booking_name_to_ct();
+
+
+--
+-- Name: reservations reservation_pricing_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER reservation_pricing_trigger AFTER INSERT OR DELETE OR UPDATE ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.trigger_pricing_recalculation();
+
+
+--
+-- Name: reservations set_checkin_token; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_checkin_token BEFORE INSERT ON public.reservations FOR EACH ROW WHEN ((new.check_in_token IS NULL)) EXECUTE FUNCTION public.generate_checkin_token();
+
+
+--
+-- Name: cleaning_tasks set_ct_booking_name; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_ct_booking_name BEFORE INSERT OR UPDATE OF reservation_id ON public.cleaning_tasks FOR EACH ROW EXECUTE FUNCTION public.set_ct_booking_name();
+
+
+--
+-- Name: beds24_auth trg_beds24_auth_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_beds24_auth_updated BEFORE UPDATE ON public.beds24_auth FOR EACH ROW EXECUTE FUNCTION public.update_beds24_auth_updated_at();
+
+
+--
+-- Name: reservations trg_cancel_cleaning_task_if_res_cancelled; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_cancel_cleaning_task_if_res_cancelled AFTER UPDATE OF status ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.cancel_cleaning_task_if_res_cancelled();
+
+
+--
+-- Name: message_deliveries trg_message_deliveries_status_ts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_message_deliveries_status_ts BEFORE INSERT OR UPDATE ON public.message_deliveries FOR EACH ROW EXECUTE FUNCTION public.message_deliveries_status_ts();
+
+
+--
+-- Name: message_deliveries trg_message_deliveries_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_message_deliveries_updated BEFORE UPDATE ON public.message_deliveries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: messages trg_messages_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_messages_updated BEFORE UPDATE ON public.messages FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: room_units trg_room_units_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_room_units_sync AFTER INSERT OR DELETE OR UPDATE ON public.room_units FOR EACH ROW EXECUTE FUNCTION public.trg_sync_room_type_total_units();
+
+
+--
+-- Name: cleaning_tasks trg_set_cleaning_status_on_insert; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_set_cleaning_status_on_insert BEFORE INSERT ON public.cleaning_tasks FOR EACH ROW EXECUTE FUNCTION public.set_cleaning_status_on_insert_if_cancelled();
+
+
+--
+-- Name: reservations trg_sync_cleaning_status_from_reservation; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_sync_cleaning_status_from_reservation AFTER UPDATE OF status ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.sync_cleaning_status_from_reservation();
+
+
+--
+-- Name: message_threads trg_threads_set_subject; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_threads_set_subject BEFORE INSERT OR UPDATE OF reservation_id, subject ON public.message_threads FOR EACH ROW EXECUTE FUNCTION public.set_default_thread_subject();
+
+
+--
+-- Name: message_threads trg_threads_updated; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_threads_updated BEFORE UPDATE ON public.message_threads FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: reservations trg_update_cleaning_status_on_res_cancel; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_update_cleaning_status_on_res_cancel AFTER UPDATE OF status ON public.reservations FOR EACH ROW WHEN ((old.status IS DISTINCT FROM new.status)) EXECUTE FUNCTION public.update_cleaning_status_on_res_cancel();
+
+
+--
+-- Name: messages trg_update_thread_on_message_insert; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_update_thread_on_message_insert AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION public.update_thread_metadata();
+
+
+--
+-- Name: messages trg_update_thread_on_message_update; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_update_thread_on_message_update AFTER UPDATE ON public.messages FOR EACH ROW WHEN (((old.content IS DISTINCT FROM new.content) OR (old.created_at IS DISTINCT FROM new.created_at))) EXECUTE FUNCTION public.update_thread_metadata();
+
+
+--
+-- Name: cleaning_tasks update_cleaning_task_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_cleaning_task_updated_at BEFORE UPDATE ON public.cleaning_tasks FOR EACH ROW EXECUTE FUNCTION public.update_cleaning_task_updated_at();
+
+
+--
+-- Name: listing_prices update_listing_prices_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_listing_prices_updated_at BEFORE UPDATE ON public.listing_prices FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: pricing_rules update_pricing_rules_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_pricing_rules_updated_at BEFORE UPDATE ON public.pricing_rules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: properties update_properties_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON public.properties FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: reservations update_reservations_verified_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_reservations_verified_at BEFORE UPDATE ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.update_verified_at();
+
+
+--
+-- Name: room_types update_room_types_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_room_types_updated_at BEFORE UPDATE ON public.room_types FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: room_units update_room_units_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_room_units_updated_at BEFORE UPDATE ON public.room_units FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: user_profiles update_user_profiles_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON public.user_profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: buckets enforce_bucket_name_length_trigger; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER enforce_bucket_name_length_trigger BEFORE INSERT OR UPDATE OF name ON storage.buckets FOR EACH ROW EXECUTE FUNCTION storage.enforce_bucket_name_length();
+
+
+--
+-- Name: objects objects_delete_delete_prefix; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER objects_delete_delete_prefix AFTER DELETE ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+
+
+--
+-- Name: objects objects_insert_create_prefix; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER objects_insert_create_prefix BEFORE INSERT ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.objects_insert_prefix_trigger();
+
+
+--
+-- Name: objects objects_update_create_prefix; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER objects_update_create_prefix BEFORE UPDATE ON storage.objects FOR EACH ROW WHEN (((new.name <> old.name) OR (new.bucket_id <> old.bucket_id))) EXECUTE FUNCTION storage.objects_update_prefix_trigger();
+
+
+--
+-- Name: prefixes prefixes_create_hierarchy; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER prefixes_create_hierarchy BEFORE INSERT ON storage.prefixes FOR EACH ROW WHEN ((pg_trigger_depth() < 1)) EXECUTE FUNCTION storage.prefixes_insert_trigger();
+
+
+--
+-- Name: prefixes prefixes_delete_hierarchy; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER prefixes_delete_hierarchy AFTER DELETE ON storage.prefixes FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+
+
+--
+-- Name: objects update_objects_updated_at; Type: TRIGGER; Schema: storage; Owner: -
+--
+
+CREATE TRIGGER update_objects_updated_at BEFORE UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.update_updated_at_column();
+
+
+--
+-- Name: identities identities_user_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.identities
+    ADD CONSTRAINT identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mfa_amr_claims mfa_amr_claims_session_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_amr_claims
+    ADD CONSTRAINT mfa_amr_claims_session_id_fkey FOREIGN KEY (session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mfa_challenges mfa_challenges_auth_factor_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_challenges
+    ADD CONSTRAINT mfa_challenges_auth_factor_id_fkey FOREIGN KEY (factor_id) REFERENCES auth.mfa_factors(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mfa_factors mfa_factors_user_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.mfa_factors
+    ADD CONSTRAINT mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: one_time_tokens one_time_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.one_time_tokens
+    ADD CONSTRAINT one_time_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: refresh_tokens refresh_tokens_session_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_session_id_fkey FOREIGN KEY (session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: saml_providers saml_providers_sso_provider_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_providers
+    ADD CONSTRAINT saml_providers_sso_provider_id_fkey FOREIGN KEY (sso_provider_id) REFERENCES auth.sso_providers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: saml_relay_states saml_relay_states_flow_state_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_relay_states
+    ADD CONSTRAINT saml_relay_states_flow_state_id_fkey FOREIGN KEY (flow_state_id) REFERENCES auth.flow_state(id) ON DELETE CASCADE;
+
+
+--
+-- Name: saml_relay_states saml_relay_states_sso_provider_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.saml_relay_states
+    ADD CONSTRAINT saml_relay_states_sso_provider_id_fkey FOREIGN KEY (sso_provider_id) REFERENCES auth.sso_providers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sessions sessions_user_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.sessions
+    ADD CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sso_domains sso_domains_sso_provider_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.sso_domains
+    ADD CONSTRAINT sso_domains_sso_provider_id_fkey FOREIGN KEY (sso_provider_id) REFERENCES auth.sso_providers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: automation_rules automation_rules_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_rules
+    ADD CONSTRAINT automation_rules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id);
+
+
+--
+-- Name: automation_rules automation_rules_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_rules
+    ADD CONSTRAINT automation_rules_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE SET NULL;
+
+
+--
+-- Name: automation_rules automation_rules_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_rules
+    ADD CONSTRAINT automation_rules_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.message_templates(id);
+
+
+--
+-- Name: cleaning_tasks cleaning_tasks_cleaner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT cleaning_tasks_cleaner_id_fkey FOREIGN KEY (cleaner_id) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cleaning_tasks fk_cleaning_task_property; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT fk_cleaning_task_property FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleaning_tasks fk_cleaning_task_reservation; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT fk_cleaning_task_reservation FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleaning_tasks fk_cleaning_task_room_unit; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleaning_tasks
+    ADD CONSTRAINT fk_cleaning_task_room_unit FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE CASCADE;
+
+
+--
+-- Name: scheduled_messages fk_scheduled_messages_rule_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT fk_scheduled_messages_rule_id FOREIGN KEY (rule_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
+
+
+--
+-- Name: guest_channel_consents guest_channel_consents_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_channel_consents
+    ADD CONSTRAINT guest_channel_consents_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: listing_prices listing_prices_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.listing_prices
+    ADD CONSTRAINT listing_prices_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_attachments message_attachments_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_attachments
+    ADD CONSTRAINT message_attachments_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_deliveries message_deliveries_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_deliveries
+    ADD CONSTRAINT message_deliveries_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_participants message_participants_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_participants
+    ADD CONSTRAINT message_participants_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_participants message_participants_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_participants
+    ADD CONSTRAINT message_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: message_templates message_templates_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_templates
+    ADD CONSTRAINT message_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: message_templates message_templates_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_templates
+    ADD CONSTRAINT message_templates_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE SET NULL;
+
+
+--
+-- Name: message_threads message_threads_assignee_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_assignee_user_id_fkey FOREIGN KEY (assignee_user_id) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: message_threads message_threads_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE SET NULL;
+
+
+--
+-- Name: messages messages_parent_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_parent_message_id_fkey FOREIGN KEY (parent_message_id) REFERENCES public.messages(id) ON DELETE SET NULL;
+
+
+--
+-- Name: messages messages_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: pricing_audit pricing_audit_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_audit
+    ADD CONSTRAINT pricing_audit_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: pricing_recalc_queue pricing_recalc_queue_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_recalc_queue
+    ADD CONSTRAINT pricing_recalc_queue_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: pricing_rules pricing_rules_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_rules
+    ADD CONSTRAINT pricing_rules_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: pricing_runs pricing_runs_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pricing_runs
+    ADD CONSTRAINT pricing_runs_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id);
+
+
+--
+-- Name: properties properties_default_cleaner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.properties
+    ADD CONSTRAINT properties_default_cleaner_id_fkey FOREIGN KEY (default_cleaner_id) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: properties properties_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.properties
+    ADD CONSTRAINT properties_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.user_profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: property_images property_images_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_images
+    ADD CONSTRAINT property_images_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
+
+
+--
+-- Name: property_images property_images_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_images
+    ADD CONSTRAINT property_images_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: property_images property_images_room_unit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_images
+    ADD CONSTRAINT property_images_room_unit_id_fkey FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE CASCADE;
+
+
+--
+-- Name: reservations reservations_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE SET NULL;
+
+
+--
+-- Name: reservations reservations_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE SET NULL;
+
+
+--
+-- Name: reservations reservations_room_unit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_room_unit_id_fkey FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE SET NULL;
+
+
+--
+-- Name: reservations reservations_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservations
+    ADD CONSTRAINT reservations_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: room_types room_types_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_types
+    ADD CONSTRAINT room_types_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
+
+
+--
+-- Name: room_units room_units_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_units
+    ADD CONSTRAINT room_units_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
+
+
+--
+-- Name: scheduled_messages scheduled_messages_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id);
+
+
+--
+-- Name: scheduled_messages scheduled_messages_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE SET NULL;
+
+
+--
+-- Name: scheduled_messages scheduled_messages_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
+
+
+--
+-- Name: scheduled_messages scheduled_messages_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.message_templates(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: scheduled_messages scheduled_messages_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_messages
+    ADD CONSTRAINT scheduled_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: thread_channels thread_channels_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_channels
+    ADD CONSTRAINT thread_channels_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: thread_labels thread_labels_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.thread_labels
+    ADD CONSTRAINT thread_labels_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_profiles user_profiles_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_profiles
+    ADD CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: objects objects_bucketId_fkey; Type: FK CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.objects
+    ADD CONSTRAINT "objects_bucketId_fkey" FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+
+
+--
+-- Name: prefixes prefixes_bucketId_fkey; Type: FK CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.prefixes
+    ADD CONSTRAINT "prefixes_bucketId_fkey" FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+
+
+--
+-- Name: s3_multipart_uploads s3_multipart_uploads_bucket_id_fkey; Type: FK CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.s3_multipart_uploads
+    ADD CONSTRAINT s3_multipart_uploads_bucket_id_fkey FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+
+
+--
+-- Name: s3_multipart_uploads_parts s3_multipart_uploads_parts_bucket_id_fkey; Type: FK CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.s3_multipart_uploads_parts
+    ADD CONSTRAINT s3_multipart_uploads_parts_bucket_id_fkey FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+
+
+--
+-- Name: s3_multipart_uploads_parts s3_multipart_uploads_parts_upload_id_fkey; Type: FK CONSTRAINT; Schema: storage; Owner: -
+--
+
+ALTER TABLE ONLY storage.s3_multipart_uploads_parts
+    ADD CONSTRAINT s3_multipart_uploads_parts_upload_id_fkey FOREIGN KEY (upload_id) REFERENCES storage.s3_multipart_uploads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: audit_log_entries; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.audit_log_entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: flow_state; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.flow_state ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: identities; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.identities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: instances; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.instances ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mfa_amr_claims; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_amr_claims ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mfa_challenges; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_challenges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mfa_factors; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_factors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: one_time_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.one_time_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: refresh_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.refresh_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_relay_states; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_relay_states ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schema_migrations; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sessions; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_domains; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_domains ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: properties Service role can manage properties; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage properties" ON public.properties USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: property_images Service role can manage property_images; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage property_images" ON public.property_images USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Service role can manage user_profiles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage user_profiles" ON public.user_profiles USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: webhook_events Service role can manage webhook_events; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage webhook_events" ON public.webhook_events USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Users can view own profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own profile" ON public.user_profiles FOR SELECT USING ((auth.uid() = id));
+
+
+--
+-- Name: cleaning_tasks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cleaning_tasks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_deliveries message_deliveries_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY message_deliveries_policy ON public.message_deliveries USING ((EXISTS ( SELECT 1
+   FROM (((public.messages m
+     JOIN public.message_threads mt ON ((m.thread_id = mt.id)))
+     JOIN public.reservations r ON ((mt.reservation_id = r.id)))
+     JOIN public.properties p ON ((r.property_id = p.id)))
+  WHERE ((m.id = message_deliveries.message_id) AND ((p.owner_id = auth.uid()) OR (auth.uid() IN ( SELECT user_profiles.id
+           FROM public.user_profiles
+          WHERE (user_profiles.role = 'admin'::public.user_role))) OR (auth.uid() IS NULL))))));
+
+
+--
+-- Name: properties; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: property_images; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.property_images ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: reservations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_types; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_types ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_units; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: webhook_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects Service role can manage guest documents; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage guest documents" ON storage.objects USING ((bucket_id = 'guest-documents'::text)) WITH CHECK ((bucket_id = 'guest-documents'::text));
+
+
+--
+-- Name: objects Service role can manage property images; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage property images" ON storage.objects USING (((bucket_id = 'property-images'::text) AND (auth.role() = 'service_role'::text)));
+
+
+--
+-- Name: buckets; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: buckets_analytics; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets_analytics ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: migrations; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: prefixes; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.prefixes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads_parts; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads_parts ENABLE ROW LEVEL SECURITY;
+
+--
+-- PostgreSQL database dump complete
+--
+

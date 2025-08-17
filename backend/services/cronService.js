@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const beds24Service = require('./beds24Service');
+const { supabaseAdmin } = require('../config/supabase');
 const communicationService = require('./communicationService');
 
 class CronService {
@@ -22,6 +23,9 @@ class CronService {
 
     // Start scheduled message processing job
     this.startScheduledMessageProcessingJob();
+
+    // Start pricing-related cron jobs
+    this.startPricingCronJobs();
 
     this.isInitialized = true;
     console.log('✅ Cron service initialized successfully');
@@ -308,6 +312,127 @@ class CronService {
     } catch (error) {
       return 'Unable to calculate';
     }
+  }
+
+  // Start pricing-related cron jobs
+  startPricingCronJobs() {
+    // Market factor updates - run daily at 2 AM JST
+    const marketFactorCron = '0 2 * * *';
+    const marketTask = cron.schedule(marketFactorCron, async () => {
+      await this.updateMarketFactors();
+    }, {
+      scheduled: false,
+      timezone: 'Asia/Tokyo'
+    });
+
+    this.cronJobs.set('marketFactorUpdate', marketTask);
+    marketTask.start();
+
+    // Pricing queue processor - run every 5 minutes
+    const queueCron = '*/5 * * * *';
+    const queueTask = cron.schedule(queueCron, async () => {
+      await this.processPricingQueue();
+    }, {
+      scheduled: false,
+      timezone: 'Asia/Tokyo'
+    });
+
+    this.cronJobs.set('pricingQueueProcessor', queueTask);
+    queueTask.start();
+
+    console.log('✅ Pricing cron jobs scheduled');
+    console.log(`📅 Market factors: Daily at 2 AM JST (${marketFactorCron})`);
+    console.log(`📅 Pricing queue: Every 5 minutes (${queueCron})`);
+  }
+
+  // Update market factors (seasonality, demand, etc.)
+  async updateMarketFactors() {
+    try {
+      console.log('🔄 Updating market factors...');
+      const startTime = new Date();
+
+      // Generate market factors for the next 365 days
+      const fromDate = new Date();
+      const toDate = new Date(fromDate.getTime() + (365 * 24 * 60 * 60 * 1000));
+      
+      const factorsToInsert = [];
+      
+      for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const month = d.getMonth() + 1; // 1-12
+        const dayOfWeek = d.getDay(); // 0 = Sunday
+
+        // Simple seasonality curve
+        let seasonality;
+        if ([12, 1, 2].includes(month)) seasonality = 0.92; // Winter
+        else if ([3, 4, 5].includes(month)) seasonality = 0.97; // Spring  
+        else if ([6, 7, 8].includes(month)) seasonality = 1.15; // Summer
+        else seasonality = 1.05; // Fall
+
+        // Weekend demand boost
+        let demand = 1.0;
+        if (dayOfWeek === 5 || dayOfWeek === 6) demand = 1.08; // Fri, Sat
+        else if (dayOfWeek === 0) demand = 1.05; // Sun
+
+        factorsToInsert.push({
+          location_id: null, // Global factors
+          dt: dateStr,
+          seasonality,
+          demand
+        });
+      }
+
+      // Bulk upsert market factors
+      const { error } = await supabaseAdmin
+        .from('market_factors')
+        .upsert(factorsToInsert, { onConflict: 'location_id,dt' });
+
+      if (error) {
+        throw error;
+      }
+
+      const endTime = new Date();
+      const duration = endTime.getTime() - startTime.getTime();
+      
+      console.log(`✅ Market factors updated: ${factorsToInsert.length} records in ${duration}ms`);
+
+    } catch (error) {
+      console.error('❌ Error updating market factors:', error);
+    }
+  }
+
+  // Process pricing recalculation queue
+  async processPricingQueue() {
+    try {
+      // Call the database function to process queue items
+      const { data, error } = await supabaseAdmin.rpc('process_pricing_queue');
+      
+      if (error) {
+        throw error;
+      }
+
+      if (data > 0) {
+        console.log(`💰 Processed ${data} pricing queue items`);
+      }
+
+      // Cleanup old completed items
+      await supabaseAdmin.rpc('cleanup_pricing_queue');
+
+    } catch (error) {
+      console.error('❌ Error processing pricing queue:', error);
+    }
+  }
+
+  // Manually trigger market factor update (useful for testing)
+  async triggerMarketFactorUpdate() {
+    console.log('🔧 Manual market factor update triggered');
+    await this.updateMarketFactors();
+  }
+
+  // Manually trigger pricing queue processing (useful for testing)
+  async triggerPricingQueueProcess() {
+    console.log('🔧 Manual pricing queue processing triggered');
+    await this.processPricingQueue();
   }
 
   // Manually trigger Beds24 token refresh (useful for testing)

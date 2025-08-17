@@ -284,17 +284,33 @@ class RoomService {
     try {
       const updateData = {};
       
+      // Handle both camelCase and snake_case field names
       if (roomTypeData.name !== undefined) updateData.name = roomTypeData.name;
       if (roomTypeData.description !== undefined) updateData.description = roomTypeData.description;
       if (roomTypeData.maxGuests !== undefined) updateData.max_guests = roomTypeData.maxGuests;
+      if (roomTypeData.max_guests !== undefined) updateData.max_guests = roomTypeData.max_guests;
+      
+      // Price fields - handle both camelCase and snake_case
       if (roomTypeData.basePrice !== undefined) updateData.base_price = roomTypeData.basePrice;
+      if (roomTypeData.base_price !== undefined) updateData.base_price = roomTypeData.base_price;
+      if (roomTypeData.minPrice !== undefined) updateData.min_price = roomTypeData.minPrice;
+      if (roomTypeData.min_price !== undefined) updateData.min_price = roomTypeData.min_price;
+      if (roomTypeData.maxPrice !== undefined) updateData.max_price = roomTypeData.maxPrice;
+      if (roomTypeData.max_price !== undefined) updateData.max_price = roomTypeData.max_price;
+      
       if (roomTypeData.currency !== undefined) updateData.currency = roomTypeData.currency;
       if (roomTypeData.roomAmenities !== undefined) updateData.room_amenities = roomTypeData.roomAmenities;
+      if (roomTypeData.room_amenities !== undefined) updateData.room_amenities = roomTypeData.room_amenities;
       if (roomTypeData.bedConfiguration !== undefined) updateData.bed_configuration = roomTypeData.bedConfiguration;
+      if (roomTypeData.bed_configuration !== undefined) updateData.bed_configuration = roomTypeData.bed_configuration;
       if (roomTypeData.roomSizeSqm !== undefined) updateData.room_size_sqm = roomTypeData.roomSizeSqm;
+      if (roomTypeData.room_size_sqm !== undefined) updateData.room_size_sqm = roomTypeData.room_size_sqm;
       if (roomTypeData.hasBalcony !== undefined) updateData.has_balcony = roomTypeData.hasBalcony;
+      if (roomTypeData.has_balcony !== undefined) updateData.has_balcony = roomTypeData.has_balcony;
       if (roomTypeData.hasKitchen !== undefined) updateData.has_kitchen = roomTypeData.hasKitchen;
+      if (roomTypeData.has_kitchen !== undefined) updateData.has_kitchen = roomTypeData.has_kitchen;
       if (roomTypeData.isAccessible !== undefined) updateData.is_accessible = roomTypeData.isAccessible;
+      if (roomTypeData.is_accessible !== undefined) updateData.is_accessible = roomTypeData.is_accessible;
 
       const { data, error } = await supabaseAdmin
         .from('room_types')

@@ -77,12 +77,13 @@ router.put('/room-types/:id', adminAuth, async (req, res) => {
     const roomType = await roomService.updateRoomType(id, updateData);
 
     res.status(200).json({
+      success: true,
       message: 'Room type updated successfully',
-      roomType
+      room_type: roomType
     });
   } catch (error) {
     console.error('Error updating room type:', error);
-    res.status(500).json({ error: 'Failed to update room type' });
+    res.status(500).json({ success: false, error: 'Failed to update room type' });
   }
 });
 

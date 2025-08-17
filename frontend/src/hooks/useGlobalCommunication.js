@@ -38,10 +38,10 @@ export function useGlobalCommunication() {
 
   // Setup real-time subscription for unread count updates
   const setupUnreadCountSubscription = useCallback(() => {
-    console.log('🔧 Setting up global unread count subscription...')
+    // console.log('🔧 Setting up global unread count subscription...')
     
     if (threadsChannelRef.current) {
-      console.log('🧹 Removing existing global threads channel')
+      // console.log('🧹 Removing existing global threads channel')
       supabase.removeChannel(threadsChannelRef.current)
       threadsChannelRef.current = null
     }
@@ -110,16 +110,16 @@ export function useGlobalCommunication() {
           
           // If last_read_at is updated (messages marked as read), reload unread count
           if (payload.new.last_read_at && payload.new.last_read_at !== payload.old?.last_read_at) {
-            console.log('🔄 Reloading global unread count due to message participant read status change')
+            // console.log('🔄 Reloading global unread count due to message participant read status change')
             setTimeout(() => loadUnreadCount(), 100) // Small delay to ensure DB consistency
           }
         }
       )
       .subscribe((status) => {
-        console.log('📡 Global unread count subscription status:', status)
+        // console.log('📡 Global unread count subscription status:', status)
       })
       
-    console.log('✅ Global unread count subscription setup complete')
+    // console.log('✅ Global unread count subscription setup complete')
   }, [loadUnreadCount])
 
   // Initialize on mount
