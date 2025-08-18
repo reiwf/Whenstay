@@ -506,6 +506,79 @@ router.delete('/events/:eventId', async (req, res) => {
 });
 
 /**
+ * Seasonality Management
+ */
+
+// Get seasonality settings for location
+router.get('/seasonality/:locationId?', async (req, res) => {
+  try {
+    const locationId = req.params.locationId === 'null' ? null : req.params.locationId;
+    const settings = await smartMarketDemandService.getSeasonalitySettings(locationId);
+    res.json(settings);
+  } catch (error) {
+    console.error('Error fetching seasonality settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update seasonality settings for location
+router.put('/seasonality/:locationId?', async (req, res) => {
+  try {
+    const locationId = req.params.locationId === 'null' ? null : req.params.locationId;
+    const { settings } = req.body;
+
+    if (!settings || !Array.isArray(settings)) {
+      return res.status(400).json({ error: 'settings must be an array of seasonality configurations' });
+    }
+
+    // Validate each setting
+    for (const setting of settings) {
+      if (!setting.season_name || !setting.start_date || !setting.end_date || !setting.multiplier) {
+        return res.status(400).json({ error: 'Each setting must have season_name, start_date, end_date, and multiplier' });
+      }
+
+      const multiplier = parseFloat(setting.multiplier);
+      if (multiplier <= 0) {
+        return res.status(400).json({ error: 'multiplier must be greater than 0' });
+      }
+
+      // Validate date format
+      const startDate = new Date(setting.start_date);
+      const endDate = new Date(setting.end_date);
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ error: 'start_date and end_date must be valid dates (YYYY-MM-DD format)' });
+      }
+    }
+
+    const result = await smartMarketDemandService.updateSeasonalitySettings(locationId, settings);
+    res.json(result);
+  } catch (error) {
+    console.error('Error updating seasonality settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset seasonality settings to defaults
+router.post('/seasonality/:locationId?/reset', async (req, res) => {
+  try {
+    const locationId = req.params.locationId === 'null' ? null : req.params.locationId;
+    
+    const defaultSettings = [
+      { season_name: 'Winter', start_date: '2024-12-01', end_date: '2025-02-28', multiplier: 0.92, year_recurring: true },
+      { season_name: 'Spring', start_date: '2024-03-01', end_date: '2024-05-31', multiplier: 0.97, year_recurring: true },
+      { season_name: 'Summer', start_date: '2024-06-01', end_date: '2024-08-31', multiplier: 1.15, year_recurring: true },
+      { season_name: 'Fall', start_date: '2024-09-01', end_date: '2024-11-30', multiplier: 1.05, year_recurring: true }
+    ];
+
+    const result = await smartMarketDemandService.updateSeasonalitySettings(locationId, defaultSettings);
+    res.json({ success: true, settings: result });
+  } catch (error) {
+    console.error('Error resetting seasonality settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Manual Trigger Endpoints (for testing/admin use)
  */
 

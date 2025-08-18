@@ -166,6 +166,81 @@ class PricingService {
   }
 
   /**
+   * Get seasonality factor for a specific date and location
+   * Falls back to 1.0 if no seasonality configured
+   */
+  async getSeasonalityFactor(date, locationId = null) {
+    try {
+      const actualLocationId = locationId === 'null' ? null : locationId;
+      
+      let query = supabaseAdmin
+        .from('seasonality_settings')
+        .select('*')
+        .eq('is_active', true);
+
+      // Location-specific first, then global fallback
+      if (actualLocationId === null) {
+        query = query.is('location_id', null);
+      } else {
+        query = query.or(`location_id.eq.${actualLocationId},location_id.is.null`);
+      }
+
+      const { data: seasons, error } = await query.order('display_order');
+
+      if (error) {
+        console.error('Error fetching seasonality settings:', error);
+        return 1.0; // Fallback
+      }
+
+      // Find matching season for this date
+      for (const season of seasons || []) {
+        if (this.isDateInSeason(date, season)) {
+          return parseFloat(season.multiplier) || 1.0;
+        }
+      }
+
+      return 1.0; // Default if no season matches
+    } catch (error) {
+      console.error('Error calculating seasonality factor:', error);
+      return 1.0; // Safe fallback
+    }
+  }
+
+  /**
+   * Check if a date falls within a seasonal range
+   * Handles year wrap-around and recurring seasons
+   */
+  isDateInSeason(checkDate, season) {
+    const checkMoment = dayjs(checkDate);
+    const startMoment = dayjs(season.start_date);
+    const endMoment = dayjs(season.end_date);
+
+    if (!season.year_recurring) {
+      // Non-recurring: exact date range match
+      return checkMoment.isSameOrAfter(startMoment, 'day') && checkMoment.isSameOrBefore(endMoment, 'day');
+    }
+
+    // Recurring: check if the date falls within the annual pattern
+    const checkMonth = checkMoment.month() + 1;
+    const checkDay = checkMoment.date();
+    const startMonth = startMoment.month() + 1;
+    const startDay = startMoment.date();
+    const endMonth = endMoment.month() + 1;
+    const endDay = endMoment.date();
+
+    const checkValue = checkMonth * 100 + checkDay;
+    const startValue = startMonth * 100 + startDay;
+    const endValue = endMonth * 100 + endDay;
+
+    if (startValue <= endValue) {
+      return checkValue >= startValue && checkValue <= endValue;
+    } else {
+      // Wrap-around range (e.g., Winter: Dec 1 - Feb 28)
+      return checkValue >= startValue || checkValue <= endValue;
+    }
+  }
+
+  /**
    * Helper function to pick value from bucket based on range
    */
   pickBucketValue(value, spec = {}) {
@@ -336,12 +411,11 @@ class PricingService {
       // Get pricing rules
       const rules = await this.getRules(roomTypeId);
 
-      // Get market factors for date range with proper location handling
+      // Get market factors for date range with proper location handling (excluding seasonality - now handled directly)
       let marketFactorsQuery = supabaseAdmin
         .from('market_factors')
         .select(`
           dt, 
-          seasonality, 
           demand, 
           comp_pressure_auto,
           manual_multiplier,
@@ -367,18 +441,6 @@ class PricingService {
         throw mfError;
       }
 
-      // Convert market factors to lookup objects with enhanced data
-      const factors = {
-        seasonality: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.seasonality) || 1])),
-        demand: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.demand) || 1])),
-        compPressure: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_pressure_auto) || 1])),
-        manualMultiplier: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.manual_multiplier) || 1])),
-        eventsWeight: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.events_weight) || 1])),
-        pickupSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.pickup_z) || 0])),
-        availabilitySignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.availability_z) || 0])),
-        compPriceSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_price_z) || 0]))
-      };
-
       // Get occupancy data using RPC
       const { data: occupancyRows, error: occError } = await supabaseAdmin
         .rpc('occupancy_by_date', {
@@ -390,6 +452,25 @@ class PricingService {
       if (occError) {
         throw occError;
       }
+
+      // Get seasonality factors directly from seasonality_settings for each date
+      const seasonalityFactors = {};
+      for (const occRow of occupancyRows || []) {
+        const date = occRow.dt;
+        seasonalityFactors[date] = await this.getSeasonalityFactor(date, locationId);
+      }
+
+      // Convert market factors to lookup objects with enhanced data (excluding seasonality)
+      const factors = {
+        seasonality: seasonalityFactors, // Now using direct seasonality_settings lookup
+        demand: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.demand) || 1])),
+        compPressure: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_pressure_auto) || 1])),
+        manualMultiplier: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.manual_multiplier) || 1])),
+        eventsWeight: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.events_weight) || 1])),
+        pickupSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.pickup_z) || 0])),
+        availabilitySignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.availability_z) || 0])),
+        compPriceSignal: Object.fromEntries((marketFactors || []).map(x => [x.dt, Number(x.comp_price_z) || 0]))
+      };
 
       // Prepare bulk inserts
       const toInsertPrices = [];

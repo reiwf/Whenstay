@@ -31,6 +31,7 @@ const MarketSettingsPage = () => {
   const [events, setEvents] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [tuning, setTuning] = useState({});
+  const [seasonality, setSeasonality] = useState([]);
 
   // Form states
   const [newCompetitor, setNewCompetitor] = useState({ label: '', property_type: 'hotel' });
@@ -48,6 +49,7 @@ const MarketSettingsPage = () => {
     { id: 'competitors', label: 'Competitors', icon: Users },
     { id: 'events', label: 'Events & Holidays', icon: Calendar },
     { id: 'tuning', label: 'Market Tuning', icon: Settings },
+    { id: 'seasonality', label: 'Seasonality', icon: TrendingUp },
     { id: 'overrides', label: 'Manual Overrides', icon: Target }
   ];
 
@@ -70,6 +72,9 @@ const MarketSettingsPage = () => {
           break;
         case 'tuning':
           await loadTuning();
+          break;
+        case 'seasonality':
+          await loadSeasonality();
           break;
         default:
           break;
@@ -200,6 +205,114 @@ const MarketSettingsPage = () => {
           text: 'Database tables not found. Please run the smart_market_demand_migration.sql file first.' 
         });
       }
+    }
+  };
+
+  const loadSeasonality = async () => {
+    try {
+      const response = await api.get('/market-demand/seasonality/null');
+      setSeasonality(response.data || []);
+    } catch (error) {
+      console.error('Error loading seasonality:', error);
+      // Don't set default values automatically - let the user manage their own seasonality settings
+      setSeasonality([]);
+      if (error.response?.status === 500) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Database tables not found. Please run the seasonality_settings_migration.sql file first.' 
+        });
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: 'Failed to load seasonality settings. Please check your connection and try again.' 
+        });
+      }
+    }
+  };
+
+  const handleSaveSeasonality = async () => {
+    setSaving(true);
+    try {
+      await api.put('/market-demand/seasonality/null', { settings: seasonality });
+      setMessage({ type: 'success', text: 'Seasonality settings saved successfully' });
+    } catch (error) {
+      console.error('Error saving seasonality:', error);
+      setMessage({ type: 'error', text: 'Failed to save seasonality settings' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetSeasonality = async () => {
+    setSaving(true);
+    try {
+      await api.post('/market-demand/seasonality/null/reset');
+      await loadSeasonality(); // Reload the default settings
+      setMessage({ type: 'success', text: 'Seasonality settings reset to defaults' });
+    } catch (error) {
+      console.error('Error resetting seasonality:', error);
+      setMessage({ type: 'error', text: 'Failed to reset seasonality settings' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addSeason = () => {
+    const currentYear = new Date().getFullYear();
+    setSeasonality([...seasonality, {
+      season_name: 'New Season',
+      start_date: `${currentYear}-01-01`,
+      end_date: `${currentYear}-03-31`,
+      multiplier: 1.0,
+      year_recurring: true
+    }]);
+  };
+
+  const updateSeason = (index, field, value) => {
+    const updated = [...seasonality];
+    updated[index] = { ...updated[index], [field]: value };
+    setSeasonality(updated);
+  };
+
+  const removeSeason = (index) => {
+    const updatedSeasons = seasonality.filter((_, i) => i !== index);
+    setSeasonality(updatedSeasons);
+    console.log('Removed season at index:', index, 'New length:', updatedSeasons.length);
+  };
+
+  const formatDateRange = (startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  };
+
+  const isDateInSeason = (checkDate, season) => {
+    if (!season.year_recurring) {
+      // Non-recurring: exact date range match
+      return checkDate >= new Date(season.start_date) && checkDate <= new Date(season.end_date);
+    }
+
+    // Recurring: check if the date falls within the annual pattern
+    const checkMonth = checkDate.getMonth() + 1;
+    const checkDay = checkDate.getDate();
+    const startDate = new Date(season.start_date);
+    const endDate = new Date(season.end_date);
+    const startMonth = startDate.getMonth() + 1;
+    const startDay = startDate.getDate();
+    const endMonth = endDate.getMonth() + 1;
+    const endDay = endDate.getDate();
+
+    // Create comparable date values (MMDD format)
+    const checkValue = checkMonth * 100 + checkDay;
+    const startValue = startMonth * 100 + startDay;
+    const endValue = endMonth * 100 + endDay;
+
+    if (startValue <= endValue) {
+      // Normal range (e.g., Spring: Mar 1 - May 31)
+      return checkValue >= startValue && checkValue <= endValue;
+    } else {
+      // Wrap-around range (e.g., Winter: Dec 1 - Feb 28)
+      return checkValue >= startValue || checkValue <= endValue;
     }
   };
 
@@ -879,6 +992,228 @@ const MarketSettingsPage = () => {
     </div>
   );
 
+  const getMonthName = (month) => {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[month - 1] || month;
+  };
+
+  const renderSeasonality = () => (
+    <div className="space-y-6">
+      {/* Header Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Seasonal Pricing Multipliers
+          </CardTitle>
+          <p className="text-sm text-gray-600">
+            Configure seasonal pricing multipliers with custom date ranges and adjustable factors
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4">
+            <Button onClick={addSeason} variant="outline">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Season
+            </Button>
+            <Button onClick={handleResetSeasonality} variant="outline" disabled={saving}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Reset to Defaults
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Season Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Season Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {seasonality.map((season, index) => (
+            <div key={index} className="p-4 border rounded-lg space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Season Name */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Season Name</label>
+                  <Input
+                    value={season.season_name}
+                    onChange={(e) => updateSeason(index, 'season_name', e.target.value)}
+                    placeholder="e.g., Summer Peak"
+                  />
+                </div>
+
+                {/* Start Date */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Start Date</label>
+                  <Input
+                    type="date"
+                    value={season.start_date}
+                    onChange={(e) => updateSeason(index, 'start_date', e.target.value)}
+                  />
+                </div>
+
+                {/* End Date */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">End Date</label>
+                  <Input
+                    type="date"
+                    value={season.end_date}
+                    onChange={(e) => updateSeason(index, 'end_date', e.target.value)}
+                  />
+                </div>
+
+                {/* Recurring Toggle */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Recurring</label>
+                  <div className="flex items-center space-x-2 mt-3">
+                    <input
+                      type="checkbox"
+                      checked={season.year_recurring}
+                      onChange={(e) => updateSeason(index, 'year_recurring', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-600">Annual</span>
+                  </div>
+                </div>
+
+                {/* Multiplier */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Multiplier 
+                    <span className="text-sm font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded ml-2">
+                      {season.multiplier.toFixed(3)}
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.001"
+                    value={season.multiplier}
+                    onChange={(e) => updateSeason(index, 'multiplier', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">0.5x - 2.0x pricing factor</p>
+                </div>
+              </div>
+
+              {/* Season Info and Actions */}
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="flex items-center gap-4">
+                  <Badge variant="outline">
+                    {formatDateRange(season.start_date, season.end_date)}
+                  </Badge>
+                  <span className="text-sm text-gray-600">
+                    {season.multiplier > 1 
+                      ? `+${((season.multiplier - 1) * 100).toFixed(1)}% price increase`
+                      : `${((1 - season.multiplier) * 100).toFixed(1)}% price decrease`
+                    }
+                  </span>
+                  {season.year_recurring && (
+                    <Badge variant="secondary" className="text-xs">Recurring</Badge>
+                  )}
+                </div>
+                <Button 
+                  onClick={() => removeSeason(index)}
+                  variant="destructive" 
+                  size="sm"
+                  disabled={seasonality.length <= 1}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Visual Timeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Seasonal Timeline Preview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Date-based season list */}
+            <div className="space-y-2">
+              {seasonality.map((season, index) => {
+                const currentSeason = seasonality.find(s => {
+                  const today = new Date();
+                  return isDateInSeason(today, s);
+                });
+                const isCurrentSeason = currentSeason?.season_name === season.season_name;
+
+                return (
+                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${
+                    isCurrentSeason ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  }`}>
+                    <div className="flex items-center gap-4">
+                      <div className="font-medium">{season.season_name}</div>
+                      <Badge variant="outline">
+                        {formatDateRange(season.start_date, season.end_date)}
+                      </Badge>
+                      {season.year_recurring && (
+                        <Badge variant="secondary" className="text-xs">Recurring</Badge>
+                      )}
+                      {isCurrentSeason && (
+                        <Badge className="text-xs bg-blue-600">Active Now</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-mono px-2 py-1 rounded ${
+                        season.multiplier > 1 
+                          ? 'bg-yellow-100 text-yellow-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {season.multiplier.toFixed(3)}x
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {season.multiplier > 1 
+                          ? `+${((season.multiplier - 1) * 100).toFixed(1)}%`
+                          : `${((1 - season.multiplier) * 100).toFixed(1)}%`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-6 text-sm border-t pt-4">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-yellow-100 rounded"></div>
+                <span>Price Increase (&gt;1.0x)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-blue-100 rounded"></div>
+                <span>Price Decrease (&lt;1.0x)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                <span>Currently Active</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Save Actions */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4 justify-end">
+            <Button onClick={handleSaveSeasonality} disabled={saving} className="px-8">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              {saving ? 'Saving Settings...' : 'Save Seasonality Settings'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   const renderOverrides = () => (
     <div className="space-y-6">
       <Card>
@@ -971,6 +1306,7 @@ const MarketSettingsPage = () => {
               {activeTab === 'competitors' && renderCompetitors()}
               {activeTab === 'events' && renderEvents()}
               {activeTab === 'tuning' && renderTuning()}
+              {activeTab === 'seasonality' && renderSeasonality()}
               {activeTab === 'overrides' && renderOverrides()}
             </>
           )}

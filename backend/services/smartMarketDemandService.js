@@ -64,18 +64,61 @@ class SmartMarketDemandService {
   }
 
   /**
-   * Calculate seasonality auto factor for a date
-   * Start with existing seed curve, apply monthly EMA smoothing
+   * Get seasonality settings for a location
    */
-  calculateSeasonalityAuto(date, previousMonthAvg = null) {
-    const month = dayjs(date).month() + 1; // 1-12
+  async getSeasonalitySettings(locationId = null) {
+    try {
+      // Handle string "null" conversion to actual null
+      const actualLocationId = locationId === 'null' ? null : locationId;
+      
+      let query = supabaseAdmin
+        .from('seasonality_settings')
+        .select('*')
+        .eq('is_active', true);
+
+      // Use .is() for null values, .eq() for actual UUIDs
+      if (actualLocationId === null) {
+        query = query.is('location_id', null);
+      } else {
+        query = query.or(`location_id.is.null,location_id.eq.${actualLocationId}`);
+      }
+
+      const { data, error } = await query.order('display_order');
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching seasonality settings:', error);
+      // Return defaults if no settings found or error
+      return [
+        { season_name: 'Winter', start_date: '2024-12-01', end_date: '2025-02-28', multiplier: 0.92, year_recurring: true },
+        { season_name: 'Spring', start_date: '2024-03-01', end_date: '2024-05-31', multiplier: 0.97, year_recurring: true },
+        { season_name: 'Summer', start_date: '2024-06-01', end_date: '2024-08-31', multiplier: 1.15, year_recurring: true },
+        { season_name: 'Fall', start_date: '2024-09-01', end_date: '2024-11-30', multiplier: 1.05, year_recurring: true }
+      ];
+    }
+  }
+
+  /**
+   * Calculate seasonality auto factor for a date using database settings
+   * Start with database-driven seasonal curve, apply monthly EMA smoothing
+   */
+  async calculateSeasonalityAuto(date, previousMonthAvg = null, locationId = null) {
+    // Get seasonal settings from database
+    const seasonalSettings = await this.getSeasonalitySettings(locationId);
     
-    // Existing seed curve (from your original migration)
-    let baseSeasonal;
-    if ([12, 1, 2].includes(month)) baseSeasonal = 0.92;      // Winter
-    else if ([3, 4, 5].includes(month)) baseSeasonal = 0.97;  // Spring  
-    else if ([6, 7, 8].includes(month)) baseSeasonal = 1.15;  // Summer
-    else baseSeasonal = 1.05;                                 // Fall
+    // Find matching season for this date
+    let baseSeasonal = 1.0; // Default if no season matches
+    
+    for (const season of seasonalSettings) {
+      if (this.isDateInSeason(date, season.start_date, season.end_date, season.year_recurring)) {
+        baseSeasonal = parseFloat(season.multiplier);
+        break;
+      }
+    }
 
     // Apply monthly EMA smoothing if we have previous data
     if (previousMonthAvg !== null && previousMonthAvg > 0) {
@@ -84,6 +127,82 @@ class SmartMarketDemandService {
     }
 
     return baseSeasonal;
+  }
+
+  /**
+   * Check if a date falls within a seasonal range (handles year wrap-around and recurring seasons)
+   */
+  isDateInSeason(checkDate, startDate, endDate, yearRecurring = true) {
+    const checkMoment = dayjs(checkDate);
+    const startMoment = dayjs(startDate);
+    const endMoment = dayjs(endDate);
+
+    if (!yearRecurring) {
+      // Non-recurring: exact date range match
+      return checkMoment.isSameOrAfter(startMoment, 'day') && checkMoment.isSameOrBefore(endMoment, 'day');
+    }
+
+    // Recurring: check if the date falls within the annual pattern
+    const checkMonth = checkMoment.month() + 1; // 1-12
+    const checkDay = checkMoment.date();
+    const startMonth = startMoment.month() + 1;
+    const startDay = startMoment.date();
+    const endMonth = endMoment.month() + 1;
+    const endDay = endMoment.date();
+
+    // Create comparable date values (MMDD format)
+    const checkValue = checkMonth * 100 + checkDay;
+    const startValue = startMonth * 100 + startDay;
+    const endValue = endMonth * 100 + endDay;
+
+    if (startValue <= endValue) {
+      // Normal range (e.g., Spring: Mar 1 - May 31)
+      return checkValue >= startValue && checkValue <= endValue;
+    } else {
+      // Wrap-around range (e.g., Winter: Dec 1 - Feb 28)
+      return checkValue >= startValue || checkValue <= endValue;
+    }
+  }
+
+  /**
+   * Update seasonality settings for a location
+   */
+  async updateSeasonalitySettings(locationId, settings) {
+    try {
+      const actualLocationId = locationId === 'null' ? null : locationId;
+      
+      // First, deactivate existing settings for this location
+      await supabaseAdmin
+        .from('seasonality_settings')
+        .update({ is_active: false })
+        .or(`location_id.is.null,location_id.eq.${actualLocationId}`);
+
+      // Insert new settings
+      const newSettings = settings.map((setting, index) => ({
+        location_id: actualLocationId,
+        season_name: setting.season_name,
+        start_date: setting.start_date,
+        end_date: setting.end_date,
+        multiplier: parseFloat(setting.multiplier),
+        year_recurring: setting.year_recurring !== undefined ? Boolean(setting.year_recurring) : true,
+        display_order: index + 1,
+        is_active: true
+      }));
+
+      const { data, error } = await supabaseAdmin
+        .from('seasonality_settings')
+        .insert(newSettings)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error updating seasonality settings:', error);
+      throw error;
+    }
   }
 
   /**
@@ -234,10 +353,10 @@ class SmartMarketDemandService {
       const eventsWeight = await this.calculateEventsWeight(stayDate, locationId);
 
       // Your formula:
-      // raw = w_pickup * pickup_proxy + w_avail * (-availability_proxy) + w_event * (events_weight - 1)
+      // raw = w_pickup * pickup_proxy + w_avail * (1 - availability_proxy) + w_event * (events_weight - 1)
       const raw = 
         tuning.w_pickup * pickupProxy +
-        tuning.w_avail * (-availabilityProxy) + // Lower avail = positive push
+        tuning.w_avail * (1 - availabilityProxy) + // Lower avail = higher (1-avail) = positive push
         tuning.w_event * (eventsWeight - 1);
 
       // demand_auto = clamp(exp(alpha * raw), demand_min, demand_max)
@@ -368,7 +487,7 @@ class SmartMarketDemandService {
 
       // Calculate seasonality auto
       const prevMonthData = currentFactors?.seasonality_auto; // Could enhance to get actual previous month avg
-      const seasonalityAuto = this.calculateSeasonalityAuto(stayDate, prevMonthData);
+      const seasonalityAuto = await this.calculateSeasonalityAuto(stayDate, prevMonthData, locationId);
 
       // Calculate demand auto
       const demandResult = await this.calculateDemandAuto(roomTypeId, stayDate, locationId);
@@ -471,7 +590,7 @@ class SmartMarketDemandService {
 
       const lockedDates = new Set((lockedFactors || []).map(f => f.dt));
 
-      // Compute factors in-memory (fast)
+      // Compute factors in-memory (fast) - seasonality now handled directly by pricing service
       const rows = [];
       for (const s of signals || []) {
         // Skip locked dates
@@ -480,17 +599,13 @@ class SmartMarketDemandService {
           continue;
         }
 
-        // Calculate seasonality auto (could be enhanced with monthly EMA later)
-        const seasonality_auto = this.calculateSeasonalityAuto(s.dt, null);
-        const myRef = basePrice * seasonality_auto;
-
         // Calculate proxies from the batch data
         const pickup_proxy = s.total_units ? (s.pickup_7d / s.total_units) : 0;
         const availability_proxy = s.total_units ? (1 - (s.occupied_units / s.total_units)) : 1;
 
         // Apply the demand formula
         const raw = tuning.w_pickup * pickup_proxy
-                  + tuning.w_avail * (-availability_proxy)
+                  + tuning.w_avail * (1 - availability_proxy)
                   + tuning.w_event * ((s.events_weight ?? 1) - 1);
 
         const demand_auto = this.clamp(
@@ -500,10 +615,11 @@ class SmartMarketDemandService {
         );
 
         // Calculate competitor pressure (if price data available)
+        // Note: Using basePrice directly since seasonality is now handled in pricing service
         let comp_price_z = 0;
         let comp_pressure_auto = 1.0;
-        if (s.comp_price_median && myRef > 0) {
-          const gap = (s.comp_price_median / myRef) - 1;
+        if (s.comp_price_median && basePrice > 0) {
+          const gap = (s.comp_price_median / basePrice) - 1;
           comp_price_z = gap;
           comp_pressure_auto = this.clamp(
             Math.exp(tuning.beta * gap), 
@@ -523,8 +639,6 @@ class SmartMarketDemandService {
         rows.push({
           location_id: locationId,
           dt: s.dt,
-          seasonality_auto: +seasonality_auto.toFixed(3),
-          seasonality: +seasonality_auto.toFixed(3),
           demand_auto: +demand_auto.toFixed(3),
           demand: +demand_effective.toFixed(3),
           comp_pressure_auto: +comp_pressure_auto.toFixed(3),
@@ -600,10 +714,8 @@ class SmartMarketDemandService {
 
       return {
         date,
-        effective_seasonality: data.seasonality,
         effective_demand: data.demand,
         breakdown: {
-          seasonality_auto: data.seasonality_auto,
           demand_auto: data.demand_auto,
           comp_pressure_auto: data.comp_pressure_auto,
           manual_multiplier: data.manual_multiplier,

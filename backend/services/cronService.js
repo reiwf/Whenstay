@@ -370,7 +370,7 @@ class CronService {
 
       // Calculate smart factors for each room type
       const fromDate = new Date().toISOString().split('T')[0]; // Today
-      const toDate = new Date(Date.now() + (90 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]; // Next 90 days
+      const toDate = new Date(Date.now() + (180 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]; // Next 180 days
       
       console.log(`📊 Processing ${roomTypes.length} room types from ${fromDate} to ${toDate}`);
 
@@ -451,9 +451,9 @@ class CronService {
   // Ensure basic market factors exist as fallback (legacy compatibility)
   async ensureBasicMarketFactors() {
     try {
-      // Generate basic market factors for the next 365 days where they don't exist
+      // Generate basic market factors for the next 180 days where they don't exist
       const fromDate = new Date();
-      const toDate = new Date(fromDate.getTime() + (365 * 24 * 60 * 60 * 1000));
+      const toDate = new Date(fromDate.getTime() + (180 * 24 * 60 * 60 * 1000));
       
       const factorsToInsert = [];
       
