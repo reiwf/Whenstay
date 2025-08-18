@@ -10,7 +10,8 @@ import {
   Settings,
   MessageCircle,
   X,
-  DollarSign
+  DollarSign,
+  Calendar
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -40,6 +41,7 @@ const Sidebar = ({
       items.push(
         { id: 'dashboard', label: 'Dashboard', icon: Home },
         { id: 'communication', label: 'Communication', icon: MessageCircle },        
+        { id: 'calendar', label: 'Calendar', icon: Calendar },
         { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
         { id: 'properties', label: 'Properties', icon: Building },
@@ -92,6 +94,9 @@ const Sidebar = ({
     } else if (itemId === 'market-settings') {
       // Navigate to the dedicated market settings page
       navigate('/market-settings')
+    } else if (itemId === 'calendar') {
+      // Navigate to the dedicated calendar page
+      navigate('/calendar')
     } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {

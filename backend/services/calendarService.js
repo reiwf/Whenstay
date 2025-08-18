@@ -1,0 +1,584 @@
+const { supabaseAdmin } = require('../config/supabase');
+const { getTokyoToday } = require('./utils/dateUtils');
+
+/**
+ * Calendar Service - Business logic for PMS Calendar Timeline
+ * Handles timeline data, drag/drop operations, gap-fill allocation, and conflict resolution
+ */
+class CalendarService {
+  
+  /**
+   * Get available properties for the property selector
+   */
+  async getAvailableProperties() {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('properties')
+        .select('id, name, address, property_type')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching properties:', error);
+        throw new Error('Failed to fetch properties');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching properties:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get room hierarchy for a specific property
+   * Returns room types with their units grouped
+   */
+  async getPropertyRoomHierarchy(propertyId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('get_property_room_hierarchy', { 
+          p_property_id: propertyId 
+        });
+
+      if (error) {
+        console.error('Error fetching room hierarchy:', error);
+        throw new Error('Failed to fetch room hierarchy');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching room hierarchy:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get timeline data for calendar visualization
+   * Returns reservations and segments for the specified property and date range
+   */
+  async getTimelineData(propertyId, startDate = null, endDate = null) {
+    try {
+      // Default to yesterday + 29 days (31 days total) if no dates provided
+      const defaultStart = startDate || this.getYesterday();
+      const defaultEnd = endDate || this.getDatePlusDays(defaultStart, 30); // +30 from start to get 31 days total
+
+      const { data, error } = await supabaseAdmin
+        .rpc('get_calendar_timeline', {
+          p_property_id: propertyId,
+          p_start_date: defaultStart,
+          p_end_date: defaultEnd
+        });
+
+      if (error) {
+        console.error('Error fetching timeline data:', error);
+        throw new Error('Failed to fetch timeline data');
+      }
+
+      // Group data for easier frontend consumption
+      const groupedData = this.groupTimelineData(data || []);
+      
+      return {
+        dateRange: {
+          startDate: defaultStart,
+          endDate: defaultEnd,
+          totalDays: this.daysBetween(defaultStart, defaultEnd)
+        },
+        roomHierarchy: groupedData.roomTypes,
+        reservations: groupedData.reservations,
+        segments: groupedData.segments
+      };
+    } catch (error) {
+      console.error('Database error fetching timeline data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Group timeline data by room types and units
+   */
+  groupTimelineData(timelineData) {
+    const roomTypesMap = new Map();
+    const reservations = [];
+    const segments = [];
+
+    timelineData.forEach(item => {
+      // Build room hierarchy
+      if (!roomTypesMap.has(item.room_type_id)) {
+        roomTypesMap.set(item.room_type_id, {
+          id: item.room_type_id,
+          name: item.room_type_name,
+          order: item.room_type_order,
+          units: new Map()
+        });
+      }
+
+      const roomType = roomTypesMap.get(item.room_type_id);
+      if (!roomType.units.has(item.room_unit_id)) {
+        roomType.units.set(item.room_unit_id, {
+          id: item.room_unit_id,
+          number: item.room_unit_number,
+          roomTypeId: item.room_type_id
+        });
+      }
+
+      // Collect reservations and segments
+      const reservationData = {
+        id: item.reservation_id,
+        segmentId: item.segment_id,
+        roomUnitId: item.room_unit_id,
+        roomTypeId: item.room_type_id,
+        bookingName: item.booking_name,
+        startDate: item.start_date,
+        endDate: item.end_date,
+        status: item.status,
+        color: item.color,
+        label: item.label,
+        isSegment: item.is_segment
+      };
+
+      if (item.is_segment) {
+        segments.push(reservationData);
+      } else {
+        reservations.push(reservationData);
+      }
+    });
+
+    // Convert maps to arrays and sort
+    const roomTypes = Array.from(roomTypesMap.values())
+      .map(roomType => ({
+        ...roomType,
+        units: Array.from(roomType.units.values())
+          .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      roomTypes,
+      reservations,
+      segments
+    };
+  }
+
+  /**
+   * Move a reservation to different room/dates
+   */
+  async moveReservation(reservationId, newRoomUnitId = null, newStartDate = null, newEndDate = null) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('move_reservation', {
+          p_reservation_id: reservationId,
+          p_new_room_unit_id: newRoomUnitId,
+          p_new_start_date: newStartDate,
+          p_new_end_date: newEndDate
+        });
+
+      if (error) {
+        console.error('Error moving reservation:', error);
+        throw new Error(`Failed to move reservation: ${error.message}`);
+      }
+
+      const result = data?.[0];
+      if (!result?.success) {
+        throw new Error(result?.error_message || 'Move operation failed');
+      }
+
+      return {
+        success: true,
+        reservationId
+      };
+    } catch (error) {
+      console.error('Database error moving reservation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Split a reservation into segments for mid-stay room changes
+   */
+  async splitReservation(reservationId, splitDate, newRoomUnitId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('split_reservation', {
+          p_reservation_id: reservationId,
+          p_split_date: splitDate,
+          p_new_room_unit_id: newRoomUnitId
+        });
+
+      if (error) {
+        console.error('Error splitting reservation:', error);
+        throw new Error(`Failed to split reservation: ${error.message}`);
+      }
+
+      const result = data?.[0];
+      if (!result?.success) {
+        throw new Error(result?.error_message || 'Split operation failed');
+      }
+
+      return {
+        success: true,
+        segmentIds: result.segment_ids,
+        reservationId
+      };
+    } catch (error) {
+      console.error('Database error splitting reservation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Intelligent gap-fill allocation with conflict resolution
+   */
+  async allocateWithGapFill(reservationData) {
+    try {
+      const {
+        guestName,
+        checkInDate,
+        checkOutDate,
+        roomUnitIds,
+        allowSwaps = true,
+        label = null
+      } = reservationData;
+
+      // First create the reservation record
+      const reservationInsertData = {
+        beds24_booking_id: `MANUAL-${Date.now()}`,
+        booking_name: guestName,
+        booking_email: reservationData.guestEmail || 'noemail@example.com',
+        check_in_date: checkInDate,
+        check_out_date: checkOutDate,
+        num_guests: reservationData.numGuests || 1,
+        status: 'confirmed'
+      };
+
+      const { data: reservation, error: reservationError } = await supabaseAdmin
+        .from('reservations')
+        .insert(reservationInsertData)
+        .select()
+        .single();
+
+      if (reservationError) {
+        throw new Error(`Failed to create reservation: ${reservationError.message}`);
+      }
+
+      // Now try to allocate with gap-fill
+      const { data: allocationResult, error: allocationError } = await supabaseAdmin
+        .rpc('try_allocate_with_swaps', {
+          p_reservation_id: reservation.id,
+          p_start_date: checkInDate,
+          p_end_date: checkOutDate,
+          p_room_unit_ids: roomUnitIds,
+          p_allow_swaps: allowSwaps,
+          p_label: label || guestName
+        });
+
+      if (allocationError) {
+        // Clean up the reservation if allocation failed
+        await supabaseAdmin
+          .from('reservations')
+          .delete()
+          .eq('id', reservation.id);
+        
+        throw new Error(`Allocation failed: ${allocationError.message}`);
+      }
+
+      const result = allocationResult?.[0];
+      if (!result?.success) {
+        // Clean up the reservation if allocation failed
+        await supabaseAdmin
+          .from('reservations')
+          .delete()
+          .eq('id', reservation.id);
+
+        return {
+          success: false,
+          error: result?.error_message || 'Allocation failed',
+          reservationId: null,
+          segments: [],
+          swaps: []
+        };
+      }
+
+      // Create reservation segments from the allocation plan
+      const segments = result.segments || [];
+      const segmentInserts = segments.map(segment => ({
+        reservation_id: reservation.id,
+        room_unit_id: segment.room_unit_id,
+        start_date: segment.start_date,
+        end_date: segment.end_date,
+        segment_order: segment.segment_order,
+        label: segment.label,
+        color: '#3b82f6'
+      }));
+
+      if (segmentInserts.length > 0) {
+        const { error: segmentError } = await supabaseAdmin
+          .from('reservation_segments')
+          .insert(segmentInserts);
+
+        if (segmentError) {
+          // Clean up reservation if segment creation failed
+          await supabaseAdmin
+            .from('reservations')
+            .delete()
+            .eq('id', reservation.id);
+          
+          throw new Error(`Failed to create segments: ${segmentError.message}`);
+        }
+      }
+
+      return {
+        success: true,
+        reservationId: reservation.id,
+        segments: segments,
+        swaps: result.swapped_reservations || [],
+        message: `Successfully allocated ${guestName} with ${segments.length} segment(s)`
+      };
+    } catch (error) {
+      console.error('Database error in gap-fill allocation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Apply room swaps (used after gap-fill allocation suggests swaps)
+   */
+  async applyRoomSwaps(swaps) {
+    try {
+      const swapResults = [];
+
+      for (const swap of swaps) {
+        try {
+          const moveResult = await this.moveReservation(
+            swap.reservation_id,
+            swap.to_room,
+            null, // keep same dates
+            null
+          );
+          
+          swapResults.push({
+            reservationId: swap.reservation_id,
+            success: true,
+            fromRoom: swap.from_room,
+            toRoom: swap.to_room
+          });
+        } catch (error) {
+          swapResults.push({
+            reservationId: swap.reservation_id,
+            success: false,
+            error: error.message,
+            fromRoom: swap.from_room,
+            toRoom: swap.to_room
+          });
+        }
+      }
+
+      return swapResults;
+    } catch (error) {
+      console.error('Error applying room swaps:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check room availability for a specific date range
+   */
+  async checkRoomAvailability(roomUnitId, startDate, endDate, excludeReservationId = null) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .rpc('is_room_available', {
+          p_room_unit_id: roomUnitId,
+          p_start_date: startDate,
+          p_end_date: endDate,
+          p_exclude_reservation_id: excludeReservationId
+        });
+
+      if (error) {
+        console.error('Error checking room availability:', error);
+        throw new Error('Failed to check room availability');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error checking room availability:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a reservation segment
+   */
+  async deleteReservationSegment(segmentId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservation_segments')
+        .delete()
+        .eq('id', segmentId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error deleting reservation segment:', error);
+        throw new Error('Failed to delete reservation segment');
+      }
+
+      return {
+        success: true,
+        deletedSegment: data
+      };
+    } catch (error) {
+      console.error('Database error deleting reservation segment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get conflicts for a specific date range and rooms
+   * Used for drag/drop validation
+   */
+  async getConflicts(roomUnitIds, startDate, endDate, excludeReservationId = null) {
+    try {
+      const conflicts = [];
+
+      for (const roomUnitId of roomUnitIds) {
+        const isAvailable = await this.checkRoomAvailability(
+          roomUnitId, 
+          startDate, 
+          endDate, 
+          excludeReservationId
+        );
+
+        if (!isAvailable) {
+          // Get details of conflicting reservations
+          const { data: conflictingReservations, error } = await supabaseAdmin
+            .from('reservations')
+            .select(`
+              id, booking_name, check_in_date, check_out_date, status,
+              room_units!inner(id, unit_number)
+            `)
+            .eq('room_units.id', roomUnitId)
+            .not('status', 'in', '(cancelled,no_show)')
+            .or(`and(check_in_date.lte.${endDate},check_out_date.gt.${startDate})`)
+            .neq('id', excludeReservationId || '00000000-0000-0000-0000-000000000000');
+
+          if (!error && conflictingReservations?.length > 0) {
+            conflicts.push({
+              roomUnitId,
+              roomUnitNumber: conflictingReservations[0].room_units.unit_number,
+              conflictingReservations
+            });
+          }
+        }
+      }
+
+      return conflicts;
+    } catch (error) {
+      console.error('Database error getting conflicts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate date range array for calendar header
+   */
+  generateDateRange(startDate, endDate) {
+    const dates = [];
+    let currentDate = new Date(startDate);
+    const end = new Date(endDate);
+
+    while (currentDate < end) {
+      dates.push(new Date(currentDate).toISOString().split('T')[0]);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  // ========== UTILITY METHODS ==========
+
+  /**
+   * Get yesterday's date
+   */
+  getYesterday() {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  }
+
+  /**
+   * Add days to a date
+   */
+  getDatePlusDays(dateString, days) {
+    const date = new Date(dateString);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0];
+  }
+
+  /**
+   * Calculate days between two dates
+   */
+  daysBetween(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const timeDiff = end.getTime() - start.getTime();
+    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+  }
+
+  /**
+   * Format date for display
+   */
+  formatDate(dateString, format = 'short') {
+    const date = new Date(dateString);
+    
+    if (format === 'short') {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    } else if (format === 'long') {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+    
+    return dateString;
+  }
+
+  /**
+   * Validate date range
+   */
+  validateDateRange(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (start >= end) {
+      throw new Error('Start date must be before end date');
+    }
+    
+    const daysDiff = this.daysBetween(startDate, endDate);
+    if (daysDiff > 365) {
+      throw new Error('Date range cannot exceed 365 days');
+    }
+    
+    return true;
+  }
+
+  /**
+   * Get default calendar date range (yesterday + 29 days)
+   */
+  getDefaultDateRange() {
+    const startDate = this.getYesterday();
+    const endDate = this.getDatePlusDays(startDate, 30); // +30 to get 31 total days
+    
+    return {
+      startDate,
+      endDate,
+      totalDays: 31,
+      dates: this.generateDateRange(startDate, endDate)
+    };
+  }
+}
+
+module.exports = new CalendarService();

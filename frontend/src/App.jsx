@@ -13,6 +13,7 @@ import GuestApp from './pages/GuestApp'
 import CommunicationPage from './pages/CommunicationPage'
 import PricingPage from './pages/PricingPage'
 import MarketSettingsPage from './pages/MarketSettingsPage'
+import CalendarPage from './pages/CalendarPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -82,6 +83,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'owner']}>
                 <CommunicationPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/calendar" 
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <CalendarPage />
               </ProtectedRoute>
             } 
           />
