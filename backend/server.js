@@ -107,23 +107,41 @@ app.use('/api/market-demand', marketDemandRoutes);
 app.use('/api/calendar', calendarRoutes);
 
 // Serve static files from frontend build
-const frontendPath = path.resolve(__dirname, 'frontend', 'dist');
+// In development: frontend is at ../frontend/dist
+// In production (Docker): frontend is at ./frontend/dist
+const frontendPath = process.env.NODE_ENV === 'production' 
+  ? path.resolve(__dirname, 'frontend', 'dist')
+  : path.resolve(__dirname, '../frontend', 'dist');
 console.log('Serving SPA from:', frontendPath);
 
 app.use(express.static(frontendPath, {
   maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
   etag: true,
-  lastModified: true
+  lastModified: true,
+  // Set correct MIME types
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+  }
 }));
 
-// SPA fallback - serve index.html for all non-API routes
-app.get('*', (req, res) => {
+// SPA fallback - serve index.html for all non-API routes that don't match static assets
+app.get('*', (req, res, next) => {
+  // Don't serve index.html for asset requests
+  if (req.path.startsWith('/assets/') || 
+      req.path.endsWith('.js') || 
+      req.path.endsWith('.css') || 
+      req.path.endsWith('.png') || 
+      req.path.endsWith('.jpg') || 
+      req.path.endsWith('.ico') || 
+      req.path.endsWith('.svg')) {
+    return res.status(404).json({ error: 'Asset not found' });
+  }
+  
   res.sendFile(path.join(frontendPath, 'index.html'));
-});
-
-// API 404 handler (for /api routes only)
-app.get(/^\/(?!api)(.*)/, (req, res) => {
-  res.sendFile('index.html', { root: frontendPath });
 });
 
 app.use('/api/*', (_req, res) => res.status(404).json({ error: 'API route not found' }));

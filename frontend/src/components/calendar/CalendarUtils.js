@@ -262,7 +262,7 @@ export class StatusUtils {
       'checked_out': '#6b7280',  // gray
       'cancelled': '#ef4444',    // red
       'pending': '#f59e0b',      // yellow
-      'new': '#8b5cf6',          // purple
+      'new': '#707cbfff',          // purple
       'no_show': '#f97316'       // orange
     };
     
@@ -299,15 +299,86 @@ export class StatusUtils {
  */
 export class GridUtils {
   /**
-   * Standard grid constants
+   * Responsive grid constants - much more compact design
    */
   static CONSTANTS = {
-    CELL_WIDTH: 96,      // pixels per day
-    ROW_HEIGHT: 48,      // pixels per room row
-    HEADER_HEIGHT: 48,   // pixels for date header
-    SIDEBAR_WIDTH: 200,  // pixels for room sidebar
-    MIN_DRAG_DISTANCE: 5 // minimum pixels to start drag
+    // Responsive cell widths (reduced significantly for compactness)
+    CELL_WIDTH: {
+      mobile: 60,    // Very compact for mobile
+      tablet: 72,    // Slightly larger for tablet
+      desktop: 84    // Still compact but readable on desktop
+    },
+    
+    // Responsive row heights (much shorter)
+    ROW_HEIGHT: {
+      mobile: 32,    // Compact rows for mobile
+      tablet: 36,    // Medium for tablet
+      desktop: 40    // Larger for desktop but still compact
+    },
+    
+    // Responsive header heights
+    HEADER_HEIGHT: {
+      mobile: 40,    // Compact header
+      tablet: 44,    // Medium header
+      desktop: 48    // Standard header
+    },
+    
+    // Responsive sidebar widths
+    SIDEBAR_WIDTH: {
+      mobile: 140,   // Very narrow for mobile
+      tablet: 160,   // Medium for tablet
+      desktop: 180   // Wider but still compact
+    },
+    
+    MIN_DRAG_DISTANCE: 5, // minimum pixels to start drag
+    
+    // Breakpoints for responsive behavior
+    BREAKPOINTS: {
+      mobile: 768,   // <= 768px
+      tablet: 1024,  // <= 1024px
+      desktop: 1025  // > 1024px
+    }
   };
+
+  /**
+   * Get current responsive values based on window width
+   */
+  static getCurrentConstants(windowWidth = window?.innerWidth || 1200) {
+    let breakpoint = 'desktop';
+    if (windowWidth <= this.CONSTANTS.BREAKPOINTS.mobile) {
+      breakpoint = 'mobile';
+    } else if (windowWidth <= this.CONSTANTS.BREAKPOINTS.tablet) {
+      breakpoint = 'tablet';
+    }
+
+    return {
+      CELL_WIDTH: this.CONSTANTS.CELL_WIDTH[breakpoint],
+      ROW_HEIGHT: this.CONSTANTS.ROW_HEIGHT[breakpoint],
+      HEADER_HEIGHT: this.CONSTANTS.HEADER_HEIGHT[breakpoint],
+      SIDEBAR_WIDTH: this.CONSTANTS.SIDEBAR_WIDTH[breakpoint],
+      MIN_DRAG_DISTANCE: this.CONSTANTS.MIN_DRAG_DISTANCE,
+      BREAKPOINT: breakpoint
+    };
+  }
+
+  /**
+   * Legacy support - returns desktop values by default
+   */
+  static get CELL_WIDTH() {
+    return this.getCurrentConstants().CELL_WIDTH;
+  }
+  
+  static get ROW_HEIGHT() {
+    return this.getCurrentConstants().ROW_HEIGHT;
+  }
+  
+  static get HEADER_HEIGHT() {
+    return this.getCurrentConstants().HEADER_HEIGHT;
+  }
+  
+  static get SIDEBAR_WIDTH() {
+    return this.getCurrentConstants().SIDEBAR_WIDTH;
+  }
 
   /**
    * Calculate grid dimensions
@@ -403,10 +474,10 @@ export class ResizeUtils {
   }
 
   /**
-   * Validate resize operation constraints
+   * Validate resize operation constraints (updated to allow bidirectional resizing)
    */
   static validateResize(originalReservation, newStartDate, newEndDate, resizeType) {
-    // Check minimum duration
+    // Check minimum duration (only constraint)
     if (!this.validateMinimumDuration(newStartDate, newEndDate)) {
       return {
         isValid: false,
@@ -414,37 +485,25 @@ export class ResizeUtils {
       };
     }
 
-    // Check edge-only expansion constraints
+    // Validate that only the correct edge is being modified
     if (resizeType === 'resize-left') {
-      // Left edge: can only move earlier (extend check-in backward) or stay same
-      if (newStartDate > originalReservation.startDate) {
-        return {
-          isValid: false,
-          reason: 'Check-in date can only be moved earlier or stay the same'
-        };
-      }
-      // End date must remain the same for left resize
+      // Left resize: only start date should change, end date must remain the same
       if (newEndDate !== originalReservation.endDate) {
         return {
           isValid: false,
           reason: 'Check-out date must remain unchanged when resizing check-in'
         };
       }
+      // Allow moving start date in BOTH directions (earlier or later)
     } else if (resizeType === 'resize-right') {
-      // Right edge: can only move later (extend check-out forward) or stay same
-      if (newEndDate < originalReservation.endDate) {
-        return {
-          isValid: false,
-          reason: 'Check-out date can only be moved later or stay the same'
-        };
-      }
-      // Start date must remain the same for right resize
+      // Right resize: only end date should change, start date must remain the same
       if (newStartDate !== originalReservation.startDate) {
         return {
           isValid: false,
           reason: 'Check-in date must remain unchanged when resizing check-out'
         };
       }
+      // Allow moving end date in BOTH directions (later or earlier)
     }
 
     return {
@@ -454,7 +513,7 @@ export class ResizeUtils {
   }
 
   /**
-   * Calculate valid resize bounds
+   * Calculate valid resize bounds (updated to allow bidirectional resizing)
    */
   static getValidResizeBounds(originalReservation, resizeType, existingReservations = []) {
     const bounds = {
@@ -464,39 +523,43 @@ export class ResizeUtils {
     };
 
     if (resizeType === 'resize-left') {
-      // For left resize (check-in date), find earliest possible date
-      bounds.maxDate = originalReservation.startDate; // Can't move forward from original
+      // For left resize (check-in date), allow movement in BOTH directions
       
-      // Find conflicting reservations that would block backward extension
-      const conflicts = existingReservations.filter(res => 
+      // Find earliest possible date (blocked by reservations that end before original start)
+      const earlierConflicts = existingReservations.filter(res => 
         res.id !== originalReservation.id && 
         res.roomUnitId === originalReservation.roomUnitId &&
         res.endDate <= originalReservation.startDate
       );
       
-      if (conflicts.length > 0) {
-        // Find the latest end date among conflicts - that's our minimum bound
-        const latestConflictEnd = conflicts.reduce((latest, res) => 
-          res.endDate > latest ? res.endDate : latest, conflicts[0].endDate
+      if (earlierConflicts.length > 0) {
+        const latestConflictEnd = earlierConflicts.reduce((latest, res) => 
+          res.endDate > latest ? res.endDate : latest, earlierConflicts[0].endDate
         );
         bounds.minDate = latestConflictEnd;
       }
       
-    } else if (resizeType === 'resize-right') {
-      // For right resize (check-out date), find latest possible date
-      bounds.minDate = originalReservation.endDate; // Can't move backward from original
+      // Find latest possible date (constrained by original end date to maintain min duration)
+      // Allow moving start date up to 1 day before end date (minimum 1 night)
+      bounds.maxDate = DateUtils.addDays(originalReservation.endDate, -1);
       
-      // Find conflicting reservations that would block forward extension
-      const conflicts = existingReservations.filter(res => 
+    } else if (resizeType === 'resize-right') {
+      // For right resize (check-out date), allow movement in BOTH directions
+      
+      // Find earliest possible date (constrained by original start date to maintain min duration)
+      // Allow moving end date to 1 day after start date (minimum 1 night)
+      bounds.minDate = DateUtils.addDays(originalReservation.startDate, 1);
+      
+      // Find latest possible date (blocked by reservations that start after original end)
+      const laterConflicts = existingReservations.filter(res => 
         res.id !== originalReservation.id && 
         res.roomUnitId === originalReservation.roomUnitId &&
         res.startDate >= originalReservation.endDate
       );
       
-      if (conflicts.length > 0) {
-        // Find the earliest start date among conflicts - that's our maximum bound
-        const earliestConflictStart = conflicts.reduce((earliest, res) => 
-          res.startDate < earliest ? res.startDate : earliest, conflicts[0].startDate
+      if (laterConflicts.length > 0) {
+        const earliestConflictStart = laterConflicts.reduce((earliest, res) => 
+          res.startDate < earliest ? res.startDate : earliest, laterConflicts[0].startDate
         );
         bounds.maxDate = earliestConflictStart;
       }

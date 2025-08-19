@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
   Calendar,
-  RotateCcw 
+  RotateCcw,
+  Move,
+  Scaling
 } from 'lucide-react';
-import { DateUtils } from './CalendarUtils';
+import { DateUtils, GridUtils } from './CalendarUtils';
+import { Switch } from '../ui/switch';
 
 /**
  * CalendarHeader - Date navigation and controls for calendar timeline
@@ -18,8 +21,24 @@ export default function CalendarHeader({
   onRefresh,
   loading = false,
   selectedPropertyId = null,
+  isResizeMode = false,
+  onModeToggle,
   className = ""
 }) {
+  const [gridConstants, setGridConstants] = useState(GridUtils.getCurrentConstants());
+
+  // Handle window resize for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setGridConstants(GridUtils.getCurrentConstants(newWidth));
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Set initial values
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   /**
    * Navigate to previous period (shift by 7 days)
@@ -115,7 +134,36 @@ export default function CalendarHeader({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-4">
+          {/* Mode Toggle Switch */}
+          {onModeToggle && (
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 text-sm text-gray-700">
+                <Move className="w-4 h-4" />
+                <span className="font-medium">Move</span>
+              </div>
+              
+              <Switch
+                checked={isResizeMode}
+                onCheckedChange={onModeToggle}
+                disabled={loading}
+                className="data-[state=checked]:bg-blue-600"
+                aria-label="Toggle between move and resize mode"
+              />
+              
+              <div className="flex items-center space-x-2 text-sm text-gray-700">
+                <Scaling className="w-4 h-4" />
+                <span className="font-medium">Resize</span>
+              </div>
+            </div>
+          )}
+
+          {/* Separator */}
+          {onModeToggle && (
+            <div className="w-px h-6 bg-gray-300" />
+          )}
+
+          {/* Refresh Button */}
           <button
             type="button"
             onClick={handleRefresh}
@@ -132,18 +180,24 @@ export default function CalendarHeader({
         </div>
       </div>
 
-      {/* Date Headers Row */}
+      {/* Date Headers Row - Responsive with matching grid constants */}
       <div className="flex bg-gray-50 border-t border-gray-200">
-        {/* Sidebar spacer */}
-        <div className="w-48 flex-shrink-0 border-r border-gray-200 bg-gray-50">
-          <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {/* Sidebar spacer - matches TimelineGrid sidebar width */}
+        <div 
+          className="flex-shrink-0 border-r border-gray-200 bg-gradient-to-r from-gray-100 to-gray-50"
+          style={{ width: `${gridConstants.SIDEBAR_WIDTH}px` }}
+        >
+          <div className="px-2 md:px-3 lg:px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
             Rooms
           </div>
         </div>
 
-        {/* Date Columns */}
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex" style={{ minWidth: `${dates.length * 96}px` }}>
+        {/* Date Columns - Fixed width matching TimelineGrid cells (no independent scroll) */}
+        <div className="flex-1">
+          <div 
+            className="flex" 
+            style={{ width: `${dates.length * gridConstants.CELL_WIDTH}px` }}
+          >
             {dates.map((date, index) => {
               const isToday = DateUtils.isToday(date);
               const isPast = DateUtils.isPast(date);
@@ -153,17 +207,31 @@ export default function CalendarHeader({
                 <div
                   key={date}
                   className={`
-                    w-24 flex-shrink-0 border-r border-gray-200 px-2 py-2 text-center
-                    ${isToday ? 'bg-blue-100 border-blue-300' : 'bg-gray-50'}
+                    flex-shrink-0 border-r border-gray-200 text-center transition-colors duration-150
+                    ${isToday ? 'bg-blue-100/60 border-blue-300' : 'bg-gray-50'}
                     ${isPast ? 'opacity-60' : ''}
-                    ${isWeekend ? 'bg-gray-100' : ''}
+                    ${isWeekend && !isToday ? 'bg-gray-100' : ''}
                   `}
-                  style={{ width: '96px' }}
+                  style={{ 
+                    width: `${gridConstants.CELL_WIDTH}px`,
+                    padding: gridConstants.BREAKPOINT === 'mobile' ? '6px 4px' : '8px 6px'
+                  }}
                 >
-                  <div className={`text-xs font-medium ${isToday ? 'text-blue-700' : 'text-gray-600'}`}>
-                    {DateUtils.formatDate(date, 'weekday')}
+                  <div className={`
+                    font-medium transition-colors duration-150
+                    ${isToday ? 'text-blue-700' : 'text-gray-600'}
+                    ${gridConstants.BREAKPOINT === 'mobile' ? 'text-xs' : 'text-xs'}
+                  `}>
+                    {gridConstants.BREAKPOINT === 'mobile' 
+                      ? DateUtils.formatDate(date, 'weekday').substring(0, 2) // Abbreviated for mobile
+                      : DateUtils.formatDate(date, 'weekday')
+                    }
                   </div>
-                  <div className={`text-sm font-semibold ${isToday ? 'text-blue-900' : 'text-gray-900'}`}>
+                  <div className={`
+                    font-semibold transition-colors duration-150
+                    ${isToday ? 'text-blue-900' : 'text-gray-900'}
+                    ${gridConstants.BREAKPOINT === 'mobile' ? 'text-xs' : 'text-sm'}
+                  `}>
                     {DateUtils.formatDate(date, 'short')}
                   </div>
                   {isToday && (

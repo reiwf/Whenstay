@@ -24,6 +24,7 @@ export default function CalendarTimeline({
   // UI state
   const [showGapFillModal, setShowGapFillModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isResizeMode, setIsResizeMode] = useState(false); // Move mode state
 
   // Date range state
   const [dateRange, setDateRange] = useState(() => DateUtils.getDefaultDateRange());
@@ -105,6 +106,13 @@ export default function CalendarTimeline({
    */
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
+  };
+
+  /**
+   * Toggle between move and resize modes
+   */
+  const handleModeToggle = () => {
+    setIsResizeMode(!isResizeMode);
   };
 
   /**
@@ -273,15 +281,6 @@ export default function CalendarTimeline({
 
   return (
     <div className={`bg-white rounded-lg shadow-lg overflow-hidden ${className}`}>
-      {/* Calendar Header */}
-      <CalendarHeader
-        dates={dateRange.dates}
-        startDate={dateRange.startDate}
-        onNavigate={handleDateNavigation}
-        onRefresh={handleRefresh}
-        loading={loading}
-        selectedPropertyId={propertyId}
-      />
 
       {/* Action Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
@@ -310,6 +309,18 @@ export default function CalendarTimeline({
           </div>
         </div>
       </div>
+      
+      {/* Calendar Header */}
+      <CalendarHeader
+        dates={dateRange.dates}
+        startDate={dateRange.startDate}
+        onNavigate={handleDateNavigation}
+        onRefresh={handleRefresh}
+        loading={loading}
+        selectedPropertyId={propertyId}
+        isResizeMode={isResizeMode}
+        onModeToggle={handleModeToggle}
+      />
 
       {/* Timeline Grid */}
       <div className="relative">
@@ -323,6 +334,7 @@ export default function CalendarTimeline({
           onReservationResize={handleReservationResize}
           onReservationSplit={handleReservationSplit}
           loading={loading}
+          isResizeMode={isResizeMode}
         />
 
         {/* Loading Overlay */}

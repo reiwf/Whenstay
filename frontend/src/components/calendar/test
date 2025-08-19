@@ -19,41 +19,13 @@ export default function TimelineGrid({
   onReservationSplit,
   onConflictCheck,
   loading = false,
-  isResizeMode = false,
   className = ""
 }) {
   const [expandedRoomTypes, setExpandedRoomTypes] = useState(new Set());
   const [dragState, setDragState] = useState(null);
   const [previewReservation, setPreviewReservation] = useState(null);
-  const [gridConstants, setGridConstants] = useState(GridUtils.getCurrentConstants());
-  const [windowWidth, setWindowWidth] = useState(window?.innerWidth || 1200);
+  const [isResizeMode, setIsResizeMode] = useState(false); // Mode toggle state
   const gridRef = useRef(null);
-
-  // Handle window resize for responsive behavior
-  useEffect(() => {
-    const handleResize = () => {
-      const newWidth = window.innerWidth;
-      setWindowWidth(newWidth);
-      setGridConstants(GridUtils.getCurrentConstants(newWidth));
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Set initial values
-    
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // CSS custom properties for responsive design
-  useEffect(() => {
-    if (gridRef.current) {
-      const root = gridRef.current;
-      root.style.setProperty('--cell-width', `${gridConstants.CELL_WIDTH}px`);
-      root.style.setProperty('--row-height', `${gridConstants.ROW_HEIGHT}px`);
-      root.style.setProperty('--header-height', `${gridConstants.HEADER_HEIGHT}px`);
-      root.style.setProperty('--sidebar-width', `${gridConstants.SIDEBAR_WIDTH}px`);
-      root.style.setProperty('--breakpoint', gridConstants.BREAKPOINT);
-    }
-  }, [gridConstants]);
 
   // Initialize expanded state - expand all room types by default
   useEffect(() => {
@@ -114,9 +86,10 @@ export default function TimelineGrid({
     }
 
     try {
-      // Calculate position relative to grid using responsive sidebar width
-      const relativeX = event.clientX - rect.left - gridConstants.SIDEBAR_WIDTH;
-      const relativeY = event.clientY - rect.top; // No mode toggle header anymore
+      // Calculate position relative to grid
+      const relativeX = event.clientX - rect.left - 192; // Subtract sidebar width
+      const modeToggleHeight = 60; // Approximate height of mode toggle header
+      const relativeY = event.clientY - rect.top - modeToggleHeight; // Subtract mode toggle header height
 
       // Debug logging for resize operations
       if (dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') {
@@ -148,7 +121,7 @@ export default function TimelineGrid({
         case 'resize-horizontal':
           // MODE-BASED RESIZE: Full reservation bar drag for date adjustment
           try {
-            const dayOffset = Math.round(relativeX / gridConstants.CELL_WIDTH);
+            const dayOffset = Math.round(relativeX / GridUtils.CONSTANTS.CELL_WIDTH);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
             
             console.log(`Mode-based resize: dayOffset=${dayOffset}, targetDate=${targetDate}`);
@@ -156,8 +129,8 @@ export default function TimelineGrid({
             // Calculate reservation position to determine drag direction
             const reservationDayOffset = DateUtils.daysBetween(startDate, dragState.originalReservation.startDate);
             const reservationDuration = DateUtils.daysBetween(dragState.originalReservation.startDate, dragState.originalReservation.endDate);
-            const reservationLeftPosition = reservationDayOffset * gridConstants.CELL_WIDTH;
-            const reservationWidth = reservationDuration * gridConstants.CELL_WIDTH;
+            const reservationLeftPosition = reservationDayOffset * GridUtils.CONSTANTS.CELL_WIDTH;
+            const reservationWidth = reservationDuration * GridUtils.CONSTANTS.CELL_WIDTH;
             
             // For full bar resize, determine which edge to move based on drag direction
             const dragDirection = relativeX > (reservationLeftPosition + reservationWidth / 2) ? 'resize-right' : 'resize-left';
@@ -530,15 +503,15 @@ export default function TimelineGrid({
     let accumulatedHeight = 0;
     
     for (const roomType of roomHierarchy) {
-      // Add room type header height using responsive constants
-      accumulatedHeight += gridConstants.ROW_HEIGHT;
+      // Add room type header height
+      accumulatedHeight += GridUtils.CONSTANTS.ROW_HEIGHT;
       
       if (expandedRoomTypes.has(roomType.id) && roomType.units) {
         for (const unit of roomType.units) {
-          if (yPosition >= accumulatedHeight && yPosition < accumulatedHeight + gridConstants.ROW_HEIGHT) {
+          if (yPosition >= accumulatedHeight && yPosition < accumulatedHeight + GridUtils.CONSTANTS.ROW_HEIGHT) {
             return unit.id;
           }
-          accumulatedHeight += gridConstants.ROW_HEIGHT;
+          accumulatedHeight += GridUtils.CONSTANTS.ROW_HEIGHT;
         }
       }
     }
@@ -623,9 +596,65 @@ export default function TimelineGrid({
     return ConflictUtils.hasConflicts(reservation, allReservations, reservation.id);
   };
 
+  /**
+   * Toggle between move and resize modes
+   */
+  const toggleMode = () => {
+    setIsResizeMode(!isResizeMode);
+    console.log(`Mode changed to: ${!isResizeMode ? 'Resize Mode' : 'Move Mode'}`);
+  };
 
   /**
-   * Render room type header with accessibility improvements
+   * Render mode toggle button
+   */
+  const renderModeToggle = () => {
+    return (
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={toggleMode}
+              className={`
+                flex items-center space-x-2 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200
+                ${isResizeMode 
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300' 
+                  : 'bg-gray-100 text-gray-700 border-2 border-gray-300 hover:bg-gray-200'
+                }
+              `}
+              title={isResizeMode ? "Switch to Move Mode" : "Switch to Resize Mode"}
+            >
+              {isResizeMode ? (
+                <>
+                  <Scaling className="w-4 h-4" />
+                  <span>Resize Mode</span>
+                </>
+              ) : (
+                <>
+                  <Move className="w-4 h-4" />
+                  <span>Move Mode</span>
+                </>
+              )}
+            </button>
+            
+            <div className="text-sm text-gray-600">
+              {isResizeMode ? (
+                <span>📅 Drag reservation bars to adjust dates</span>
+              ) : (
+                <span>🏠 Drag reservation bars to change rooms</span>
+              )}
+            </div>
+          </div>
+          
+          <div className="text-xs text-gray-500">
+            Press <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">R</kbd> to toggle
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * Render room type header
    */
   const renderRoomTypeHeader = (roomType) => {
     const isExpanded = expandedRoomTypes.has(roomType.id);
@@ -634,14 +663,12 @@ export default function TimelineGrid({
     return (
       <div
         key={`roomtype-${roomType.id}`}
-        className="bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200 sticky left-0 z-10 shadow-sm"
+        className="bg-gray-100 border-b border-gray-200 sticky left-0 z-10"
       >
         <button
           type="button"
           onClick={() => toggleRoomType(roomType.id)}
-          className="w-full flex items-center justify-between px-3 md:px-4 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors duration-150"
-          aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${roomType.name} room type with ${unitCount} unit${unitCount !== 1 ? 's' : ''}`}
+          className="w-full flex items-center justify-between px-4 py-2 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 transition-colors duration-150"
         >
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isExpanded ? (
@@ -651,10 +678,10 @@ export default function TimelineGrid({
             )}
             
             <div className="min-w-0 flex-1">
-              <div className="text-xs md:text-sm font-semibold text-gray-900 truncate">
+              <div className="text-sm font-semibold text-gray-900 truncate">
                 {roomType.name}
               </div>
-              <div className="text-xs text-gray-500 truncate">
+              <div className="text-xs text-gray-500">
                 {unitCount} unit{unitCount !== 1 ? 's' : ''}
               </div>
             </div>
@@ -673,51 +700,41 @@ export default function TimelineGrid({
     return (
       <div
         key={`unit-${roomUnit.id}`}
-        className="relative border-b border-gray-200 hover:bg-gray-50/30 transition-colors duration-150"
-        style={{ height: `${gridConstants.ROW_HEIGHT}px` }}
+        className="relative border-b border-gray-200"
+        style={{ height: `${GridUtils.CONSTANTS.ROW_HEIGHT}px` }}
       >
-        {/* Room Unit Label with responsive styling */}
-        <div 
-          className="absolute left-0 top-0 h-full bg-white border-r border-gray-200 flex items-center z-10 px-2 md:px-3 lg:px-4"
-          style={{ width: `${gridConstants.SIDEBAR_WIDTH}px` }}
-        >
-          <div className="pl-2 md:pl-4 lg:pl-6 min-w-0 flex-1">
-            <div className="text-xs md:text-sm font-medium text-gray-900 truncate">
+        {/* Room Unit Label */}
+        <div className="absolute left-0 top-0 w-48 h-full bg-white border-r border-gray-200 px-4 py-2 flex items-center z-10">
+          <div className="pl-6 min-w-0 flex-1">
+            <div className="text-sm font-medium text-gray-900 truncate">
               {roomUnit.number}
             </div>
             {roomUnit.floor_number && (
-              <div className="text-xs text-gray-500 truncate">
+              <div className="text-xs text-gray-500">
                 Floor {roomUnit.floor_number}
               </div>
             )}
           </div>
         </div>
 
-        {/* Timeline Area with responsive width */}
-        <div 
-          className="relative"
-          style={{ 
-            marginLeft: `${gridConstants.SIDEBAR_WIDTH}px`,
-            minWidth: `${dates.length * gridConstants.CELL_WIDTH}px` 
-          }}
-        >
-          {/* Grid Lines with responsive spacing */}
+        {/* Timeline Area */}
+        <div className="ml-48 relative" style={{ minWidth: `${dates.length * GridUtils.CONSTANTS.CELL_WIDTH}px` }}>
+          {/* Grid Lines */}
           {dates.map((date, index) => (
             <div
               key={`gridline-${date}`}
               className="absolute top-0 bottom-0 border-r border-gray-100"
               style={{
-                left: `${index * gridConstants.CELL_WIDTH}px`,
+                left: `${index * GridUtils.CONSTANTS.CELL_WIDTH}px`,
                 width: '1px'
               }}
             />
           ))}
 
-          {/* Date Cells with modern hover effects */}
+          {/* Date Cells (for drop targets) */}
           {dates.map((date, index) => {
             const isToday = DateUtils.isToday(date);
             const isWeekend = DateUtils.isWeekend(date);
-            const isPast = DateUtils.isPast(date);
             const isDragHover = dragState && 
               previewReservation && 
               previewReservation.roomUnitId === roomUnit.id;
@@ -728,17 +745,16 @@ export default function TimelineGrid({
               <div
                 key={`cell-${date}`}
                 className={`
-                  absolute top-0 bottom-0 transition-all duration-200 ease-in-out
-                  ${!dragState && !isPast ? 'hover:bg-blue-50/50 hover:shadow-sm' : ''}
-                  ${isToday ? 'bg-blue-100/40 border-l-2 border-blue-400' : ''}
-                  ${isWeekend && !isToday ? 'bg-gray-50/60' : ''}
-                  ${isPast ? 'bg-gray-50/30' : ''}
-                  ${isValidDropZone ? 'bg-emerald-50 border border-emerald-300 shadow-sm' : ''}
-                  ${isInvalidDropZone ? 'bg-red-50 border border-red-300 shadow-sm' : ''}
+                  absolute top-0 bottom-0 transition-all duration-150
+                  ${!dragState ? 'hover:bg-blue-50' : ''}
+                  ${isToday ? 'bg-blue-25' : ''}
+                  ${isWeekend ? 'bg-gray-25' : ''}
+                  ${isValidDropZone ? 'bg-green-50 border border-green-200' : ''}
+                  ${isInvalidDropZone ? 'bg-red-50 border border-red-200' : ''}
                 `}
                 style={{
-                  left: `${index * gridConstants.CELL_WIDTH}px`,
-                  width: `${gridConstants.CELL_WIDTH}px`
+                  left: `${index * GridUtils.CONSTANTS.CELL_WIDTH}px`,
+                  width: `${GridUtils.CONSTANTS.CELL_WIDTH}px`
                 }}
                 data-date={date}
                 data-room-unit-id={roomUnit.id}
@@ -840,6 +856,9 @@ export default function TimelineGrid({
       onDrop={handleDrop}
       onDragLeave={handleDragLeave}
     >
+      {/* Mode Toggle UI */}
+      {renderModeToggle()}
+      
       {/* Room Types and Units */}
       {roomHierarchy.map((roomType) => {
         const isExpanded = expandedRoomTypes.has(roomType.id);
@@ -864,17 +883,14 @@ export default function TimelineGrid({
         );
       })}
       
-      {/* Global Vertical Grid Lines - spans entire timeline with responsive positioning */}
-      <div 
-        className="absolute top-0 bottom-0 pointer-events-none z-5"
-        style={{ left: `${gridConstants.SIDEBAR_WIDTH}px` }}
-      >
+      {/* Global Vertical Grid Lines - spans entire timeline */}
+      <div className="absolute top-0 bottom-0 left-48 pointer-events-none z-5">
         {dates.map((date, index) => (
           <div
             key={`global-gridline-${date}`}
-            className="absolute top-0 bottom-0 border-r border-gray-200/80"
+            className="absolute top-0 bottom-0 border-r border-gray-200"
             style={{
-              left: `${index * gridConstants.CELL_WIDTH}px`,
+              left: `${index * GridUtils.CONSTANTS.CELL_WIDTH}px`,
               width: '1px'
             }}
           />
