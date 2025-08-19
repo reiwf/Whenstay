@@ -502,17 +502,6 @@ export default function ReservationBar({
         </span>
       </div>
 
-      {/* Status Indicator */}
-      {reservation.status && (
-        <div 
-          className="absolute top-1 right-1 w-2 h-2 rounded-full"
-          style={{ 
-            backgroundColor: hasConflict ? '#dc2626' : 'rgba(255, 255, 255, 0.7)'
-          }}
-          title={StatusUtils.getStatusDisplayName(reservation.status)}
-        />
-      )}
-
       {/* Conflict Indicator */}
       {hasConflict && (
         <div className="absolute inset-0 border-2 border-red-500 bg-red-100 bg-opacity-20 rounded border-dashed pointer-events-none">

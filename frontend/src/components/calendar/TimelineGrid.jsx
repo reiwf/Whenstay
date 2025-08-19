@@ -90,6 +90,35 @@ export default function TimelineGrid({
   };
 
   /**
+   * Calculate availability for a room type on a specific date
+   */
+  const calculateAvailabilityForDate = (roomType, date) => {
+    if (!roomType.units || roomType.units.length === 0) return 0;
+    
+    const totalUnits = roomType.units.length;
+    let occupiedUnits = 0;
+    
+    // Get all active reservations and segments
+    const allActiveReservations = [
+      ...reservations.filter(r => r.status && !['cancelled', 'no_show'].includes(r.status)),
+      ...segments.filter(s => s.status && !['cancelled', 'no_show'].includes(s.status))
+    ];
+    
+    // Count units that are occupied on this specific date
+    roomType.units.forEach(unit => {
+      const unitReservations = allActiveReservations.filter(r => r.roomUnitId === unit.id);
+      const isOccupied = unitReservations.some(reservation => 
+        date >= reservation.startDate && date < reservation.endDate
+      );
+      if (isOccupied) {
+        occupiedUnits++;
+      }
+    });
+    
+    return totalUnits - occupiedUnits;
+  };
+
+  /**
    * Handle HTML5 drag start from ReservationBar
    */
   const handleDragStart = (dragData) => {
@@ -757,7 +786,7 @@ export default function TimelineGrid({
 
 
   /**
-   * Render room type header with accessibility improvements
+   * Render room type header with accessibility improvements and availability timeline
    */
   const renderRoomTypeHeader = (roomType) => {
     const isExpanded = expandedRoomTypes.has(roomType.id);
@@ -766,17 +795,21 @@ export default function TimelineGrid({
     return (
       <div
         key={`roomtype-${roomType.id}`}
-        className="bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200 sticky left-0 z-10 shadow-sm"
+        className="bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200 sticky left-0 z-10 shadow-sm relative"
         style={{ height: `${gridConstants.ROW_HEIGHT}px` }}
         data-room-type-header={roomType.id}
       >
+        {/* Left Side - Room Type Info Button */}
         <button
           type="button"
           onClick={() => toggleRoomType(roomType.id)}
-          className="w-full h-full flex items-center justify-between px-3 md:px-4 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors duration-150"
+          className="absolute left-0 top-0 h-full flex items-center justify-between px-3 md:px-4 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors duration-150 border-r border-gray-200"
+          style={{ 
+            width: `${gridConstants.SIDEBAR_WIDTH}px`,
+            height: `${gridConstants.ROW_HEIGHT}px` 
+          }}
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${roomType.name} room type with ${unitCount} unit${unitCount !== 1 ? 's' : ''}`}
-          style={{ height: `${gridConstants.ROW_HEIGHT}px` }}
         >
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isExpanded ? (
@@ -795,6 +828,47 @@ export default function TimelineGrid({
             </div>
           </div>
         </button>
+
+        {/* Right Side - Availability Timeline */}
+        <div 
+          className="absolute top-0 h-full bg-gradient-to-r from-gray-100 to-gray-50"
+          style={{ 
+            left: `${gridConstants.SIDEBAR_WIDTH}px`,
+            right: 0,
+            height: `${gridConstants.ROW_HEIGHT}px`,
+            minWidth: `${dates.length * gridConstants.CELL_WIDTH}px`
+          }}
+        >
+          {/* Vertical Grid Lines */}
+          {dates.map((date, index) => (
+            <div
+              key={`header-gridline-${roomType.id}-${date}`}
+              className="absolute top-0 bottom-0 border-r border-gray-200"
+              style={{
+                left: `${index * gridConstants.CELL_WIDTH}px`,
+                width: '1px'
+              }}
+            />
+          ))}
+
+          {/* Availability Numbers */}
+          {dates.map((date, index) => {
+            const availableUnits = calculateAvailabilityForDate(roomType, date);
+            
+            return (
+              <div
+                key={`header-availability-${roomType.id}-${date}`}
+                className="absolute top-0 bottom-0 flex items-center justify-center text-xs text-gray-500"
+                style={{
+                  left: `${index * gridConstants.CELL_WIDTH}px`,
+                  width: `${gridConstants.CELL_WIDTH}px`
+                }}
+              >
+                {availableUnits}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
