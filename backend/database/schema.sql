@@ -468,6 +468,17 @@ END $$;
 
 
 --
+-- Name: daterange_overlaps(date, date, date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.daterange_overlaps(a_start date, a_end date, b_start date, b_end date) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+    SELECT a_start < b_end AND b_start < a_end;
+$$;
+
+
+--
 -- Name: enforce_cleaner_role(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -530,6 +541,129 @@ BEGIN
     NEW.check_in_token := token;
     RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: get_calendar_timeline(uuid, date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date date DEFAULT (CURRENT_DATE - '1 day'::interval), p_end_date date DEFAULT (CURRENT_DATE + '29 days'::interval)) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_order integer, room_unit_id uuid, room_unit_number text, reservation_id uuid, segment_id uuid, booking_name text, start_date date, end_date date, status text, color text, label text, is_segment boolean)
+    LANGUAGE sql STABLE
+    AS $$
+    -- First get ALL room units for the property (including those with no reservations)
+    SELECT 
+        rt.id as room_type_id,
+        rt.name as room_type_name,
+        ROW_NUMBER() OVER (ORDER BY rt.name) as room_type_order,
+        ru.id as room_unit_id,
+        ru.unit_number as room_unit_number,
+        NULL::uuid as reservation_id,
+        NULL::uuid as segment_id,
+        NULL::text as booking_name,
+        NULL::date as start_date,
+        NULL::date as end_date,
+        NULL::text as status,
+        NULL::text as color,
+        NULL::text as label,
+        false as is_segment
+    FROM room_types rt
+    JOIN room_units ru ON rt.id = ru.room_type_id
+    WHERE rt.property_id = p_property_id
+    AND rt.is_active = true
+    AND ru.is_active = true
+    AND NOT EXISTS (
+        -- Only include empty room rows if there are no reservations for this room in date range
+        SELECT 1 FROM reservations r 
+        WHERE r.room_unit_id = ru.id 
+        AND r.check_in_date <= p_end_date
+        AND r.check_out_date > p_start_date
+        AND r.status::text <> 'cancelled'
+        AND NOT EXISTS (
+            SELECT 1 FROM reservation_segments rs WHERE rs.reservation_id = r.id
+        )
+        UNION ALL
+        SELECT 1 FROM reservation_segments rs
+        JOIN reservations r2 ON rs.reservation_id = r2.id
+        WHERE rs.room_unit_id = ru.id
+        AND rs.start_date <= p_end_date
+        AND rs.end_date > p_start_date
+        AND r2.status::text <> 'cancelled'
+    )
+    
+    UNION ALL
+    
+    -- Then get regular reservations (not split into segments)
+    SELECT 
+        rt.id as room_type_id,
+        rt.name as room_type_name,
+        ROW_NUMBER() OVER (ORDER BY rt.name) as room_type_order,
+        ru.id as room_unit_id,
+        ru.unit_number as room_unit_number,
+        r.id as reservation_id,
+        NULL::uuid as segment_id,
+        r.booking_name,
+        r.check_in_date as start_date,
+        r.check_out_date as end_date,
+        r.status::text,
+        CASE r.status::text
+            WHEN 'confirmed' THEN '#3b82f6'
+            WHEN 'checked_in' THEN '#10b981'
+            WHEN 'checked_out' THEN '#6b7280'
+            WHEN 'cancelled' THEN '#ef4444'
+            ELSE '#b5945a'
+        END as color,
+        r.booking_name as label,
+        false as is_segment
+    FROM reservations r
+    JOIN room_units ru ON r.room_unit_id = ru.id
+    JOIN room_types rt ON ru.room_type_id = rt.id
+    WHERE rt.property_id = p_property_id
+    AND r.check_in_date <= p_end_date
+    AND r.check_out_date > p_start_date
+    AND r.status::text <> 'cancelled'
+    AND NOT EXISTS (
+        -- Exclude reservations that have been split into segments
+        SELECT 1 FROM reservation_segments rs 
+        WHERE rs.reservation_id = r.id
+    )
+    
+    UNION ALL
+    
+    -- Then get reservation segments (for split reservations)
+    SELECT 
+        rt.id as room_type_id,
+        rt.name as room_type_name,
+        ROW_NUMBER() OVER (ORDER BY rt.name) as room_type_order,
+        ru.id as room_unit_id,
+        ru.unit_number as room_unit_number,
+        r.id as reservation_id,
+        rs.id as segment_id,
+        r.booking_name,
+        rs.start_date,
+        rs.end_date,
+        r.status::text,
+        COALESCE(rs.color, 
+            CASE r.status::text
+                WHEN 'confirmed' THEN '#3b82f6'
+                WHEN 'checked_in' THEN '#10b981'
+                WHEN 'checked_out' THEN '#6b7280'
+                WHEN 'cancelled' THEN '#ef4444'
+                ELSE '#b5945a'
+            END
+        ) as color,
+        COALESCE(rs.label, r.booking_name) as label,
+        true as is_segment
+    FROM reservation_segments rs
+    JOIN reservations r ON rs.reservation_id = r.id
+    JOIN room_units ru ON rs.room_unit_id = ru.id
+    JOIN room_types rt ON ru.room_type_id = rt.id
+    WHERE rt.property_id = p_property_id
+    AND rs.start_date <= p_end_date
+    AND rs.end_date > p_start_date
+    AND r.status::text <> 'cancelled'
+    
+    ORDER BY room_type_name, room_unit_number, start_date;
 $$;
 
 
@@ -693,6 +827,35 @@ CREATE FUNCTION public.get_property_default_cleaner(unit_id uuid) RETURNS uuid
 
 
 --
+-- Name: get_property_room_hierarchy(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_property_room_hierarchy(p_property_id uuid) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_description text, max_guests integer, room_units jsonb)
+    LANGUAGE sql STABLE
+    AS $$
+    SELECT 
+        rt.id as room_type_id,
+        rt.name as room_type_name,
+        rt.description as room_type_description,
+        rt.max_guests,
+        jsonb_agg(
+            jsonb_build_object(
+                'id', ru.id,
+                'unit_number', ru.unit_number,
+                'floor_number', ru.floor_number,
+                'is_active', ru.is_active
+            ) ORDER BY ru.unit_number
+        ) as room_units
+    FROM room_types rt
+    LEFT JOIN room_units ru ON rt.id = ru.room_type_id AND ru.is_active = true
+    WHERE rt.property_id = p_property_id
+    AND rt.is_active = true
+    GROUP BY rt.id, rt.name, rt.description, rt.max_guests
+    ORDER BY rt.name;
+$$;
+
+
+--
 -- Name: handle_reservation_cleaning_task(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -756,6 +919,32 @@ CREATE FUNCTION public.handle_reservation_cleaning_task() RETURNS trigger
         RETURN NULL;
       END;
       $$;
+
+
+--
+-- Name: is_room_available(uuid, date, date, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_room_available(p_room_unit_id uuid, p_start_date date, p_end_date date, p_exclude_reservation_id uuid DEFAULT NULL::uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$SELECT NOT EXISTS (
+        -- Check regular reservations
+        SELECT 1 FROM reservations r
+        WHERE r.room_unit_id = p_room_unit_id
+        AND r.status::text NOT IN ('cancelled', 'no_show')
+        AND public.daterange_overlaps(r.check_in_date, r.check_out_date, p_start_date, p_end_date)
+        AND (p_exclude_reservation_id IS NULL OR r.id != p_exclude_reservation_id)
+        
+        UNION
+        
+        -- Check reservation segments
+        SELECT 1 FROM reservation_segments rs
+        JOIN reservations r ON rs.reservation_id = r.id
+        WHERE rs.room_unit_id = p_room_unit_id
+        AND r.status::text NOT IN ('cancelled', 'no_show')
+        AND public.daterange_overlaps(rs.start_date, rs.end_date, p_start_date, p_end_date)
+        AND (p_exclude_reservation_id IS NULL OR r.id != p_exclude_reservation_id)
+    );$$;
 
 
 --
@@ -970,6 +1159,36 @@ $$;
 
 
 --
+-- Name: max_consecutive_nights(uuid, date, date, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.max_consecutive_nights(p_room_unit_id uuid, p_start_date date, p_max_end_date date, p_exclude_reservation_id uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+    v_current_date date := p_start_date;
+    v_nights integer := 0;
+BEGIN
+    WHILE v_current_date < p_max_end_date LOOP
+        IF public.is_room_available(
+            p_room_unit_id, 
+            v_current_date, 
+            v_current_date + 1, 
+            p_exclude_reservation_id
+        ) THEN
+            v_nights := v_nights + 1;
+            v_current_date := v_current_date + 1;
+        ELSE
+            EXIT;
+        END IF;
+    END LOOP;
+    
+    RETURN v_nights;
+END;
+$$;
+
+
+--
 -- Name: message_deliveries_status_trigger(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1065,6 +1284,68 @@ begin
 
   return new;
 end 
+$$;
+
+
+--
+-- Name: move_reservation(uuid, uuid, date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.move_reservation(p_reservation_id uuid, p_new_room_unit_id uuid DEFAULT NULL::uuid, p_new_start_date date DEFAULT NULL::date, p_new_end_date date DEFAULT NULL::date) RETURNS TABLE(success boolean, error_message text)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_reservation record;
+    v_target_start date;
+    v_target_end date;
+    v_target_room uuid;
+BEGIN
+    -- Get current reservation
+    SELECT * INTO v_reservation
+    FROM reservations
+    WHERE id = p_reservation_id;
+    
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT false, 'Reservation not found'::text;
+        RETURN;
+    END IF;
+    
+    -- Use provided values or keep existing ones
+    v_target_room := COALESCE(p_new_room_unit_id, v_reservation.room_unit_id);
+    v_target_start := COALESCE(p_new_start_date, v_reservation.check_in_date);
+    v_target_end := COALESCE(p_new_end_date, v_reservation.check_out_date);
+    
+    -- Validate date range
+    IF v_target_start >= v_target_end THEN
+        RETURN QUERY SELECT false, 'Invalid date range'::text;
+        RETURN;
+    END IF;
+    
+    -- Check availability (exclude current reservation)
+    IF NOT public.is_room_available(
+        v_target_room,
+        v_target_start,
+        v_target_end,
+        p_reservation_id
+    ) THEN
+        RETURN QUERY SELECT false, 'Target slot not available'::text;
+        RETURN;
+    END IF;
+    
+    -- Update reservation
+    UPDATE reservations SET
+        room_unit_id = v_target_room,
+        check_in_date = v_target_start,
+        check_out_date = v_target_end,
+        updated_at = now()
+    WHERE id = p_reservation_id;
+    
+    -- Clean up any existing segments (reservation is no longer split)
+    DELETE FROM reservation_segments 
+    WHERE reservation_id = p_reservation_id;
+    
+    RETURN QUERY SELECT true, NULL::text;
+END;
 $$;
 
 
@@ -1218,6 +1499,31 @@ $$;
 
 
 --
+-- Name: rooms_compatible(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rooms_compatible(room_a_id uuid, room_b_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+    SELECT EXISTS (
+        SELECT 1 
+        FROM room_units ru1
+        JOIN room_types rt1 ON ru1.room_type_id = rt1.id
+        JOIN room_units ru2 ON rt1.property_id = (
+            SELECT rt2.property_id 
+            FROM room_units ru_check
+            JOIN room_types rt2 ON ru_check.room_type_id = rt2.id
+            WHERE ru_check.id = room_b_id
+        )
+        JOIN room_types rt2 ON ru2.room_type_id = rt2.id
+        WHERE ru1.id = room_a_id 
+        AND ru2.id = room_b_id
+        AND rt1.property_id = rt2.property_id
+    );
+$$;
+
+
+--
 -- Name: schedule_message(uuid, uuid, text, timestamp with time zone, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1358,6 +1664,82 @@ end $$;
 
 
 --
+-- Name: split_reservation(uuid, date, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.split_reservation(p_reservation_id uuid, p_split_date date, p_new_room_unit_id uuid) RETURNS TABLE(success boolean, segment_ids uuid[], error_message text)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_reservation record;
+    v_segment1_id uuid;
+    v_segment2_id uuid;
+    v_segments uuid[] := ARRAY[]::uuid[];
+BEGIN
+    -- Get reservation details
+    SELECT * INTO v_reservation
+    FROM reservations
+    WHERE id = p_reservation_id;
+    
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT false, ARRAY[]::uuid[], 'Reservation not found'::text;
+        RETURN;
+    END IF;
+    
+    -- Validate split date
+    IF p_split_date <= v_reservation.check_in_date 
+    OR p_split_date >= v_reservation.check_out_date THEN
+        RETURN QUERY SELECT false, ARRAY[]::uuid[], 'Invalid split date'::text;
+        RETURN;
+    END IF;
+    
+    -- Check if new room is available for second segment
+    IF NOT public.is_room_available(
+        p_new_room_unit_id,
+        p_split_date,
+        v_reservation.check_out_date,
+        p_reservation_id
+    ) THEN
+        RETURN QUERY SELECT false, ARRAY[]::uuid[], 'Target room not available'::text;
+        RETURN;
+    END IF;
+    
+    -- Create first segment (original room)
+    INSERT INTO reservation_segments (
+        reservation_id, room_unit_id, start_date, end_date, 
+        segment_order, label, color
+    ) VALUES (
+        p_reservation_id,
+        v_reservation.room_unit_id,
+        v_reservation.check_in_date,
+        p_split_date,
+        1,
+        v_reservation.booking_name || ' (Part 1)',
+        '#3b82f6'
+    ) RETURNING id INTO v_segment1_id;
+    
+    -- Create second segment (new room)
+    INSERT INTO reservation_segments (
+        reservation_id, room_unit_id, start_date, end_date,
+        segment_order, label, color  
+    ) VALUES (
+        p_reservation_id,
+        p_new_room_unit_id,
+        p_split_date,
+        v_reservation.check_out_date,
+        2,
+        v_reservation.booking_name || ' (Part 2)',
+        '#3b82f6'
+    ) RETURNING id INTO v_segment2_id;
+    
+    v_segments := ARRAY[v_segment1_id, v_segment2_id];
+    
+    RETURN QUERY SELECT true, v_segments, NULL::text;
+END;
+$$;
+
+
+--
 -- Name: sync_cleaning_status_from_reservation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1397,8 +1779,7 @@ END; $$;
 
 CREATE FUNCTION public.trigger_pricing_recalculation() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-DECLARE
+    AS $$DECLARE
   op        text := TG_OP;
   -- Put all "sellable" statuses you want to count here:
   sellable  text[] := ARRAY['new','confirmed','checked_in','completed','paid','booked'];
@@ -1423,7 +1804,7 @@ BEGIN
        (NEW.room_type_id, NEW.check_in_date, NEW.check_out_date, NEW.status) THEN
 
       -- Requeue OLD window if it used to count
-      IF OLD.status = ANY(sellable) THEN
+      IF OLD.status::text = ANY(sellable) THEN
         INSERT INTO pricing_recalc_queue (room_type_id, start_date, end_date, triggered_by)
         VALUES (OLD.room_type_id,
                 GREATEST(OLD.check_in_date, today),
@@ -1434,7 +1815,7 @@ BEGIN
       END IF;
 
       -- Queue NEW window if it now counts
-      IF NEW.status = ANY(sellable) THEN
+      IF NEW.status::text = ANY(sellable) THEN
         rt_id := NEW.room_type_id;
         sdate := NEW.check_in_date;
         edate := (NEW.check_out_date - INTERVAL '1 day')::date;
@@ -1468,8 +1849,7 @@ BEGIN
   END IF;
 
   RETURN CASE WHEN op = 'DELETE' THEN OLD ELSE NEW END;
-END;
-$$;
+END;$$;
 
 
 --
@@ -1477,6 +1857,152 @@ $$;
 --
 
 COMMENT ON FUNCTION public.trigger_pricing_recalculation() IS 'Automatically queues pricing recalculation when reservations change';
+
+
+--
+-- Name: try_allocate_with_swaps(uuid, date, date, uuid[], boolean, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.try_allocate_with_swaps(p_reservation_id uuid, p_start_date date, p_end_date date, p_room_unit_ids uuid[], p_allow_swaps boolean DEFAULT true, p_label text DEFAULT NULL::text) RETURNS TABLE(success boolean, segments jsonb, swapped_reservations jsonb, error_message text)
+    LANGUAGE plpgsql
+    AS $$DECLARE
+    v_cursor date := p_start_date;
+    v_segments jsonb := '[]'::jsonb;
+    v_swapped jsonb := '[]'::jsonb;
+    v_best_room uuid;
+    v_best_nights integer;
+    v_room_id uuid;
+    v_nights integer;
+    v_segment_order integer := 1;
+    v_blocking_reservation uuid;
+    v_alternative_room uuid;
+BEGIN
+    -- Validate inputs
+    IF p_start_date >= p_end_date THEN
+        RETURN QUERY SELECT false, '[]'::jsonb, '[]'::jsonb, 'Invalid date range'::text;
+        RETURN;
+    END IF;
+    
+    IF array_length(p_room_unit_ids, 1) IS NULL OR array_length(p_room_unit_ids, 1) = 0 THEN
+        RETURN QUERY SELECT false, '[]'::jsonb, '[]'::jsonb, 'No rooms specified'::text;
+        RETURN;
+    END IF;
+    
+    -- Main allocation loop
+    WHILE v_cursor < p_end_date LOOP
+        v_best_room := NULL;
+        v_best_nights := 0;
+        
+        -- Find room with longest consecutive availability
+        FOREACH v_room_id IN ARRAY p_room_unit_ids LOOP
+            v_nights := public.max_consecutive_nights(
+                v_room_id, 
+                v_cursor, 
+                p_end_date, 
+                p_reservation_id
+            );
+            
+            IF v_nights > v_best_nights THEN
+                v_best_nights := v_nights;
+                v_best_room := v_room_id;
+            END IF;
+        END LOOP;
+        
+        -- If we found available nights, create segment
+        IF v_best_room IS NOT NULL AND v_best_nights > 0 THEN
+            v_segments := v_segments || jsonb_build_object(
+                'room_unit_id', v_best_room,
+                'start_date', v_cursor,
+                'end_date', v_cursor + v_best_nights,
+                'segment_order', v_segment_order,
+                'label', COALESCE(p_label, 'Segment ' || v_segment_order)
+            );
+            
+            v_cursor := v_cursor + v_best_nights;
+            v_segment_order := v_segment_order + 1;
+            CONTINUE;
+        END IF;
+        
+        -- No direct availability - try swaps if allowed
+        IF NOT p_allow_swaps THEN
+            RETURN QUERY SELECT false, '[]'::jsonb, '[]'::jsonb, 
+                ('No availability on ' || v_cursor::text)::text;
+            RETURN;
+        END IF;
+        
+        -- Attempt one-hop swap for current night
+        DECLARE
+            v_swap_found boolean := false;
+        BEGIN
+            FOREACH v_room_id IN ARRAY p_room_unit_ids LOOP
+                -- Find blocking reservation for this night
+                SELECT r.id INTO v_blocking_reservation
+                FROM reservations r
+                WHERE r.room_unit_id = v_room_id
+                AND r.status::text NOT IN ('cancelled', 'no_show')
+                AND r.check_in_date <= v_cursor
+                AND r.check_out_date > v_cursor
+                AND r.id != p_reservation_id
+                LIMIT 1;
+                
+                IF v_blocking_reservation IS NULL THEN
+                    -- Check reservation segments
+                    SELECT r.id INTO v_blocking_reservation
+                    FROM reservation_segments rs
+                    JOIN reservations r ON rs.reservation_id = r.id
+                    WHERE rs.room_unit_id = v_room_id
+                    AND r.status::text NOT IN ('cancelled', 'no_show')
+                    AND rs.start_date <= v_cursor
+                    AND rs.end_date > v_cursor
+                    AND r.id != p_reservation_id
+                    LIMIT 1;
+                END IF;
+                
+                IF v_blocking_reservation IS NOT NULL THEN
+                    -- Find compatible alternative room for the blocking reservation
+                    FOREACH v_alternative_room IN ARRAY p_room_unit_ids LOOP
+                        IF v_alternative_room != v_room_id 
+                        AND public.rooms_compatible(v_room_id, v_alternative_room) 
+                        AND public.is_room_available(
+                            v_alternative_room,
+                            v_cursor,
+                            v_cursor + 1,
+                            v_blocking_reservation
+                        ) THEN
+                            -- Record the swap (but don't execute yet - that's for the caller)
+                            v_swapped := v_swapped || jsonb_build_object(
+                                'reservation_id', v_blocking_reservation,
+                                'from_room', v_room_id,
+                                'to_room', v_alternative_room,
+                                'date', v_cursor
+                            );
+                            
+                            v_swap_found := true;
+                            EXIT;
+                        END IF;
+                    END LOOP;
+                    
+                    IF v_swap_found THEN
+                        EXIT;
+                    END IF;
+                END IF;
+            END LOOP;
+            
+            IF NOT v_swap_found THEN
+                RETURN QUERY SELECT false, '[]'::jsonb, v_swapped, 
+                    ('Cannot resolve conflicts for ' || v_cursor::text)::text;
+                RETURN;
+            END IF;
+        END;
+        
+        -- Move to next day (swap found, retry allocation)
+        -- Note: In practice, the caller should apply swaps and retry the allocation
+        v_cursor := v_cursor + 1;
+    END LOOP;
+    
+    -- Success - return the allocation plan
+    RETURN QUERY SELECT true, v_segments, v_swapped, NULL::text;
+END;$$;
 
 
 --
@@ -1541,6 +2067,20 @@ begin
   new.updated_at = now();
   return new;
 end;
+$$;
+
+
+--
+-- Name: update_seasonality_settings_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_seasonality_settings_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
 $$;
 
 
@@ -2585,6 +3125,7 @@ CREATE TABLE auth.sso_providers (
     resource_id text,
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
+    disabled boolean,
     CONSTRAINT "resource_id not empty" CHECK (((resource_id = NULL::text) OR (char_length(resource_id) > 0)))
 );
 
@@ -2945,7 +3486,6 @@ CREATE TABLE public.market_factors (
     id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
     location_id uuid,
     dt date NOT NULL,
-    seasonality numeric(4,3) DEFAULT 1.0,
     demand numeric(4,3) DEFAULT 1.0,
     event_score numeric(4,2) DEFAULT 0,
     holiday boolean DEFAULT false,
@@ -2953,7 +3493,6 @@ CREATE TABLE public.market_factors (
     comp_availability_pct numeric(5,2) DEFAULT 0,
     comp_median_price numeric(10,2) DEFAULT 0,
     created_at timestamp with time zone DEFAULT now(),
-    seasonality_auto numeric(5,3),
     demand_auto numeric(5,3),
     comp_pressure_auto numeric(5,3) DEFAULT 1.00,
     manual_multiplier numeric(5,3) DEFAULT 1.00,
@@ -2971,14 +3510,7 @@ CREATE TABLE public.market_factors (
 -- Name: TABLE market_factors; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.market_factors IS 'Market-level seasonality and demand factors';
-
-
---
--- Name: COLUMN market_factors.seasonality_auto; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.market_factors.seasonality_auto IS 'Auto-calculated seasonality factor (learned/smoothed)';
+COMMENT ON TABLE public.market_factors IS 'Market demand factors (seasonality handled separately via seasonality_settings table)';
 
 
 --
@@ -3440,6 +3972,26 @@ CREATE VIEW public.property_summary AS
 
 
 --
+-- Name: reservation_segments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservation_segments (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    room_unit_id uuid NOT NULL,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    label text,
+    color text DEFAULT '#3b82f6'::text,
+    segment_order integer DEFAULT 1,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT positive_segment_order CHECK ((segment_order > 0)),
+    CONSTRAINT valid_date_range CHECK ((start_date < end_date))
+);
+
+
+--
 -- Name: reservation_webhook_logs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3468,7 +4020,7 @@ CREATE TABLE public.reservations (
     num_guests integer DEFAULT 1,
     total_amount numeric(10,2),
     currency character varying(3) DEFAULT 'JPY'::character varying,
-    status public.reservation_status DEFAULT 'pending'::public.reservation_status,
+    status public.reservation_status,
     check_in_token character varying(8),
     guest_lastname character varying(255),
     guest_firstname character varying(255),
@@ -3504,7 +4056,8 @@ CREATE TABLE public.reservations (
     price numeric,
     "timeStamp" timestamp with time zone,
     lang text,
-    access_read boolean DEFAULT false
+    access_read boolean DEFAULT false,
+    status_temp text
 );
 
 
@@ -3637,6 +4190,75 @@ CREATE VIEW public.room_availability AS
      LEFT JOIN public.reservations r ON (((ru.id = r.room_unit_id) AND (r.status = ANY (ARRAY['confirmed'::public.reservation_status, 'checked_in'::public.reservation_status])) AND (r.check_in_date <= CURRENT_DATE) AND (r.check_out_date > CURRENT_DATE))))
   WHERE (p.is_active = true)
   GROUP BY p.id, p.name, rt.id, rt.name, rt.base_price, rt.max_guests, ru.id, ru.unit_number, ru.is_active, rt.is_active, p.is_active;
+
+
+--
+-- Name: seasonality_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.seasonality_settings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    location_id uuid,
+    season_name character varying(50) NOT NULL,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    multiplier numeric(5,3) NOT NULL,
+    year_recurring boolean DEFAULT true,
+    display_order integer DEFAULT 0,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT seasonality_settings_multiplier_check CHECK ((multiplier > (0)::numeric))
+);
+
+
+--
+-- Name: TABLE seasonality_settings; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.seasonality_settings IS 'Configurable seasonal pricing multipliers with custom date ranges';
+
+
+--
+-- Name: COLUMN seasonality_settings.location_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.location_id IS 'NULL for global settings, specific location_id for location overrides';
+
+
+--
+-- Name: COLUMN seasonality_settings.start_date; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.start_date IS 'Start date of seasonal period (DATE)';
+
+
+--
+-- Name: COLUMN seasonality_settings.end_date; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.end_date IS 'End date of seasonal period (DATE), inclusive';
+
+
+--
+-- Name: COLUMN seasonality_settings.multiplier; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.multiplier IS 'Seasonal pricing multiplier (e.g., 1.15 = 15% increase)';
+
+
+--
+-- Name: COLUMN seasonality_settings.year_recurring; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.year_recurring IS 'If true, applies to same date range every year';
+
+
+--
+-- Name: COLUMN seasonality_settings.display_order; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.seasonality_settings.display_order IS 'Order for UI display and conflict resolution';
 
 
 --
@@ -4289,6 +4911,14 @@ ALTER TABLE ONLY public.property_images
 
 
 --
+-- Name: reservation_segments reservation_segments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_segments
+    ADD CONSTRAINT reservation_segments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: reservation_webhook_logs reservation_webhook_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4366,6 +4996,14 @@ ALTER TABLE ONLY public.room_units
 
 ALTER TABLE ONLY public.scheduled_messages
     ADD CONSTRAINT scheduled_messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: seasonality_settings seasonality_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seasonality_settings
+    ADD CONSTRAINT seasonality_settings_pkey PRIMARY KEY (id);
 
 
 --
@@ -4768,6 +5406,13 @@ CREATE UNIQUE INDEX sso_providers_resource_id_idx ON auth.sso_providers USING bt
 
 
 --
+-- Name: sso_providers_resource_id_pattern_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX sso_providers_resource_id_pattern_idx ON auth.sso_providers USING btree (resource_id text_pattern_ops);
+
+
+--
 -- Name: unique_phone_factor_per_user; Type: INDEX; Schema: auth; Owner: -
 --
 
@@ -5139,6 +5784,41 @@ CREATE INDEX idx_property_images_room_unit_id ON public.property_images USING bt
 
 
 --
+-- Name: idx_reservation_segments_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_segments_dates ON public.reservation_segments USING btree (start_date, end_date);
+
+
+--
+-- Name: idx_reservation_segments_no_overlap; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_reservation_segments_no_overlap ON public.reservation_segments USING btree (room_unit_id, start_date, end_date);
+
+
+--
+-- Name: idx_reservation_segments_reservation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_segments_reservation_id ON public.reservation_segments USING btree (reservation_id);
+
+
+--
+-- Name: idx_reservation_segments_room_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_segments_room_dates ON public.reservation_segments USING btree (room_unit_id, start_date, end_date);
+
+
+--
+-- Name: idx_reservation_segments_room_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_segments_room_unit_id ON public.reservation_segments USING btree (room_unit_id);
+
+
+--
 -- Name: idx_reservations_admin_verified; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5339,6 +6019,20 @@ CREATE INDEX idx_scheduled_messages_status_run_at ON public.scheduled_messages U
 --
 
 CREATE INDEX idx_scheduled_messages_thread_id ON public.scheduled_messages USING btree (thread_id);
+
+
+--
+-- Name: idx_seasonality_location_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_seasonality_location_active ON public.seasonality_settings USING btree (location_id, is_active) WHERE (is_active = true);
+
+
+--
+-- Name: idx_seasonality_location_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_seasonality_location_order ON public.seasonality_settings USING btree (location_id, display_order) WHERE (is_active = true);
 
 
 --
@@ -5580,6 +6274,13 @@ CREATE TRIGGER trg_messages_updated BEFORE UPDATE ON public.messages FOR EACH RO
 
 
 --
+-- Name: reservation_segments trg_reservation_segments_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_reservation_segments_updated_at BEFORE UPDATE ON public.reservation_segments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: room_units trg_room_units_sync; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5633,6 +6334,13 @@ CREATE TRIGGER trg_update_thread_on_message_insert AFTER INSERT ON public.messag
 --
 
 CREATE TRIGGER trg_update_thread_on_message_update AFTER UPDATE ON public.messages FOR EACH ROW WHEN (((old.content IS DISTINCT FROM new.content) OR (old.created_at IS DISTINCT FROM new.created_at))) EXECUTE FUNCTION public.update_thread_metadata();
+
+
+--
+-- Name: seasonality_settings trigger_seasonality_settings_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_seasonality_settings_updated_at BEFORE UPDATE ON public.seasonality_settings FOR EACH ROW EXECUTE FUNCTION public.update_seasonality_settings_updated_at();
 
 
 --
@@ -6119,6 +6827,22 @@ ALTER TABLE ONLY public.property_images
 
 
 --
+-- Name: reservation_segments reservation_segments_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_segments
+    ADD CONSTRAINT reservation_segments_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: reservation_segments reservation_segments_room_unit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_segments
+    ADD CONSTRAINT reservation_segments_room_unit_id_fkey FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: reservations reservations_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6204,6 +6928,14 @@ ALTER TABLE ONLY public.scheduled_messages
 
 ALTER TABLE ONLY public.scheduled_messages
     ADD CONSTRAINT scheduled_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: seasonality_settings seasonality_settings_location_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seasonality_settings
+    ADD CONSTRAINT seasonality_settings_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.properties(id) ON DELETE CASCADE;
 
 
 --

@@ -17,6 +17,9 @@ export default function ReservationBar({
   showHandles = true,
   enableSplit = true,
   isResizeMode = false, // Mode toggle state
+  isSwapTarget = false, // Indicates this reservation is a swap target
+  isSwapPreview = false, // Indicates this is a swap preview
+  swapType = null, // 'dragged' or 'target' for different swap preview types
   className = ""
 }) {
   const [isHovered, setIsHovered] = useState(false);
@@ -226,6 +229,27 @@ export default function ReservationBar({
         textColor = '#1e40af';
         borderStyle = 'dashed';
       }
+    } else if (isSwapPreview) {
+      // Swap preview styling - purple theme for sophisticated swap operations
+      if (swapType === 'dragged') {
+        // Dragged reservation preview - bright purple
+        backgroundColor = '#f3e8ff';
+        borderColor = '#8b5cf6';
+        textColor = '#7c3aed';
+        borderStyle = 'dashed';
+      } else if (swapType === 'target') {
+        // Target reservation preview - complementary purple
+        backgroundColor = '#faf5ff';
+        borderColor = '#a855f7';
+        textColor = '#9333ea';
+        borderStyle = 'dotted';
+      } else {
+        // Generic swap preview
+        backgroundColor = '#f3e8ff';
+        borderColor = '#8b5cf6';
+        textColor = '#7c3aed';
+        borderStyle = 'dashed';
+      }
     } else if (isMovePreview) {
       // Valid move preview - green theme
       backgroundColor = '#f0fdf4';
@@ -238,6 +262,12 @@ export default function ReservationBar({
       borderColor = reservationColor;
       textColor = reservationColor;
       borderStyle = 'dashed';
+    } else if (isSwapTarget) {
+      // Swap target styling - highlight the target reservation with purple glow
+      backgroundColor = reservationColor;
+      borderColor = '#8b5cf6';
+      textColor = '#ffffff';
+      borderStyle = 'solid';
     } else {
       // Normal state with mode-specific styling
       backgroundColor = reservationColor;

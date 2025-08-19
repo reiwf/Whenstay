@@ -227,6 +227,66 @@ class CalendarService {
   }
 
   /**
+   * Swap room units of two reservations (ROOM-ONLY SWAP - dates preserved)
+   */
+  async swapReservations(reservationA, reservationB) {
+    try {
+      console.log('Starting room-only swap operation:', {
+        reservationA: reservationA.id,
+        reservationB: reservationB.id,
+        roomA: reservationA.newRoomUnitId,
+        roomB: reservationB.newRoomUnitId
+      });
+
+      // Simple direct room unit updates - no date changes needed
+      // This avoids all the complexity of the RPC function and date conflicts
+      
+      // Update reservation A's room unit
+      const { error: errorA } = await supabaseAdmin
+        .from('reservations')
+        .update({ room_unit_id: reservationA.newRoomUnitId })
+        .eq('id', reservationA.id);
+
+      if (errorA) {
+        console.error('Error updating reservation A room:', errorA);
+        throw new Error(`Failed to update reservation A room: ${errorA.message}`);
+      }
+
+      // Update reservation B's room unit
+      const { error: errorB } = await supabaseAdmin
+        .from('reservations')
+        .update({ room_unit_id: reservationB.newRoomUnitId })
+        .eq('id', reservationB.id);
+
+      if (errorB) {
+        console.error('Error updating reservation B room:', errorB);
+        
+        // Rollback reservation A if B fails
+        try {
+          await supabaseAdmin
+            .from('reservations')
+            .update({ room_unit_id: reservationB.newRoomUnitId }) // Put A back to original room
+            .eq('id', reservationA.id);
+        } catch (rollbackError) {
+          console.error('Rollback failed:', rollbackError);
+        }
+        
+        throw new Error(`Failed to update reservation B room: ${errorB.message}`);
+      }
+
+      console.log('Room-only swap completed successfully');
+      return {
+        success: true,
+        swappedReservations: [reservationA.id, reservationB.id],
+        message: 'Room units swapped successfully (dates preserved)'
+      };
+    } catch (error) {
+      console.error('Database error swapping reservations:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Intelligent gap-fill allocation with conflict resolution
    */
   async allocateWithGapFill(reservationData) {

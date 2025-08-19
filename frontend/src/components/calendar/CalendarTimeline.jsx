@@ -190,6 +190,48 @@ export default function CalendarTimeline({
   };
 
   /**
+   * Handle reservation swap
+   */
+  const handleReservationSwap = async (swappedReservationA, swappedReservationB) => {
+    try {
+      setLoading(true);
+
+      console.log('Executing swap via API:', {
+        reservationA: swappedReservationA.id,
+        reservationB: swappedReservationB.id
+      });
+
+      // Call API to swap the reservations (ROOM-ONLY SWAP)
+      await api.post('/calendar/reservations/swap', {
+        reservationA: {
+          id: swappedReservationA.id,
+          newRoomUnitId: swappedReservationA.roomUnitId,
+          // Include dates for validation but they should be preserved
+          newStartDate: swappedReservationA.startDate,
+          newEndDate: swappedReservationA.endDate
+        },
+        reservationB: {
+          id: swappedReservationB.id,
+          newRoomUnitId: swappedReservationB.roomUnitId,
+          // Include dates for validation but they should be preserved
+          newStartDate: swappedReservationB.startDate,
+          newEndDate: swappedReservationB.endDate
+        }
+      });
+
+      // Refresh timeline data
+      await loadTimelineData();
+      console.log('Swap operation completed successfully');
+      
+    } catch (error) {
+      console.error('Error swapping reservations:', error);
+      alert(`Failed to swap reservations: ${error.response?.data?.details || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
    * Handle gap-fill allocation
    */
   const handleGapFillAllocate = async (allocationData) => {
@@ -333,6 +375,7 @@ export default function CalendarTimeline({
           onReservationMove={handleReservationMove}
           onReservationResize={handleReservationResize}
           onReservationSplit={handleReservationSplit}
+          onReservationSwap={handleReservationSwap}
           loading={loading}
           isResizeMode={isResizeMode}
         />

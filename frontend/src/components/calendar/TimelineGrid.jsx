@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Move, Scaling } from 'lucide-react';
 import ReservationBar from './ReservationBar';
-import { DateUtils, GridUtils, ConflictUtils, SnapUtils, ResizeUtils } from './CalendarUtils';
+import { DateUtils, GridUtils, ConflictUtils, SnapUtils, ResizeUtils, SwapUtils } from './CalendarUtils';
 
 /**
  * TimelineGrid - Main grid component with 2-level room hierarchy
@@ -17,6 +17,7 @@ export default function TimelineGrid({
   onReservationMove,
   onReservationResize,
   onReservationSplit,
+  onReservationSwap,
   onConflictCheck,
   loading = false,
   isResizeMode = false,
@@ -25,6 +26,7 @@ export default function TimelineGrid({
   const [expandedRoomTypes, setExpandedRoomTypes] = useState(new Set());
   const [dragState, setDragState] = useState(null);
   const [previewReservation, setPreviewReservation] = useState(null);
+  const [swapState, setSwapState] = useState(null);
   const [gridConstants, setGridConstants] = useState(GridUtils.getCurrentConstants());
   const [windowWidth, setWindowWidth] = useState(window?.innerWidth || 1200);
   const gridRef = useRef(null);
@@ -133,15 +135,78 @@ export default function TimelineGrid({
           // PURE VERTICAL DRAG: Only change room unit, preserve dates exactly
           const targetRoomUnitId = findTargetRoomUnitFromPosition(relativeY);
           if (targetRoomUnitId) {
-            updatedReservation = {
-              ...dragState.originalReservation,
-              // Preserve original dates exactly - no horizontal movement
-              startDate: dragState.originalReservation.startDate,
-              endDate: dragState.originalReservation.endDate,
-              // Only change room unit
-              roomUnitId: targetRoomUnitId
-            };
-            previewCreated = true;
+            // Check if dragging over another reservation for potential swap (VERTICAL DETECTION)
+            const targetReservation = SwapUtils.findReservationAtPosition(
+              relativeX, relativeY, allReservations, startDate, gridConstants, roomHierarchy, expandedRoomTypes
+            );
+            
+            console.log('Vertical swap detection:', { 
+              targetReservation: targetReservation?.id, 
+              targetRoom: targetRoomUnitId,
+              originalRoom: dragState.originalReservation.roomUnitId,
+              differentRooms: dragState.originalReservation.roomUnitId !== targetRoomUnitId
+            });
+            
+            // Pure vertical swap: trigger if dragging to a room with any reservation
+            if (targetReservation && 
+                targetReservation.id !== dragState.originalReservation.id &&
+                dragState.originalReservation.roomUnitId !== targetRoomUnitId) {
+              // SWAP OPERATION: Check if swap is possible
+              console.log('Swap detection:', {
+                dragged: dragState.originalReservation.bookingName || dragState.originalReservation.id,
+                target: targetReservation.bookingName || targetReservation.id,
+                draggedId: dragState.originalReservation.id,
+                targetId: targetReservation.id
+              });
+              
+              const swapPreview = SwapUtils.getSwapPreview(
+                dragState.originalReservation, 
+                targetReservation, 
+                allReservations
+              );
+              
+              if (swapPreview.canSwap) {
+                // Set swap state for visual feedback
+                setSwapState({
+                  draggedReservation: dragState.originalReservation,
+                  targetReservation: targetReservation,
+                  swapPreview: swapPreview.previewReservations
+                });
+                
+                // Create preview for the dragged reservation in its new position
+                updatedReservation = {
+                  ...swapPreview.previewReservations.draggedPreview,
+                  isSwapPreview: true,
+                  swapType: 'dragged'
+                };
+                previewCreated = true;
+                console.log('Valid swap preview created');
+              } else {
+                // Invalid swap - show conflict
+                console.log('Invalid swap:', swapPreview.reason);
+                updatedReservation = {
+                  ...dragState.originalReservation,
+                  roomUnitId: targetRoomUnitId,
+                  hasSwapConflict: true,
+                  swapConflictReason: swapPreview.reason
+                };
+                previewCreated = true;
+              }
+            } else {
+              // NORMAL MOVE: No target reservation, just move to new room
+              updatedReservation = {
+                ...dragState.originalReservation,
+                // Preserve original dates exactly - no horizontal movement
+                startDate: dragState.originalReservation.startDate,
+                endDate: dragState.originalReservation.endDate,
+                // Only change room unit
+                roomUnitId: targetRoomUnitId
+              };
+              previewCreated = true;
+              
+              // Clear any existing swap state
+              setSwapState(null);
+            }
           }
           break;
             
@@ -420,7 +485,8 @@ export default function TimelineGrid({
         } else {
           console.log('Ignoring minor conflict for resize operation');
         }
-      } else if (previewReservation.hasConflict) {
+      } else if (previewReservation.hasConflict && !previewReservation.isSwapPreview) {
+        // Don't block swap operations due to conflicts - swap validation handles this separately
         console.warn('Cannot complete drop: conflicts detected');
         return;
       }
@@ -431,12 +497,42 @@ export default function TimelineGrid({
       
       switch (dragState.dragType) {
         case 'move-vertical':
-          if (onReservationMove) {
-            onReservationMove(previewReservation);
-            operationSuccessful = true;
-            console.log('Move operation completed');
+          // Check if this is a swap operation
+          if (swapState && swapState.swapPreview && previewReservation.isSwapPreview) {
+            console.log('Attempting swap operation:', {
+              hasCallback: !!onReservationSwap,
+              draggedRes: swapState.draggedReservation?.id,
+              targetRes: swapState.targetReservation?.id
+            });
+            
+            if (onReservationSwap) {
+              try {
+                // Execute swap operation
+                const swapResult = SwapUtils.performSwap(
+                  swapState.draggedReservation, 
+                  swapState.targetReservation
+                );
+                console.log('Calling onReservationSwap with:', swapResult);
+                onReservationSwap(swapResult.swappedReservationA, swapResult.swappedReservationB);
+                operationSuccessful = true;
+                console.log('Swap operation completed successfully');
+              } catch (swapError) {
+                console.error('Error during swap execution:', swapError);
+              }
+            } else {
+              console.error('onReservationSwap handler not available! Parent component must provide this callback.');
+              // Fallback: show an alert to indicate the missing callback
+              alert('Swap functionality requires the onReservationSwap callback to be implemented in the parent component.');
+            }
           } else {
-            console.warn('onReservationMove handler not available');
+            // Normal move operation
+            if (onReservationMove) {
+              onReservationMove(previewReservation);
+              operationSuccessful = true;
+              console.log('Move operation completed');
+            } else {
+              console.warn('onReservationMove handler not available');
+            }
           }
           break;
         case 'resize-horizontal':
@@ -493,6 +589,7 @@ export default function TimelineGrid({
       console.log('Cleaning up drag state');
       setDragState(null);
       setPreviewReservation(null);
+      setSwapState(null); // Clear swap state
     }
   };
 
@@ -524,7 +621,7 @@ export default function TimelineGrid({
   };
 
   /**
-   * Find target room unit based on Y position in grid
+   * Find target room unit based on Y position in grid - improved tolerance
    */
   const findTargetRoomUnitFromPosition = (yPosition) => {
     let accumulatedHeight = 0;
@@ -535,7 +632,12 @@ export default function TimelineGrid({
       
       if (expandedRoomTypes.has(roomType.id) && roomType.units) {
         for (const unit of roomType.units) {
-          if (yPosition >= accumulatedHeight && yPosition < accumulatedHeight + gridConstants.ROW_HEIGHT) {
+          // More tolerant detection - allow some margin for better user experience
+          const rowStart = accumulatedHeight;
+          const rowEnd = accumulatedHeight + gridConstants.ROW_HEIGHT;
+          const tolerance = gridConstants.ROW_HEIGHT * 0.15; // 15% tolerance for margins
+          
+          if (yPosition >= (rowStart - tolerance) && yPosition < (rowEnd + tolerance)) {
             return unit.id;
           }
           accumulatedHeight += gridConstants.ROW_HEIGHT;
@@ -764,9 +866,19 @@ export default function TimelineGrid({
                                     dragState?.dragType === 'resize-horizontal'); // Include mode-based resize
               const hasValidPreview = previewReservation && previewReservation.roomUnitId === roomUnit.id;
               
+              // Check if this is the target reservation in a swap operation
+              const isSwapTarget = swapState && 
+                                swapState.targetReservation && 
+                                swapState.targetReservation.id === reservation.id;
+              
               // Conservative hiding: only hide if being resized AND we have a valid preview
               if (isBeingResized && hasValidPreview) {
                 return null; // Don't render original during resize - preview will show instead
+              }
+              
+              // Hide the original dragged reservation during swap (its preview will show in new position)
+              if (dragState?.reservation?.id === reservation.id && dragState?.dragType === 'move-vertical' && swapState) {
+                return null;
               }
               
               return (
@@ -780,6 +892,7 @@ export default function TimelineGrid({
                   showHandles={!loading}
                   enableSplit={!reservation.isSegment} // Only allow splitting on main reservations
                   isResizeMode={isResizeMode} // Pass mode state to reservation bars
+                  isSwapTarget={isSwapTarget} // Add swap target indicator
                 />
               );
             })}
@@ -792,6 +905,20 @@ export default function TimelineGrid({
               startDate={startDate}
               isPreview={true}
               hasConflict={previewReservation.hasConflict}
+              showHandles={false}
+            />
+          )}
+          
+          {/* Target Reservation Preview (during swap) */}
+          {swapState && swapState.swapPreview && swapState.swapPreview.targetPreview && 
+           swapState.swapPreview.targetPreview.roomUnitId === roomUnit.id && (
+            <ReservationBar
+              key="swap-target-preview"
+              reservation={swapState.swapPreview.targetPreview}
+              startDate={startDate}
+              isPreview={true}
+              isSwapPreview={true}
+              swapType="target"
               showHandles={false}
             />
           )}

@@ -632,6 +632,192 @@ export class ResizeUtils {
 }
 
 /**
+ * Swap utilities for reservation position swapping
+ */
+export class SwapUtils {
+  /**
+   * Check if two reservations can be swapped
+   */
+  static canSwapReservations(reservationA, reservationB, allReservations = []) {
+    // Basic validation checks
+    if (!reservationA || !reservationB || reservationA.id === reservationB.id) {
+      return { canSwap: false, reason: 'Invalid reservations for swap' };
+    }
+
+    // Check if both reservations are in active status
+    if (!StatusUtils.isActiveStatus(reservationA.status) || !StatusUtils.isActiveStatus(reservationB.status)) {
+      return { canSwap: false, reason: 'Cannot swap cancelled or no-show reservations' };
+    }
+
+    // Check if swapped positions would create conflicts
+    const swapValidation = this.validateSwapPositions(reservationA, reservationB, allReservations);
+    if (!swapValidation.isValid) {
+      return { canSwap: false, reason: swapValidation.reason };
+    }
+
+    return { canSwap: true, reason: null };
+  }
+
+  /**
+   * Validate that swapped positions don't create conflicts (room-only swap)
+   */
+  static validateSwapPositions(reservationA, reservationB, allReservations = []) {
+    // Create swapped versions of the reservations (ROOM-ONLY SWAP)
+    const swappedA = {
+      ...reservationA,
+      roomUnitId: reservationB.roomUnitId,
+      // KEEP ORIGINAL DATES - only room changes
+      startDate: reservationA.startDate,
+      endDate: reservationA.endDate
+    };
+
+    const swappedB = {
+      ...reservationB,
+      roomUnitId: reservationA.roomUnitId,
+      // KEEP ORIGINAL DATES - only room changes
+      startDate: reservationB.startDate,
+      endDate: reservationB.endDate
+    };
+
+    // Filter out the original reservations from conflict checking
+    const otherReservations = allReservations.filter(r => 
+      r.id !== reservationA.id && r.id !== reservationB.id
+    );
+
+    // Check if swapped A would conflict with other reservations in its new room
+    const hasConflictA = ConflictUtils.hasConflicts(swappedA, otherReservations);
+    if (hasConflictA) {
+      return { 
+        isValid: false, 
+        reason: `${reservationA.bookingName || 'Reservation A'} would conflict in room ${reservationB.roomUnitId}` 
+      };
+    }
+
+    // Check if swapped B would conflict with other reservations in its new room
+    const hasConflictB = ConflictUtils.hasConflicts(swappedB, otherReservations);
+    if (hasConflictB) {
+      return { 
+        isValid: false, 
+        reason: `${reservationB.bookingName || 'Reservation B'} would conflict in room ${reservationA.roomUnitId}` 
+      };
+    }
+
+    return { isValid: true, reason: null };
+  }
+
+  /**
+   * Perform the actual swap operation (ROOM-ONLY SWAP)
+   */
+  static performSwap(reservationA, reservationB) {
+    const swappedA = {
+      ...reservationA,
+      roomUnitId: reservationB.roomUnitId,
+      // KEEP ORIGINAL DATES - only room changes
+      startDate: reservationA.startDate,
+      endDate: reservationA.endDate
+    };
+
+    const swappedB = {
+      ...reservationB,
+      roomUnitId: reservationA.roomUnitId,
+      // KEEP ORIGINAL DATES - only room changes
+      startDate: reservationB.startDate,
+      endDate: reservationB.endDate
+    };
+
+    return {
+      swappedReservationA: swappedA,
+      swappedReservationB: swappedB
+    };
+  }
+
+  /**
+   * Find reservation at specific coordinates (both room and date must match)
+   */
+  static findReservationAtPosition(x, y, reservations, startDate, gridConstants, roomHierarchy, expandedRoomTypes) {
+    // Calculate which room unit based on Y position
+    const targetRoomUnitId = this.findRoomUnitFromPosition(y, gridConstants, roomHierarchy, expandedRoomTypes);
+    if (!targetRoomUnitId) return null;
+
+    // Calculate target date based on X position
+    const dayOffset = Math.floor(x / gridConstants.CELL_WIDTH);
+    const targetDate = DateUtils.addDays(startDate, dayOffset);
+
+    // Find reservations that match BOTH the room AND the specific date
+    const candidateReservations = reservations.filter(reservation => 
+      reservation.roomUnitId === targetRoomUnitId &&
+      targetDate >= reservation.startDate && 
+      targetDate < reservation.endDate
+    );
+
+    // Return the first matching reservation (there should be only one due to conflict prevention)
+    return candidateReservations.length > 0 ? candidateReservations[0] : null;
+  }
+
+  /**
+   * Find room unit ID from Y position (helper method) - improved tolerance
+   */
+  static findRoomUnitFromPosition(yPosition, gridConstants, roomHierarchy, expandedRoomTypes) {
+    let accumulatedHeight = 0;
+    
+    for (const roomType of roomHierarchy) {
+      // Add room type header height
+      accumulatedHeight += gridConstants.ROW_HEIGHT;
+      
+      if (expandedRoomTypes.has(roomType.id) && roomType.units) {
+        for (const unit of roomType.units) {
+          // More tolerant detection - allow some margin for better user experience
+          const rowStart = accumulatedHeight;
+          const rowEnd = accumulatedHeight + gridConstants.ROW_HEIGHT;
+          const tolerance = gridConstants.ROW_HEIGHT * 0.1; // 10% tolerance
+          
+          if (yPosition >= (rowStart - tolerance) && yPosition < (rowEnd + tolerance)) {
+            return unit.id;
+          }
+          accumulatedHeight += gridConstants.ROW_HEIGHT;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get swap preview data for visual feedback
+   */
+  static getSwapPreview(draggedReservation, targetReservation, allReservations) {
+    const swapValidation = this.canSwapReservations(draggedReservation, targetReservation, allReservations);
+    
+    if (!swapValidation.canSwap) {
+      return {
+        canSwap: false,
+        reason: swapValidation.reason,
+        previewReservations: null
+      };
+    }
+
+    const swapResult = this.performSwap(draggedReservation, targetReservation);
+    
+    return {
+      canSwap: true,
+      reason: null,
+      previewReservations: {
+        draggedPreview: {
+          ...swapResult.swappedReservationA,
+          isSwapPreview: true,
+          swapPartner: targetReservation
+        },
+        targetPreview: {
+          ...swapResult.swappedReservationB,
+          isSwapPreview: true,
+          swapPartner: draggedReservation
+        }
+      }
+    };
+  }
+}
+
+/**
  * Snapping utilities for edge alignment
  */
 export class SnapUtils {
@@ -804,6 +990,7 @@ export default {
   GridUtils,
   ConflictUtils,
   ResizeUtils,
+  SwapUtils,
   SnapUtils,
   KeyboardUtils,
   PerformanceUtils

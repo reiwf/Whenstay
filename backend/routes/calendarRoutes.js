@@ -190,6 +190,65 @@ router.post('/reservation/:reservationId/split', async (req, res) => {
 });
 
 /**
+ * POST /api/calendar/reservations/swap
+ * Swap positions of two reservations
+ * Body: { 
+ *   reservationA: { id, newRoomUnitId, newStartDate, newEndDate },
+ *   reservationB: { id, newRoomUnitId, newStartDate, newEndDate }
+ * }
+ */
+router.post('/reservations/swap', async (req, res) => {
+  try {
+    const { reservationA, reservationB } = req.body;
+
+    // Validate input
+    if (!reservationA || !reservationB) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both reservationA and reservationB are required'
+      });
+    }
+
+    if (!reservationA.id || !reservationB.id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both reservations must have valid IDs'
+      });
+    }
+
+    if (!reservationA.newRoomUnitId || !reservationB.newRoomUnitId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both reservations must specify new room unit IDs'
+      });
+    }
+
+    if (!reservationA.newStartDate || !reservationA.newEndDate || 
+        !reservationB.newStartDate || !reservationB.newEndDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both reservations must specify new start and end dates'
+      });
+    }
+
+    const result = await calendarService.swapReservations(reservationA, reservationB);
+    
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: 'Reservations swapped successfully'
+    });
+  } catch (error) {
+    console.error('Error swapping reservations:', error);
+    res.status(400).json({
+      success: false,
+      error: 'Failed to swap reservations',
+      details: error.message
+    });
+  }
+});
+
+/**
  * POST /api/calendar/allocate
  * Smart gap-fill allocation across multiple rooms
  * Body: { guestName, guestEmail?, checkInDate, checkOutDate, roomUnitIds[], allowSwaps?, numGuests? }
