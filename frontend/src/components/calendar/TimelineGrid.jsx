@@ -28,7 +28,9 @@ export default function TimelineGrid({
   const [previewReservation, setPreviewReservation] = useState(null);
   const [swapState, setSwapState] = useState(null);
   const [gridConstants, setGridConstants] = useState(GridUtils.getCurrentConstants());
+  const [lockedGridConstants, setLockedGridConstants] = useState(null); // Locked constants during drag
   const [windowWidth, setWindowWidth] = useState(window?.innerWidth || 1200);
+  const [roomPositionMap, setRoomPositionMap] = useState(new Map()); // Cached room positions
   const gridRef = useRef(null);
 
   // Handle window resize for responsive behavior
@@ -91,12 +93,19 @@ export default function TimelineGrid({
    * Handle HTML5 drag start from ReservationBar
    */
   const handleDragStart = (dragData) => {
+    // Lock grid constants during drag to prevent misalignment from responsive changes
+    const currentConstants = GridUtils.getCurrentConstants(windowWidth);
+    setLockedGridConstants(currentConstants);
+    
+    console.log('Drag started - locking grid constants:', currentConstants);
+    
     setDragState({
       reservation: dragData.reservation,
       dragType: dragData.dragType,
       startX: dragData.startX,
       startY: dragData.startY,
-      originalReservation: { ...dragData.reservation }
+      originalReservation: { ...dragData.reservation },
+      lockedConstants: currentConstants // Store with drag state for reference
     });
   };
 
@@ -116,8 +125,11 @@ export default function TimelineGrid({
     }
 
     try {
-      // Calculate position relative to grid using responsive sidebar width
-      const relativeX = event.clientX - rect.left - gridConstants.SIDEBAR_WIDTH;
+      // Use locked grid constants during drag to prevent misalignment
+      const activeConstants = lockedGridConstants || gridConstants;
+      
+      // Calculate position relative to grid using locked sidebar width
+      const relativeX = event.clientX - rect.left - activeConstants.SIDEBAR_WIDTH;
       const relativeY = event.clientY - rect.top; // No mode toggle header anymore
 
       // Debug logging for resize operations
@@ -213,7 +225,7 @@ export default function TimelineGrid({
         case 'resize-horizontal':
           // MODE-BASED RESIZE: Full reservation bar drag for date adjustment
           try {
-            const dayOffset = Math.round(relativeX / gridConstants.CELL_WIDTH);
+            const dayOffset = Math.round(relativeX / activeConstants.CELL_WIDTH);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
             
             console.log(`Mode-based resize: dayOffset=${dayOffset}, targetDate=${targetDate}`);
@@ -221,8 +233,8 @@ export default function TimelineGrid({
             // Calculate reservation position to determine drag direction
             const reservationDayOffset = DateUtils.daysBetween(startDate, dragState.originalReservation.startDate);
             const reservationDuration = DateUtils.daysBetween(dragState.originalReservation.startDate, dragState.originalReservation.endDate);
-            const reservationLeftPosition = reservationDayOffset * gridConstants.CELL_WIDTH;
-            const reservationWidth = reservationDuration * gridConstants.CELL_WIDTH;
+            const reservationLeftPosition = reservationDayOffset * activeConstants.CELL_WIDTH;
+            const reservationWidth = reservationDuration * activeConstants.CELL_WIDTH;
             
             // For full bar resize, determine which edge to move based on drag direction
             const dragDirection = relativeX > (reservationLeftPosition + reservationWidth / 2) ? 'resize-right' : 'resize-left';
@@ -286,7 +298,7 @@ export default function TimelineGrid({
         case 'resize-right':
           try {
             // PURE HORIZONTAL DRAG: Only change dates, preserve room unit exactly
-            const dayOffset = Math.round(relativeX / GridUtils.CONSTANTS.CELL_WIDTH);
+            const dayOffset = Math.round(relativeX / activeConstants.CELL_WIDTH);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
             
             console.log(`Resize calculation: dayOffset=${dayOffset}, targetDate=${targetDate}`);
@@ -362,7 +374,7 @@ export default function TimelineGrid({
         case 'split':
           // Split operation: calculate both room and date
           const splitTargetRoomUnitId = findTargetRoomUnitFromPosition(relativeY);
-          const splitDayOffset = Math.round(relativeX / GridUtils.CONSTANTS.CELL_WIDTH);
+          const splitDayOffset = Math.round(relativeX / activeConstants.CELL_WIDTH);
           const splitTargetDate = DateUtils.addDays(startDate, splitDayOffset);
           
           if (splitTargetDate > dragState.originalReservation.startDate && 
@@ -614,37 +626,55 @@ export default function TimelineGrid({
    */
   const handleDragEnd = (updatedReservation, dragType, isFinal) => {
     if (isFinal) {
+      // Unlock grid constants when drag completes
+      console.log('Drag ended - unlocking grid constants');
+      setLockedGridConstants(null);
+      
       // Clean up drag state when drag operation completes
       setDragState(null);
       setPreviewReservation(null);
+      setSwapState(null); // Also clear swap state
     }
   };
 
   /**
-   * Find target room unit based on Y position in grid - improved tolerance
+   * Find target room unit based on Y position in grid - stabilized with locked constants
    */
   const findTargetRoomUnitFromPosition = (yPosition) => {
+    // Use locked grid constants during drag for consistency
+    const activeConstants = lockedGridConstants || gridConstants;
     let accumulatedHeight = 0;
     
+    console.log('Finding room from position:', yPosition, 'with constants:', activeConstants);
+    
     for (const roomType of roomHierarchy) {
-      // Add room type header height using responsive constants
-      accumulatedHeight += gridConstants.ROW_HEIGHT;
+      // Add room type header height using stable constants
+      // Use actual rendered header height for more accurate positioning
+      const headerEl = document.querySelector(
+        `[data-room-type-header="${roomType.id}"]`
+      );
+      const headerHeight = headerEl?.offsetHeight || gridConstants.ROW_HEIGHT;
+      accumulatedHeight += headerHeight;
       
       if (expandedRoomTypes.has(roomType.id) && roomType.units) {
         for (const unit of roomType.units) {
-          // More tolerant detection - allow some margin for better user experience
+          // More precise detection with locked constants
           const rowStart = accumulatedHeight;
-          const rowEnd = accumulatedHeight + gridConstants.ROW_HEIGHT;
-          const tolerance = gridConstants.ROW_HEIGHT * 0.15; // 15% tolerance for margins
+          const rowEnd = accumulatedHeight + activeConstants.ROW_HEIGHT;
+          const tolerance = activeConstants.ROW_HEIGHT * 0.1; // Reduced tolerance for more accuracy
+          
+          console.log(`Checking unit ${unit.number}: rowStart=${rowStart}, rowEnd=${rowEnd}, tolerance=${tolerance}`);
           
           if (yPosition >= (rowStart - tolerance) && yPosition < (rowEnd + tolerance)) {
+            console.log(`Found target room: ${unit.id} (${unit.number})`);
             return unit.id;
           }
-          accumulatedHeight += gridConstants.ROW_HEIGHT;
+          accumulatedHeight += activeConstants.ROW_HEIGHT;
         }
       }
     }
     
+    console.log('No target room found for position:', yPosition);
     return null;
   };
 
@@ -737,13 +767,16 @@ export default function TimelineGrid({
       <div
         key={`roomtype-${roomType.id}`}
         className="bg-gradient-to-r from-gray-100 to-gray-50 border-b border-gray-200 sticky left-0 z-10 shadow-sm"
+        style={{ height: `${gridConstants.ROW_HEIGHT}px` }}
+        data-room-type-header={roomType.id}
       >
         <button
           type="button"
           onClick={() => toggleRoomType(roomType.id)}
-          className="w-full flex items-center justify-between px-3 md:px-4 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors duration-150"
+          className="w-full h-full flex items-center justify-between px-3 md:px-4 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors duration-150"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${roomType.name} room type with ${unitCount} unit${unitCount !== 1 ? 's' : ''}`}
+          style={{ height: `${gridConstants.ROW_HEIGHT}px` }}
         >
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isExpanded ? (

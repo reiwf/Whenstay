@@ -762,7 +762,12 @@ export class SwapUtils {
     
     for (const roomType of roomHierarchy) {
       // Add room type header height
-      accumulatedHeight += gridConstants.ROW_HEIGHT;
+      // Use actual rendered header height when available
+      const headerEl = document.querySelector(
+        `[data-room-type-header="${roomType.id}"]`
+      );
+      const headerHeight = headerEl?.offsetHeight || gridConstants.ROW_HEIGHT;
+      accumulatedHeight += headerHeight;
       
       if (expandedRoomTypes.has(roomType.id) && roomType.units) {
         for (const unit of roomType.units) {

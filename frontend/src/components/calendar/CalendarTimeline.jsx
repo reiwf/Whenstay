@@ -120,22 +120,30 @@ export default function CalendarTimeline({
    */
   const handleReservationMove = async (reservation) => {
     try {
-      setLoading(true);
-
       await api.put(`/calendar/reservation/${reservation.id}/move`, {
         newRoomUnitId: reservation.roomUnitId,
         newStartDate: reservation.startDate,
         newEndDate: reservation.endDate
       });
 
-      // Refresh timeline data
-      await loadTimelineData();
+      // Update the local state optimistically instead of full refresh
+      setTimelineData(prevData => {
+        if (!prevData) return prevData;
+        
+        const updatedReservations = prevData.reservations.map(res => 
+          res.id === reservation.id 
+            ? { ...res, roomUnitId: reservation.roomUnitId, startDate: reservation.startDate, endDate: reservation.endDate }
+            : res
+        );
+        
+        return { ...prevData, reservations: updatedReservations };
+      });
       
     } catch (error) {
       console.error('Error moving reservation:', error);
       alert(`Failed to move reservation: ${error.response?.data?.details || error.message}`);
-    } finally {
-      setLoading(false);
+      // Only refresh on error to restore correct state
+      await loadTimelineData();
     }
   };
 
@@ -144,25 +152,37 @@ export default function CalendarTimeline({
    */
   const handleReservationResize = async (reservation, resizeType) => {
     try {
-      setLoading(true);
-
       const updateData = {};
       if (resizeType === 'resize-left') {
         updateData.newStartDate = reservation.startDate;
       } else if (resizeType === 'resize-right') {
         updateData.newEndDate = reservation.endDate;
+      } else if (resizeType === 'resize-horizontal') {
+        // Mode-based resize - update both dates
+        updateData.newStartDate = reservation.startDate;
+        updateData.newEndDate = reservation.endDate;
       }
 
       await api.put(`/calendar/reservation/${reservation.id}/move`, updateData);
 
-      // Refresh timeline data
-      await loadTimelineData();
+      // Update the local state optimistically instead of full refresh
+      setTimelineData(prevData => {
+        if (!prevData) return prevData;
+        
+        const updatedReservations = prevData.reservations.map(res => 
+          res.id === reservation.id 
+            ? { ...res, startDate: reservation.startDate, endDate: reservation.endDate }
+            : res
+        );
+        
+        return { ...prevData, reservations: updatedReservations };
+      });
       
     } catch (error) {
       console.error('Error resizing reservation:', error);
       alert(`Failed to resize reservation: ${error.response?.data?.details || error.message}`);
-    } finally {
-      setLoading(false);
+      // Only refresh on error to restore correct state
+      await loadTimelineData();
     }
   };
 
@@ -171,21 +191,17 @@ export default function CalendarTimeline({
    */
   const handleReservationSplit = async (reservation) => {
     try {
-      setLoading(true);
-
       await api.post(`/calendar/reservation/${reservation.id}/split`, {
         splitDate: reservation.splitDate,
         newRoomUnitId: reservation.roomUnitId // Room for second segment
       });
 
-      // Refresh timeline data
+      // Refresh timeline data for split operations (complex operation that creates new reservations)
       await loadTimelineData();
       
     } catch (error) {
       console.error('Error splitting reservation:', error);
       alert(`Failed to split reservation: ${error.response?.data?.details || error.message}`);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -194,8 +210,6 @@ export default function CalendarTimeline({
    */
   const handleReservationSwap = async (swappedReservationA, swappedReservationB) => {
     try {
-      setLoading(true);
-
       console.log('Executing swap via API:', {
         reservationA: swappedReservationA.id,
         reservationB: swappedReservationB.id
@@ -219,15 +233,29 @@ export default function CalendarTimeline({
         }
       });
 
-      // Refresh timeline data
-      await loadTimelineData();
+      // Update local state optimistically for both swapped reservations
+      setTimelineData(prevData => {
+        if (!prevData) return prevData;
+        
+        const updatedReservations = prevData.reservations.map(res => {
+          if (res.id === swappedReservationA.id) {
+            return { ...res, roomUnitId: swappedReservationA.roomUnitId };
+          } else if (res.id === swappedReservationB.id) {
+            return { ...res, roomUnitId: swappedReservationB.roomUnitId };
+          }
+          return res;
+        });
+        
+        return { ...prevData, reservations: updatedReservations };
+      });
+      
       console.log('Swap operation completed successfully');
       
     } catch (error) {
       console.error('Error swapping reservations:', error);
       alert(`Failed to swap reservations: ${error.response?.data?.details || error.message}`);
-    } finally {
-      setLoading(false);
+      // Only refresh on error to restore correct state
+      await loadTimelineData();
     }
   };
 
