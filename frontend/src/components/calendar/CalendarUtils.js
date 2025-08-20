@@ -709,20 +709,78 @@ export class SwapUtils {
    * Perform the actual swap operation (ROOM-ONLY SWAP)
    */
   static performSwap(reservationA, reservationB) {
+    // Define safe core fields that are guaranteed to exist in the database
+    const getSafeReservationFields = (reservation) => ({
+      id: reservation.id,
+      beds24_booking_id: reservation.beds24_booking_id,
+      booking_name: reservation.booking_name,
+      booking_email: reservation.booking_email,
+      booking_phone: reservation.booking_phone,
+      booking_lastname: reservation.booking_lastname,
+      check_in_date: reservation.check_in_date,
+      check_out_date: reservation.check_out_date,
+      num_guests: reservation.num_guests,
+      num_adults: reservation.num_adults,
+      num_children: reservation.num_children,
+      total_amount: reservation.total_amount,
+      currency: reservation.currency,
+      status: reservation.status,
+      booking_source: reservation.booking_source,
+      special_requests: reservation.special_requests,
+      property_id: reservation.property_id,
+      room_type_id: reservation.room_type_id,
+      room_unit_id: reservation.room_unit_id,
+      
+      // Additional safe fields if they exist
+      ...(reservation.lang && { lang: reservation.lang }),
+      ...(reservation.apiReference && { apiReference: reservation.apiReference }),
+      ...(reservation.commission && { commission: reservation.commission }),
+      ...(reservation.rateDescription && { rateDescription: reservation.rateDescription }),
+      ...(reservation.bookingTime && { bookingTime: reservation.bookingTime }),
+      ...(reservation.timeStamp && { timeStamp: reservation.timeStamp }),
+      ...(reservation.comments && { comments: reservation.comments }),
+      ...(reservation.created_at && { created_at: reservation.created_at }),
+      ...(reservation.updated_at && { updated_at: reservation.updated_at }),
+      
+      // Frontend-only fields for display purposes
+      ...(reservation.guest_name && { guest_name: reservation.guest_name }),
+      ...(reservation.guest_email && { guest_email: reservation.guest_email }),
+      ...(reservation.guest_phone && { guest_phone: reservation.guest_phone }),
+      ...(reservation.property_name && { property_name: reservation.property_name }),
+      ...(reservation.room_type_name && { room_type_name: reservation.room_type_name }),
+      ...(reservation.room_number && { room_number: reservation.room_number }),
+      ...(reservation.room_name && { room_name: reservation.room_name }),
+      ...(reservation.unit_number && { unit_number: reservation.unit_number })
+    });
+
     const swappedA = {
-      ...reservationA,
+      ...getSafeReservationFields(reservationA),
       roomUnitId: reservationB.roomUnitId,
+      room_unit_id: reservationB.roomUnitId, // Ensure both camelCase and snake_case are set
       // KEEP ORIGINAL DATES - only room changes
       startDate: reservationA.startDate,
-      endDate: reservationA.endDate
+      endDate: reservationA.endDate,
+      check_in_date: reservationA.check_in_date,
+      check_out_date: reservationA.check_out_date,
+      // Update display fields for the new room
+      room_number: reservationB.room_number,
+      room_name: reservationB.room_name,
+      unit_number: reservationB.unit_number
     };
 
     const swappedB = {
-      ...reservationB,
+      ...getSafeReservationFields(reservationB),
       roomUnitId: reservationA.roomUnitId,
+      room_unit_id: reservationA.roomUnitId, // Ensure both camelCase and snake_case are set
       // KEEP ORIGINAL DATES - only room changes
       startDate: reservationB.startDate,
-      endDate: reservationB.endDate
+      endDate: reservationB.endDate,
+      check_in_date: reservationB.check_in_date,
+      check_out_date: reservationB.check_out_date,
+      // Update display fields for the new room
+      room_number: reservationA.room_number,
+      room_name: reservationA.room_name,
+      unit_number: reservationA.unit_number
     };
 
     return {

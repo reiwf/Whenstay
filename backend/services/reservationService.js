@@ -363,13 +363,15 @@ class ReservationService {
   }
 
 
-  // Check if guest check-in is completed by checking checkin_submitted_at field
+  // Check if guest check-in is completed by checking checkin_submitted_at field in reservation_guests
   async getGuestCheckinByReservationId(reservationId) {
     try {
+      // Get primary guest from reservation_guests table
       const { data, error } = await supabaseAdmin
-        .from('reservations')
+        .from('reservation_guests')
         .select('checkin_submitted_at, admin_verified, guest_firstname, guest_lastname, passport_url')
-        .eq('id', reservationId)
+        .eq('reservation_id', reservationId)
+        .eq('is_primary_guest', true)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -398,9 +400,29 @@ class ReservationService {
   // Get all completed check-ins for admin dashboard
   async getCompletedCheckins(limit = 50, offset = 0) {
     try {
+      // Query reservation_guests table for completed check-ins, then join with reservations
       const { data, error } = await supabaseAdmin
-        .from('reservations')
-        .select('*')
+        .from('reservation_guests')
+        .select(`
+          *,
+          reservations (
+            id,
+            beds24_booking_id,
+            booking_name,
+            booking_lastname,
+            booking_email,
+            booking_phone,
+            check_in_date,
+            check_out_date,
+            num_guests,
+            status,
+            property_id,
+            room_unit_id,
+            total_amount,
+            currency,
+            special_requests
+          )
+        `)
         .not('checkin_submitted_at', 'is', null)
         .order('checkin_submitted_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -410,7 +432,30 @@ class ReservationService {
         throw new Error('Failed to fetch completed check-ins');
       }
 
-      return data;
+      // Transform data to maintain backward compatibility
+      const transformedData = (data || []).map(guest => ({
+        ...guest.reservations,
+        // Guest information from reservation_guests table
+        guest_firstname: guest.guest_firstname,
+        guest_lastname: guest.guest_lastname,
+        guest_contact: guest.guest_contact,
+        guest_mail: guest.guest_mail,
+        guest_address: guest.guest_address,
+        estimated_checkin_time: guest.estimated_checkin_time,
+        travel_purpose: guest.travel_purpose,
+        emergency_contact_name: guest.emergency_contact_name,
+        emergency_contact_phone: guest.emergency_contact_phone,
+        passport_url: guest.passport_url,
+        agreement_accepted: guest.agreement_accepted,
+        checkin_submitted_at: guest.checkin_submitted_at,
+        admin_verified: guest.admin_verified,
+        verified_at: guest.verified_at,
+        verified_by: guest.verified_by,
+        guest_number: guest.guest_number,
+        is_primary_guest: guest.is_primary_guest
+      }));
+
+      return transformedData;
     } catch (error) {
       console.error('Database error fetching completed check-ins:', error);
       throw error;
@@ -986,19 +1031,53 @@ class ReservationService {
   }
 
 
-  // Update admin verification status
+  // Update admin verification status for primary guest
   async updateAdminVerification(reservationId, verified) {
     try {
+      // Update admin_verified for the primary guest in reservation_guests table
+      const updateData = {
+        admin_verified: verified,
+        verified_at: verified ? new Date().toISOString() : null
+      };
+
       const { data, error } = await supabaseAdmin
-        .from('reservations')
-        .update({ admin_verified: verified })
-        .eq('id', reservationId)
+        .from('reservation_guests')
+        .update(updateData)
+        .eq('reservation_id', reservationId)
+        .eq('is_primary_guest', true)
         .select()
         .single();
 
       if (error) {
         console.error('Error updating admin verification:', error);
         throw new Error('Failed to update admin verification');
+      }
+
+      // If verification successful, also return the reservation data for backward compatibility
+      if (data) {
+        const { data: reservationData, error: resError } = await supabaseAdmin
+          .from('reservations')
+          .select('*')
+          .eq('id', reservationId)
+          .single();
+
+        if (resError) {
+          console.error('Error fetching reservation after verification update:', resError);
+          // Return guest data if reservation fetch fails
+          return {
+            ...data,
+            reservation_id: reservationId,
+            admin_verified: verified
+          };
+        }
+
+        // Return reservation data with guest verification info for backward compatibility
+        return {
+          ...reservationData,
+          admin_verified: verified,
+          verified_at: data.verified_at,
+          guest_verification_updated: true
+        };
       }
 
       return data;
