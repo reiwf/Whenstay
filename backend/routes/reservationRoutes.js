@@ -227,7 +227,7 @@ router.get('/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Update reservation
+// Update reservation (booking info only - guest info uses separate endpoints)
 router.put('/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -235,50 +235,45 @@ router.put('/:id', adminAuth, async (req, res) => {
 
     console.log('PUT /reservations/:id - Received data:', { id, updateData });
 
-    const { data: existingReservation, error: fetchError } = await require('../config/supabase').supabaseAdmin
-      .from('reservations')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError) {
-      console.error('Error fetching existing reservation:', fetchError);
-      return res.status(404).json({ error: 'Reservation not found', details: fetchError.message });
-    }
-
+    // Check if reservation exists
+    const existingReservation = await reservationService.getReservationFullDetails(id);
     if (!existingReservation) {
-      console.error('Reservation not found for ID:', id);
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
     console.log('Existing reservation found:', existingReservation.id);
 
+    // Prepare booking information updates (non-guest fields only)
     const reservationUpdateData = {};
 
-    if (updateData.bookingName !== undefined) reservationUpdateData.booking_name = updateData.bookingName;
-    if (updateData.bookingEmail !== undefined) reservationUpdateData.booking_email = updateData.bookingEmail;
-    if (updateData.bookingPhone !== undefined) reservationUpdateData.booking_phone = updateData.bookingPhone;
-    if (updateData.bookingLastname !== undefined) reservationUpdateData.booking_lastname = updateData.bookingLastname;
+    // Booking contact information (kept in reservations table)
+    if (updateData.bookingName !== undefined) reservationUpdateData.bookingName = updateData.bookingName;
+    if (updateData.bookingEmail !== undefined) reservationUpdateData.bookingEmail = updateData.bookingEmail;
+    if (updateData.bookingPhone !== undefined) reservationUpdateData.bookingPhone = updateData.bookingPhone;
+    if (updateData.bookingLastname !== undefined) reservationUpdateData.bookingLastname = updateData.bookingLastname;
 
-    if (updateData.guestName !== undefined) reservationUpdateData.booking_name = updateData.guestName;
-    if (updateData.guestEmail !== undefined) reservationUpdateData.booking_email = updateData.guestEmail;
-    if (updateData.phoneNumber !== undefined) reservationUpdateData.booking_phone = updateData.phoneNumber;
+    // Legacy field mappings for backward compatibility
+    if (updateData.guestName !== undefined) reservationUpdateData.bookingName = updateData.guestName;
+    if (updateData.guestEmail !== undefined) reservationUpdateData.bookingEmail = updateData.guestEmail;
+    if (updateData.phoneNumber !== undefined) reservationUpdateData.bookingPhone = updateData.phoneNumber;
 
-    if (updateData.checkInDate !== undefined) reservationUpdateData.check_in_date = updateData.checkInDate;
-    if (updateData.checkOutDate !== undefined) reservationUpdateData.check_out_date = updateData.checkOutDate;
-    if (updateData.numGuests !== undefined) reservationUpdateData.num_guests = updateData.numGuests;
-    if (updateData.numAdults !== undefined) reservationUpdateData.num_adults = updateData.numAdults;
-    if (updateData.numChildren !== undefined) reservationUpdateData.num_children = updateData.numChildren;
-    if (updateData.totalAmount !== undefined) reservationUpdateData.total_amount = updateData.totalAmount;
+    // Reservation details
+    if (updateData.checkInDate !== undefined) reservationUpdateData.checkInDate = updateData.checkInDate;
+    if (updateData.checkOutDate !== undefined) reservationUpdateData.checkOutDate = updateData.checkOutDate;
+    if (updateData.numGuests !== undefined) reservationUpdateData.numGuests = updateData.numGuests;
+    if (updateData.numAdults !== undefined) reservationUpdateData.numAdults = updateData.numAdults;
+    if (updateData.numChildren !== undefined) reservationUpdateData.numChildren = updateData.numChildren;
+    if (updateData.totalAmount !== undefined) reservationUpdateData.totalAmount = updateData.totalAmount;
     if (updateData.price !== undefined) reservationUpdateData.price = updateData.price;
     if (updateData.commission !== undefined) reservationUpdateData.commission = updateData.commission;
     if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
     if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
-    if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24_booking_id = updateData.beds24BookingId;
-    if (updateData.specialRequests !== undefined) reservationUpdateData.special_requests = updateData.specialRequests;
-    if (updateData.bookingSource !== undefined) reservationUpdateData.booking_source = updateData.bookingSource;
+    if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24BookingId = updateData.beds24BookingId;
+    if (updateData.specialRequests !== undefined) reservationUpdateData.specialRequests = updateData.specialRequests;
+    if (updateData.bookingSource !== undefined) reservationUpdateData.bookingSource = updateData.bookingSource;
     if (updateData.comments !== undefined) reservationUpdateData.comments = updateData.comments;
 
+    // Beds24 specific fields
     if (updateData.apiReference !== undefined) reservationUpdateData.apiReference = updateData.apiReference;
     if (updateData.rateDescription !== undefined) reservationUpdateData.rateDescription = updateData.rateDescription;
     if (updateData.apiMessage !== undefined) reservationUpdateData.apiMessage = updateData.apiMessage;
@@ -286,42 +281,18 @@ router.put('/:id', adminAuth, async (req, res) => {
     if (updateData.timeStamp !== undefined) reservationUpdateData.timeStamp = updateData.timeStamp;
     if (updateData.lang !== undefined) reservationUpdateData.lang = updateData.lang;
 
-    if (updateData.propertyId !== undefined) reservationUpdateData.property_id = updateData.propertyId;
-    if (updateData.roomTypeId !== undefined) reservationUpdateData.room_type_id = updateData.roomTypeId;
-    if (updateData.roomUnitId !== undefined) reservationUpdateData.room_unit_id = updateData.roomUnitId;
+    // Room assignment
+    if (updateData.propertyId !== undefined) reservationUpdateData.propertyId = updateData.propertyId;
+    if (updateData.roomTypeId !== undefined) reservationUpdateData.roomTypeId = updateData.roomTypeId;
+    if (updateData.roomUnitId !== undefined) reservationUpdateData.roomUnitId = updateData.roomUnitId;
 
-    if (updateData.guestFirstname !== undefined) reservationUpdateData.guest_firstname = updateData.guestFirstname;
-    if (updateData.guestLastname !== undefined) reservationUpdateData.guest_lastname = updateData.guestLastname;
-    if (updateData.guestMail !== undefined) reservationUpdateData.guest_mail = updateData.guestMail;
-    if (updateData.guestPersonalEmail !== undefined) reservationUpdateData.guest_mail = updateData.guestPersonalEmail;
-    if (updateData.guestContact !== undefined) reservationUpdateData.guest_contact = updateData.guestContact;
-    if (updateData.guestAddress !== undefined) reservationUpdateData.guest_address = updateData.guestAddress;
-    if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimated_checkin_time = updateData.estimatedCheckinTime;
-    if (updateData.travelPurpose !== undefined) reservationUpdateData.travel_purpose = updateData.travelPurpose;
-    if (updateData.emergencyContactName !== undefined) reservationUpdateData.emergency_contact_name = updateData.emergencyContactName;
-    if (updateData.emergencyContactPhone !== undefined) reservationUpdateData.emergency_contact_phone = updateData.emergencyContactPhone;
-    if (updateData.passportUrl !== undefined) reservationUpdateData.passport_url = updateData.passportUrl;
-    if (updateData.agreementAccepted !== undefined) reservationUpdateData.agreement_accepted = updateData.agreementAccepted;
-    if (updateData.adminVerified !== undefined) reservationUpdateData.admin_verified = updateData.adminVerified;
-    if (updateData.accessRead !== undefined) reservationUpdateData.access_read = updateData.accessRead;
+    // Access read flag (kept in reservations table)
+    if (updateData.accessRead !== undefined) reservationUpdateData.accessRead = updateData.accessRead;
 
-    console.log('Mapped update data:', reservationUpdateData);
+    console.log('Mapped reservation update data:', reservationUpdateData);
 
-    const { data: updatedReservation, error: updateError } = await require('../config/supabase').supabaseAdmin
-      .from('reservations')
-      .update(reservationUpdateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error('Supabase update error:', updateError);
-      return res.status(500).json({
-        error: 'Failed to update reservation',
-        details: updateError.message,
-        code: updateError.code
-      });
-    }
+    // Update reservation using service
+    const updatedReservation = await reservationService.updateReservation(id, reservationUpdateData);
 
     console.log('Reservation updated successfully:', updatedReservation.id);
 
@@ -333,6 +304,124 @@ router.put('/:id', adminAuth, async (req, res) => {
     console.error('Error updating reservation:', error);
     res.status(500).json({
       error: 'Failed to update reservation',
+      details: error.message
+    });
+  }
+});
+
+// Create or update guest information
+router.put('/:id/guests/:guestNumber', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, guestNumber } = req.params;
+    const guestInfo = req.body;
+
+    console.log('PUT /reservations/:id/guests/:guestNumber - Received data:', { reservationId, guestNumber, guestInfo });
+
+    // Validate guest number
+    const guestNum = parseInt(guestNumber);
+    if (isNaN(guestNum) || guestNum < 1) {
+      return res.status(400).json({ error: 'Invalid guest number. Must be a positive integer.' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Validate guest number against num_guests
+    if (guestNum > (reservation.num_guests || 1)) {
+      return res.status(400).json({ 
+        error: `Guest number ${guestNum} exceeds reservation capacity of ${reservation.num_guests || 1} guests` 
+      });
+    }
+
+    // Create or update guest using new service method
+    const guestData = await reservationService.createOrUpdateGuest(reservationId, guestNum, guestInfo);
+
+    // Get updated completion status
+    const completionStatus = await reservationService.validateAllGuestsComplete(reservationId);
+
+    res.status(200).json({
+      message: 'Guest information updated successfully',
+      data: {
+        guest: guestData,
+        completion: completionStatus
+      }
+    });
+  } catch (error) {
+    console.error('Error updating guest information:', error);
+    res.status(500).json({
+      error: 'Failed to update guest information',
+      details: error.message
+    });
+  }
+});
+
+// Get all guests for a reservation
+router.get('/:id/guests', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId } = req.params;
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get all guests for this reservation
+    const guests = await reservationService.getReservationGuests(reservationId);
+    
+    // Get completion status
+    const completionStatus = await reservationService.validateAllGuestsComplete(reservationId);
+
+    res.status(200).json({
+      message: 'Guests retrieved successfully',
+      data: {
+        guests,
+        completion: completionStatus,
+        reservation: {
+          id: reservation.id,
+          booking_name: reservation.booking_name,
+          num_guests: reservation.num_guests
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching guests:', error);
+    res.status(500).json({
+      error: 'Failed to fetch guests',
+      details: error.message
+    });
+  }
+});
+
+// Get specific guest by number
+router.get('/:id/guests/:guestNumber', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, guestNumber } = req.params;
+
+    // Validate guest number
+    const guestNum = parseInt(guestNumber);
+    if (isNaN(guestNum) || guestNum < 1) {
+      return res.status(400).json({ error: 'Invalid guest number. Must be a positive integer.' });
+    }
+
+    // Get specific guest
+    const guest = await reservationService.getGuestByNumber(reservationId, guestNum);
+    
+    if (!guest) {
+      return res.status(404).json({ error: 'Guest not found' });
+    }
+
+    res.status(200).json({
+      message: 'Guest retrieved successfully',
+      data: { guest }
+    });
+  } catch (error) {
+    console.error('Error fetching guest:', error);
+    res.status(500).json({
+      error: 'Failed to fetch guest',
       details: error.message
     });
   }

@@ -267,7 +267,7 @@ export default function TimePicker({
             style={{
                 position: "absolute",
                 zIndex: 50,
-                top: "calc(100% + 6px)",
+                bottom: "calc(100% + 6px)",
                 left: 0,
                 width: "100%",
                 maxHeight: 260,

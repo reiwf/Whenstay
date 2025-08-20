@@ -182,10 +182,13 @@ class ReservationService {
     }
   }
 
-  // Update reservation with guest information
-  async updateReservationGuestInfo(reservationId, guestInfo) {
+  // Create or update guest information (replaces updateReservationGuestInfo)
+  async createOrUpdateGuest(reservationId, guestNumber, guestInfo) {
     try {
-      const updateData = {
+      const guestData = {
+        reservation_id: reservationId,
+        guest_number: guestNumber,
+        is_primary_guest: guestNumber === 1,
         guest_firstname: guestInfo.firstName || null,
         guest_lastname: guestInfo.lastName || null,
         guest_mail: guestInfo.personalEmail || null,
@@ -201,34 +204,160 @@ class ReservationService {
       };
 
       // Convert empty strings to null for proper database handling
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === '' || updateData[key] === undefined) {
-          updateData[key] = null;
+      Object.keys(guestData).forEach(key => {
+        if (guestData[key] === '' || guestData[key] === undefined) {
+          guestData[key] = null;
         }
       });
 
       // Ensure boolean fields are properly handled
-      if (typeof updateData.agreement_accepted === 'string') {
-        updateData.agreement_accepted = updateData.agreement_accepted === 'true';
+      if (typeof guestData.agreement_accepted === 'string') {
+        guestData.agreement_accepted = guestData.agreement_accepted === 'true';
       }
 
-      console.log('Updating reservation with data:', updateData);
+      console.log('Creating/updating guest data:', guestData);
 
+      // Use upsert to create or update guest record
       const { data, error } = await supabaseAdmin
-        .from('reservations')
-        .update(updateData)
-        .eq('id', reservationId)
+        .from('reservation_guests')
+        .upsert(guestData, {
+          onConflict: 'reservation_id,guest_number',
+          ignoreDuplicates: false
+        })
         .select()
         .single();
 
       if (error) {
-        console.error('Supabase update error:', error);
-        throw new Error(`Failed to update reservation guest information: ${error.message}`);
+        console.error('Supabase upsert error:', error);
+        throw new Error(`Failed to create/update guest information: ${error.message}`);
       }
 
       return data;
     } catch (error) {
-      console.error('Database error updating reservation guest info:', error);
+      console.error('Database error creating/updating guest info:', error);
+      throw error;
+    }
+  }
+
+  // Legacy method for backward compatibility
+  async updateReservationGuestInfo(reservationId, guestInfo) {
+    console.warn('updateReservationGuestInfo is deprecated. Use createOrUpdateGuest instead.');
+    return this.createOrUpdateGuest(reservationId, 1, guestInfo);
+  }
+
+  // Get all guests for a reservation
+  async getReservationGuests(reservationId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservation_guests')
+        .select('*')
+        .eq('reservation_id', reservationId)
+        .order('guest_number', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching reservation guests:', error);
+        throw new Error('Failed to fetch reservation guests');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching reservation guests:', error);
+      throw error;
+    }
+  }
+
+  // Get specific guest by number
+  async getGuestByNumber(reservationId, guestNumber) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservation_guests')
+        .select('*')
+        .eq('reservation_id', reservationId)
+        .eq('guest_number', guestNumber)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error fetching guest by number:', error);
+        throw new Error('Failed to fetch guest information');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error fetching guest by number:', error);
+      throw error;
+    }
+  }
+
+  // Create placeholder guests for multi-guest reservations
+  async createPlaceholderGuests(reservationId, numGuests) {
+    try {
+      const placeholders = [];
+      
+      for (let i = 1; i <= numGuests; i++) {
+        const placeholderData = {
+          reservation_id: reservationId,
+          guest_number: i,
+          is_primary_guest: i === 1,
+          agreement_accepted: false,
+          admin_verified: false
+        };
+        placeholders.push(placeholderData);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('reservation_guests')
+        .insert(placeholders)
+        .select();
+
+      if (error) {
+        console.error('Error creating placeholder guests:', error);
+        throw new Error('Failed to create placeholder guests');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Database error creating placeholder guests:', error);
+      throw error;
+    }
+  }
+
+  // Validate that all guests have completed check-in
+  async validateAllGuestsComplete(reservationId) {
+    try {
+      // Get reservation to check num_guests
+      const { data: reservation, error: resError } = await supabaseAdmin
+        .from('reservations')
+        .select('num_guests')
+        .eq('id', reservationId)
+        .single();
+
+      if (resError) {
+        throw new Error('Failed to fetch reservation');
+      }
+
+      const requiredGuests = reservation.num_guests || 1;
+
+      // Count completed guest check-ins
+      const { data: completedGuests, error: guestError } = await supabaseAdmin
+        .from('reservation_guests')
+        .select('id')
+        .eq('reservation_id', reservationId)
+        .not('checkin_submitted_at', 'is', null);
+
+      if (guestError) {
+        throw new Error('Failed to fetch guest check-ins');
+      }
+
+      const completedCount = completedGuests?.length || 0;
+      
+      return {
+        isComplete: completedCount >= requiredGuests,
+        requiredGuests,
+        completedGuests: completedCount,
+        remainingGuests: Math.max(0, requiredGuests - completedCount)
+      };
+    } catch (error) {
+      console.error('Database error validating guest completion:', error);
       throw error;
     }
   }
@@ -1380,113 +1509,166 @@ class ReservationService {
   async getGuestAppData(checkinToken) {
     try {
       // First, get the reservation using the reservations_details view for comprehensive data
-      const { data, error } = await supabaseAdmin
+      const { data: reservationData, error: reservationError } = await supabaseAdmin
         .from('reservations_details')
         .select('*')
         .eq('check_in_token', checkinToken)
         .single();
 
-      if (error) {
-        console.error('Error fetching guest dashboard data:', error);
+      if (reservationError) {
+        console.error('Error fetching guest dashboard data:', reservationError);
         return null;
       }
 
-      if (!data) {
+      if (!reservationData) {
         return null;
       }
 
+      // Get all guests for this reservation
+      const { data: guestsData, error: guestsError } = await supabaseAdmin
+        .from('reservation_guests')
+        .select('*')
+        .eq('reservation_id', reservationData.id)
+        .order('guest_number', { ascending: true });
+
+      if (guestsError) {
+        console.error('Error fetching guests data:', guestsError);
+        // Continue with reservation data only if guests can't be fetched
+      }
+
+      // Get primary guest (guest #1) for backward compatibility
+      const primaryGuest = guestsData?.find(g => g.guest_number === 1) || null;
+      
+      // Check completion status
+      const completionStatus = await this.validateAllGuestsComplete(reservationData.id);
+      
       // Structure the data for the frontend
       const dashboardData = {
         reservation: {
-          id: data.id,
-          beds24_booking_id: data.beds24_booking_id,
-          booking_name: data.booking_name,
-          booking_lastname: data.lastName,
-          booking_email: data.booking_email,
-          booking_phone: data.booking_phone,
-          check_in_date: data.check_in_date,
-          check_out_date: data.check_out_date,
-          num_guests: data.num_guests,
-          num_adults: data.num_adults,
-          num_children: data.num_children,
-          total_amount: data.total_amount,
-          currency: data.currency,
-          status: data.status,
-          special_requests: data.special_requests,
+          id: reservationData.id,
+          beds24_booking_id: reservationData.beds24_booking_id,
+          booking_name: reservationData.booking_name,
+          booking_lastname: reservationData.booking_lastname,
+          booking_email: reservationData.booking_email,
+          booking_phone: reservationData.booking_phone,
+          check_in_date: reservationData.check_in_date,
+          check_out_date: reservationData.check_out_date,
+          num_guests: reservationData.num_guests,
+          num_adults: reservationData.num_adults,
+          num_children: reservationData.num_children,
+          total_amount: reservationData.total_amount,
+          currency: reservationData.currency,
+          status: reservationData.status,
+          special_requests: reservationData.special_requests,
           
-          // Guest information
-          guest_firstname: data.guest_firstname,
-          guest_lastname: data.guest_lastname,
-          guest_contact: data.guest_contact,
-          guest_mail: data.guest_mail,
-          guest_address: data.guest_address,
-          estimated_checkin_time: data.estimated_checkin_time,
-          travel_purpose: data.travel_purpose,
-          emergency_contact_name: data.emergency_contact_name,
-          emergency_contact_phone: data.emergency_contact_phone,
-          passport_url: data.passport_url,
-          agreement_accepted: data.agreement_accepted,
-          checkin_submitted_at: data.checkin_submitted_at,
-          admin_verified: data.admin_verified,
-          verified_at: data.verified_at,
-          access_read: data.access_read || false,
+          // Primary guest information (for backward compatibility)
+          guest_firstname: primaryGuest?.guest_firstname,
+          guest_lastname: primaryGuest?.guest_lastname,
+          guest_contact: primaryGuest?.guest_contact,
+          guest_mail: primaryGuest?.guest_mail,
+          guest_address: primaryGuest?.guest_address,
+          estimated_checkin_time: primaryGuest?.estimated_checkin_time,
+          travel_purpose: primaryGuest?.travel_purpose,
+          emergency_contact_name: primaryGuest?.emergency_contact_name,
+          emergency_contact_phone: primaryGuest?.emergency_contact_phone,
+          passport_url: primaryGuest?.passport_url,
+          agreement_accepted: primaryGuest?.agreement_accepted || false,
+          checkin_submitted_at: primaryGuest?.checkin_submitted_at,
+          admin_verified: primaryGuest?.admin_verified || false,
+          verified_at: primaryGuest?.verified_at,
+          access_read: reservationData.access_read || false,
+          
+          // Multi-guest completion status
+          all_guests_completed: completionStatus.isComplete,
+          completed_guests_count: completionStatus.completedGuests,
+          total_guests_required: completionStatus.requiredGuests,
+          remaining_guests: completionStatus.remainingGuests,
           
           // Computed fields for backward compatibility
-          guest_name: data.booking_name,
-          guest_email: data.booking_email,
-          guest_phone: data.booking_phone
+          guest_name: reservationData.booking_name,
+          guest_email: reservationData.booking_email,
+          guest_phone: reservationData.booking_phone
         },
         
+        // All guests information (for multi-guest check-in process)
+        guests: (guestsData || []).map((guest, index) => ({
+          id: guest.id,
+          guest_number: guest.guest_number,
+          is_primary_guest: guest.is_primary_guest,
+          guest_firstname: guest.guest_firstname,
+          guest_lastname: guest.guest_lastname,
+          guest_contact: guest.guest_contact,
+          guest_mail: guest.guest_mail,
+          guest_address: guest.guest_address,
+          estimated_checkin_time: guest.estimated_checkin_time,
+          travel_purpose: guest.travel_purpose,
+          emergency_contact_name: guest.emergency_contact_name,
+          emergency_contact_phone: guest.emergency_contact_phone,
+          passport_url: guest.passport_url,
+          agreement_accepted: guest.agreement_accepted || false,
+          checkin_submitted_at: guest.checkin_submitted_at,
+          admin_verified: guest.admin_verified || false,
+          verified_at: guest.verified_at,
+          // Completion status for this guest
+          is_completed: !!guest.checkin_submitted_at,
+          // Display name for UI
+          display_name: guest.guest_firstname && guest.guest_lastname 
+            ? `${guest.guest_firstname} ${guest.guest_lastname}`.trim()
+            : `Guest #${guest.guest_number}`,
+          created_at: guest.created_at,
+          updated_at: guest.updated_at
+        })),
+        
         property: {
-          id: data.property_id,
-          name: data.property_name,
-          address: data.property_address,
-          description: data.description,
-          property_type: data.property_type,
-          wifi_name: data.property_wifi_name || data.wifi_name,
-          wifi_password: data.property_wifi_password || data.wifi_password,
-          house_rules: data.house_rules,
-          check_in_instructions: data.check_in_instructions,
-          emergency_contact: data.property_emergency_contact,
-          property_amenities: data.property_amenities,
-          location_info: data.location_info,
-          access_time: data.access_time // Important for time-based room access
+          id: reservationData.property_id,
+          name: reservationData.property_name,
+          address: reservationData.property_address,
+          description: reservationData.description,
+          property_type: reservationData.property_type,
+          wifi_name: reservationData.property_wifi_name || reservationData.wifi_name,
+          wifi_password: reservationData.property_wifi_password || reservationData.wifi_password,
+          house_rules: reservationData.house_rules,
+          check_in_instructions: reservationData.check_in_instructions,
+          emergency_contact: reservationData.property_emergency_contact,
+          property_amenities: reservationData.property_amenities,
+          location_info: reservationData.location_info,
+          access_time: reservationData.access_time // Important for time-based room access
         },
         
         room: {
           // Room Type information
-          room_type_id: data.room_type_id,
-          room_type_name: data.room_type_name || 'Standard Room',
-          room_type_description: data.room_type_description,
-          max_guests: data.room_type_max_guests || data.max_guests,
-          base_price: data.base_price,
-          room_amenities: data.room_type_amenities,
-          bed_configuration: data.bed_configuration,
-          room_size_sqm: data.room_size_sqm,
-          has_balcony: data.room_type_has_balcony,
-          has_kitchen: data.room_type_has_kitchen,
-          is_accessible: data.room_type_is_accessible,
+          room_type_id: reservationData.room_type_id,
+          room_type_name: reservationData.room_type_name || 'Standard Room',
+          room_type_description: reservationData.room_type_description,
+          max_guests: reservationData.room_type_max_guests || reservationData.max_guests,
+          base_price: reservationData.base_price,
+          room_amenities: reservationData.room_type_amenities,
+          bed_configuration: reservationData.bed_configuration,
+          room_size_sqm: reservationData.room_size_sqm,
+          has_balcony: reservationData.room_type_has_balcony,
+          has_kitchen: reservationData.room_type_has_kitchen,
+          is_accessible: reservationData.room_type_is_accessible,
           
           // Room Unit information
-          room_unit_id: data.room_unit_id,
-          unit_number: data.unit_number,
-          floor_number: data.floor_number,
-          access_code: data.access_code,
-          access_instructions: data.access_instructions,
-          wifi_name: data.unit_wifi_name,
-          wifi_password: data.unit_wifi_password,
-          unit_amenities: data.unit_amenities,
-          maintenance_notes: data.maintenance_notes,
+          room_unit_id: reservationData.room_unit_id,
+          unit_number: reservationData.unit_number,
+          floor_number: reservationData.floor_number,
+          access_code: reservationData.access_code,
+          access_instructions: reservationData.access_instructions,
+          wifi_name: reservationData.unit_wifi_name,
+          wifi_password: reservationData.unit_wifi_password,
+          unit_amenities: reservationData.unit_amenities,
+          maintenance_notes: reservationData.maintenance_notes,
           
           // Backward compatibility fields
-          room_number: data.unit_number || data.room_number || 'TBD',
-          room_name: data.room_type_name || 'Standard Room',
-          amenities: data.room_type_amenities || data.unit_amenities || {}
+          room_number: reservationData.unit_number || reservationData.room_number || 'TBD',
+          room_name: reservationData.room_type_name || 'Standard Room',
+          amenities: reservationData.room_type_amenities || reservationData.unit_amenities || {}
         },
         
         // Additional computed fields
-        checkin_status: data.checkin_submitted_at ? 'completed' : 'pending',
-        can_access_room: this.canAccessRoom(data),
+        checkin_status: completionStatus.isComplete ? 'completed' : 'pending',
+        can_access_room: this.canAccessRoom(reservationData, completionStatus.isComplete),
         
         // Meta information
         last_updated: new Date().toISOString()
@@ -1500,10 +1682,15 @@ class ReservationService {
   }
 
   // Helper method to determine if guest can access room details
-  canAccessRoom(reservationData) {
+  canAccessRoom(reservationData, allGuestsCompleted = null) {
     try {
-      // Check if check-in is completed
-      if (!reservationData.checkin_submitted_at) {
+      // For multi-guest scenarios, use the completion status parameter
+      const isCheckinCompleted = allGuestsCompleted !== null 
+        ? allGuestsCompleted 
+        : !!reservationData.checkin_submitted_at;
+      
+      // Check if check-in is completed for all required guests
+      if (!isCheckinCompleted) {
         return false;
       }
 

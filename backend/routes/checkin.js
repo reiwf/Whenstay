@@ -22,7 +22,7 @@ const upload = multer({
   }
 });
 
-// Get reservation details by check-in token
+// Get reservation details by check-in token (supports multi-guest)
 router.get('/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -39,83 +39,114 @@ router.get('/:token', async (req, res) => {
     }
 
     const reservation = dashboardData.reservation;
+    const guests = dashboardData.guests || [];
     
-    // Check if check-in is already completed
-    const checkinCompleted = !!reservation.checkin_submitted_at;
+    // Check if ALL guests have completed check-in (new multi-guest logic)
+    const allGuestsCompleted = reservation.all_guests_completed;
     
-    if (checkinCompleted) {
+    // Build reservation response
+    const reservationResponse = {
+      id: reservation.id,
+      guestName: reservation.booking_name,
+      guestEmail: reservation.booking_email,
+      guestPhone: reservation.booking_phone,
+      checkInDate: reservation.check_in_date,
+      checkOutDate: reservation.check_out_date,
+      roomNumber: dashboardData.room.room_number,
+      roomTypes: dashboardData.room.room_type_name,
+      numGuests: reservation.num_guests,
+      // Enhanced information from reservations_details view
+      propertyName: dashboardData.property.name,
+      roomTypeName: dashboardData.room.room_type_name,
+      roomTypeDescription: dashboardData.room.room_type_description,
+      unitNumber: dashboardData.room.unit_number,
+      floorNumber: dashboardData.room.floor_number,
+      bedConfiguration: dashboardData.room.bed_configuration,
+      roomSizeSqm: dashboardData.room.room_size_sqm,
+      hasBalcony: dashboardData.room.has_balcony,
+      hasKitchen: dashboardData.room.has_kitchen,
+      maxGuests: dashboardData.room.max_guests,
+      // Multi-guest completion info
+      totalGuestsRequired: reservation.total_guests_required,
+      completedGuestsCount: reservation.completed_guests_count,
+      remainingGuests: reservation.remaining_guests
+    };
+
+    if (allGuestsCompleted) {
+      // All guests completed - return full details
+      const primaryGuest = guests.find(g => g.is_primary_guest) || guests[0];
+      
       return res.status(200).json({
-        reservation: {
-          id: reservation.id,
-          guestName: reservation.booking_name,
-          guestEmail: reservation.booking_email,
-          guestPhone: reservation.booking_phone,
-          checkInDate: reservation.check_in_date,
-          checkOutDate: reservation.check_out_date,
-          roomNumber: dashboardData.room.room_number,
-          roomTypes: dashboardData.room.room_type_name,
-          numGuests: reservation.num_guests,
-          // Enhanced information from reservations_details view
-          propertyName: dashboardData.property.name,
-          roomTypeName: dashboardData.room.room_type_name,
-          roomTypeDescription: dashboardData.room.room_type_description,
-          unitNumber: dashboardData.room.unit_number,
-          floorNumber: dashboardData.room.floor_number,
-          bedConfiguration: dashboardData.room.bed_configuration,
-          roomSizeSqm: dashboardData.room.room_size_sqm,
-          hasBalcony: dashboardData.room.has_balcony,
-          hasKitchen: dashboardData.room.has_kitchen,
-          maxGuests: dashboardData.room.max_guests
-        },
+        reservation: reservationResponse,
         checkinCompleted: true,
+        allGuestsCompleted: true,
+        guests: guests.map(guest => ({
+          guestNumber: guest.guest_number,
+          firstName: guest.guest_firstname,
+          lastName: guest.guest_lastname,
+          personalEmail: guest.guest_mail,
+          contactNumber: guest.guest_contact,
+          address: guest.guest_address,
+          estimatedCheckinTime: guest.estimated_checkin_time,
+          travelPurpose: guest.travel_purpose,
+          emergencyContactName: guest.emergency_contact_name,
+          emergencyContactPhone: guest.emergency_contact_phone,
+          passportUrl: guest.passport_url,
+          agreementAccepted: guest.agreement_accepted,
+          submittedAt: guest.checkin_submitted_at,
+          adminVerified: guest.admin_verified,
+          isCompleted: guest.is_completed,
+          displayName: guest.display_name
+        })),
+        // Legacy guestData for backward compatibility (primary guest only)
+        guestData: primaryGuest ? {
+          firstName: primaryGuest.guest_firstname,
+          lastName: primaryGuest.guest_lastname,
+          personalEmail: primaryGuest.guest_mail,
+          contactNumber: primaryGuest.guest_contact,
+          address: primaryGuest.guest_address,
+          estimatedCheckinTime: primaryGuest.estimated_checkin_time,
+          travelPurpose: primaryGuest.travel_purpose,
+          emergencyContactName: primaryGuest.emergency_contact_name,
+          emergencyContactPhone: primaryGuest.emergency_contact_phone,
+          passportUrl: primaryGuest.passport_url,
+          agreementAccepted: primaryGuest.agreement_accepted,
+          submittedAt: primaryGuest.checkin_submitted_at,
+          adminVerified: primaryGuest.admin_verified
+        } : null,
         checkin: {
           id: reservation.id,
-          submitted_at: reservation.checkin_submitted_at,
-          admin_verified: reservation.admin_verified || false
-        },
-        guestData: {
-          firstName: reservation.guest_firstname,
-          lastName: reservation.guest_lastname,
-          personalEmail: reservation.guest_mail,
-          contactNumber: reservation.guest_contact,
-          address: reservation.guest_address,
-          estimatedCheckinTime: reservation.estimated_checkin_time,
-          travelPurpose: reservation.travel_purpose,
-          emergencyContactName: reservation.emergency_contact_name,
-          emergencyContactPhone: reservation.emergency_contact_phone,
-          passportUrl: reservation.passport_url,
-          agreementAccepted: reservation.agreement_accepted,
-          submittedAt: reservation.checkin_submitted_at,
-          adminVerified: reservation.admin_verified
+          submitted_at: primaryGuest?.checkin_submitted_at,
+          admin_verified: primaryGuest?.admin_verified || false
         }
       });
     }
 
-    // Return enhanced reservation details for check-in form
+    // Check-in not completed yet - return form data with guest status
     return res.status(200).json({
-      reservation: {
-        id: reservation.id,
-        guestName: reservation.booking_name,
-        guestEmail: reservation.booking_email,
-        guestPhone: reservation.booking_phone,
-        checkInDate: reservation.check_in_date,
-        checkOutDate: reservation.check_out_date,
-        roomNumber: dashboardData.room.room_number,
-        roomTypes: dashboardData.room.room_type_name,
-        numGuests: reservation.num_guests,
-        // Enhanced information from reservations_details view
-        propertyName: dashboardData.property.name,
-        roomTypeName: dashboardData.room.room_type_name,
-        roomTypeDescription: dashboardData.room.room_type_description,
-        unitNumber: dashboardData.room.unit_number,
-        floorNumber: dashboardData.room.floor_number,
-        bedConfiguration: dashboardData.room.bed_configuration,
-        roomSizeSqm: dashboardData.room.room_size_sqm,
-        hasBalcony: dashboardData.room.has_balcony,
-        hasKitchen: dashboardData.room.has_kitchen,
-        maxGuests: dashboardData.room.max_guests
-      },
-      checkinCompleted: false
+      reservation: reservationResponse,
+      checkinCompleted: false,
+      allGuestsCompleted: false,
+      guests: guests.map(guest => ({
+        guestNumber: guest.guest_number,
+        isPrimaryGuest: guest.is_primary_guest,
+        isCompleted: guest.is_completed,
+        displayName: guest.display_name,
+        // Include existing data if available (for editing)
+        firstName: guest.guest_firstname,
+        lastName: guest.guest_lastname,
+        personalEmail: guest.guest_mail,
+        contactNumber: guest.guest_contact,
+        address: guest.guest_address,
+        estimatedCheckinTime: guest.estimated_checkin_time,
+        travelPurpose: guest.travel_purpose,
+        emergencyContactName: guest.emergency_contact_name,
+        emergencyContactPhone: guest.emergency_contact_phone,
+        passportUrl: guest.passport_url,
+        agreementAccepted: guest.agreement_accepted,
+        submittedAt: guest.checkin_submitted_at,
+        adminVerified: guest.admin_verified
+      }))
     });
 
   } catch (error) {
@@ -124,7 +155,187 @@ router.get('/:token', async (req, res) => {
   }
 });
 
-// Submit check-in form
+// Submit all guest information in one request
+router.post('/:token/submit-all-guests', 
+  [
+    body('guests').isArray({ min: 1 }).withMessage('At least one guest is required'),
+    body('guests.*.firstName').notEmpty().withMessage('First name is required for all guests'),
+    body('guests.*.lastName').notEmpty().withMessage('Last name is required for all guests'),
+    body('agreementAccepted').equals('true').withMessage('Agreement must be accepted')
+  ],
+  async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { guests: guestInfoArray, agreementAccepted, submittedAt } = req.body;
+      
+      // Validate basic input structure
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ 
+          error: 'Validation failed', 
+          details: errors.array() 
+        });
+      }
+
+      // Get reservation from database
+      const reservation = await reservationService.getReservationByToken(token);
+      
+      if (!reservation) {
+        return res.status(404).json({ error: 'Invalid or expired check-in link' });
+      }
+
+      // Validate number of guests provided matches reservation
+      const numGuests = reservation.num_guests || 1;
+      if (guestInfoArray.length !== numGuests) {
+        return res.status(400).json({ 
+          error: `Expected ${numGuests} guests, but received ${guestInfoArray.length}` 
+        });
+      }
+
+      // Custom validation for guest-specific requirements
+      const customValidationErrors = [];
+      guestInfoArray.forEach((guest, index) => {
+        const guestNumber = index + 1;
+        const isPrimary = guestNumber === 1;
+        
+        // All guests need first and last name
+        if (!guest.firstName || !guest.firstName.trim()) {
+          customValidationErrors.push(`Guest ${guestNumber}: First name is required`);
+        }
+        if (!guest.lastName || !guest.lastName.trim()) {
+          customValidationErrors.push(`Guest ${guestNumber}: Last name is required`);
+        }
+        
+        // Only primary guest needs email and contact
+        if (isPrimary) {
+          if (!guest.personalEmail || !guest.personalEmail.trim()) {
+            customValidationErrors.push(`Primary guest: Email is required`);
+          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.personalEmail)) {
+            customValidationErrors.push(`Primary guest: Valid email is required`);
+          }
+          
+          if (!guest.contactNumber || !guest.contactNumber.trim()) {
+            customValidationErrors.push(`Primary guest: Contact number is required`);
+          }
+        }
+      });
+
+      if (customValidationErrors.length > 0) {
+        return res.status(400).json({ 
+          error: 'Validation failed', 
+          details: customValidationErrors.map(msg => ({ msg }))
+        });
+      }
+
+      // Check if check-in is already completed
+      const completionStatus = await reservationService.validateAllGuestsComplete(reservation.id);
+      
+      // Allow modification if isModification flag is set
+      const isModification = req.body.isModification === true || req.body.isModification === 'true';
+      
+      if (completionStatus.isComplete && !isModification) {
+        return res.status(400).json({ 
+          error: 'Check-in already completed for all guests. Use modification mode to update.' 
+        });
+      }
+
+      // Process each guest
+      const processedGuests = [];
+      const failedGuests = [];
+
+      for (let i = 0; i < guestInfoArray.length; i++) {
+        const guestInfo = guestInfoArray[i];
+        const guestNumber = i + 1;
+
+        try {
+          // Prepare guest information for database update
+          const guestInfoForDb = {
+            firstName: guestInfo.firstName,
+            lastName: guestInfo.lastName,
+            personalEmail: guestInfo.personalEmail,
+            contactNumber: guestInfo.contactNumber,
+            address: guestInfo.address,
+            estimatedCheckinTime: guestInfo.estimatedCheckinTime,
+            travelPurpose: guestInfo.travelPurpose,
+            emergencyContactName: guestInfo.emergencyContactName,
+            emergencyContactPhone: guestInfo.emergencyContactPhone,
+            passportUrl: guestInfo.passportUrl,
+            agreementAccepted: agreementAccepted === 'true' || agreementAccepted === true,
+            submittedAt: submittedAt || new Date().toISOString()
+          };
+
+          // Create or update guest information
+          const updatedGuest = await reservationService.createOrUpdateGuest(reservation.id, guestNumber, guestInfoForDb);
+          processedGuests.push({
+            guestNumber,
+            id: updatedGuest.id,
+            name: `${guestInfo.firstName} ${guestInfo.lastName}`.trim()
+          });
+
+          // Send confirmation email only to guests with email addresses (primary guest)
+          if (guestInfo.personalEmail && guestInfo.personalEmail.trim()) {
+            try {
+              await emailService.sendCheckinConfirmation(
+                guestInfo.personalEmail,
+                `${guestInfo.firstName} ${guestInfo.lastName}`,
+                reservation.check_in_date
+              );
+            } catch (emailError) {
+              console.log(`Email service not available for guest ${guestNumber}:`, emailError.message);
+            }
+          }
+
+        } catch (error) {
+          console.error(`Error processing guest ${guestNumber}:`, error);
+          failedGuests.push({
+            guestNumber,
+            error: error.message
+          });
+        }
+      }
+
+      // Get final completion status
+      const finalCompletionStatus = await reservationService.validateAllGuestsComplete(reservation.id);
+
+      // Send notification to admin if all guests are complete
+      if (finalCompletionStatus.isComplete) {
+        try {
+          await emailService.sendAdminNotification(
+            reservation.booking_name,
+            reservation.booking_email,
+            reservation.check_in_date,
+            reservation.id
+          );
+        } catch (emailError) {
+          console.log('Email service not available:', emailError.message);
+        }
+      }
+
+      // Determine response status
+      const hasFailures = failedGuests.length > 0;
+      const allSuccessful = processedGuests.length === guestInfoArray.length;
+
+      res.status(allSuccessful ? 200 : 207).json({
+        message: allSuccessful 
+          ? 'All guests check-in completed successfully'
+          : `${processedGuests.length} of ${guestInfoArray.length} guests processed successfully`,
+        data: {
+          processedGuests,
+          failedGuests,
+          completion: finalCompletionStatus,
+          allGuestsComplete: finalCompletionStatus.isComplete
+        },
+        warnings: hasFailures ? 'Some guests failed to process' : undefined
+      });
+
+    } catch (error) {
+      console.error('Error submitting all guests check-in:', error);
+      res.status(500).json({ error: 'Failed to submit guests check-in' });
+    }
+  }
+);
+
+// Legacy endpoint for backward compatibility (now supports single guest submission)
 router.post('/:token/submit', 
   [
     body('guestInfo.firstName').notEmpty().withMessage('First name is required'),
@@ -139,6 +350,22 @@ router.post('/:token/submit',
       const { token } = req.params;
       const { guestInfo, passportUrl, agreementAccepted, submittedAt } = req.body;
       
+      console.warn('Using legacy single-guest submission endpoint. Consider using /submit-all-guests for multi-guest support.');
+      
+      // Convert single guest to array format for compatibility with new system
+      const guestsArray = [{
+        ...guestInfo,
+        passportUrl
+      }];
+
+      // Modify request body to match new format
+      req.body = {
+        guests: guestsArray,
+        agreementAccepted,
+        submittedAt,
+        isModification: req.body.isModification
+      };
+
       // Validate input
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -155,17 +382,7 @@ router.post('/:token/submit',
         return res.status(404).json({ error: 'Invalid or expired check-in link' });
       }
 
-      // Check if check-in is already completed
-      const existingCheckin = await reservationService.getGuestCheckinByReservationId(reservation.id);
-      
-      // Allow modification if isModification flag is set
-      const isModification = req.body.isModification === true || req.body.isModification === 'true';
-      
-      if (existingCheckin && !isModification) {
-        return res.status(400).json({ error: 'Check-in already completed. Use modification mode to update.' });
-      }
-
-      // Prepare guest information for database update
+      // For legacy compatibility, only submit guest #1
       const guestInfoForDb = {
         firstName: guestInfo.firstName,
         lastName: guestInfo.lastName,
@@ -181,10 +398,13 @@ router.post('/:token/submit',
         submittedAt: submittedAt || new Date().toISOString()
       };
 
-      // Update reservation with guest information
-      const updatedReservation = await reservationService.updateReservationGuestInfo(reservation.id, guestInfoForDb);
+      // Create or update guest #1 using new service method
+      const updatedGuest = await reservationService.createOrUpdateGuest(reservation.id, 1, guestInfoForDb);
 
-      // Send confirmation email to guest
+      // Get completion status
+      const completionStatus = await reservationService.validateAllGuestsComplete(reservation.id);
+
+      // Send confirmation email
       try {
         await emailService.sendCheckinConfirmation(
           guestInfo.personalEmail,
@@ -195,29 +415,38 @@ router.post('/:token/submit',
         console.log('Email service not available:', emailError.message);
       }
 
-      // Send notification to admin
-      try {
-        await emailService.sendAdminNotification(
-          `${guestInfo.firstName} ${guestInfo.lastName}`,
-          guestInfo.personalEmail,
-          reservation.check_in_date,
-          reservation.id
-        );
-      } catch (emailError) {
-        console.log('Email service not available:', emailError.message);
+      // Send admin notification if all guests complete
+      if (completionStatus.isComplete) {
+        try {
+          await emailService.sendAdminNotification(
+            reservation.booking_name,
+            reservation.booking_email,
+            reservation.check_in_date,
+            reservation.id
+          );
+        } catch (emailError) {
+          console.log('Email service not available:', emailError.message);
+        }
       }
 
+      // Return legacy-compatible response
       res.status(200).json({
         message: 'Check-in completed successfully',
         checkin: {
-          id: updatedReservation.id,
-          submittedAt: updatedReservation.checkin_submitted_at,
-          adminVerified: false
+          id: updatedGuest.id,
+          submittedAt: updatedGuest.checkin_submitted_at,
+          adminVerified: updatedGuest.admin_verified || false
+        },
+        // Additional info for multi-guest awareness
+        multiGuestInfo: {
+          guestNumber: 1,
+          completion: completionStatus,
+          allGuestsComplete: completionStatus.isComplete
         }
       });
 
     } catch (error) {
-      console.error('Error submitting check-in:', error);
+      console.error('Error submitting legacy check-in:', error);
       res.status(500).json({ error: 'Failed to submit check-in' });
     }
   }
@@ -281,7 +510,7 @@ router.post('/:token/resend-invitation', async (req, res) => {
   }
 });
 
-// Get check-in status
+// Get check-in status (supports multi-guest)
 router.get('/:token/status', async (req, res) => {
   try {
     const { token } = req.params;
@@ -293,14 +522,33 @@ router.get('/:token/status', async (req, res) => {
       return res.status(404).json({ error: 'Invalid or expired check-in link' });
     }
 
-    // Get check-in details if exists
-    const checkin = await reservationService.getGuestCheckinByReservationId(reservation.id);
+    // Get all guests and completion status
+    const guests = await reservationService.getReservationGuests(reservation.id);
+    const completionStatus = await reservationService.validateAllGuestsComplete(reservation.id);
+
+    // Get primary guest for backward compatibility
+    const primaryGuest = guests.find(g => g.is_primary_guest) || guests[0];
 
     res.status(200).json({
       reservationStatus: reservation.status,
-      checkinCompleted: !!checkin,
-      adminVerified: checkin ? checkin.admin_verified : false,
-      submittedAt: checkin ? checkin.submitted_at : null
+      checkinCompleted: completionStatus.isComplete,
+      adminVerified: primaryGuest ? primaryGuest.admin_verified : false,
+      submittedAt: primaryGuest ? primaryGuest.checkin_submitted_at : null,
+      // Multi-guest specific status
+      multiGuest: {
+        totalGuests: reservation.num_guests || 1,
+        completedGuests: completionStatus.completedGuests,
+        remainingGuests: completionStatus.remainingGuests,
+        allComplete: completionStatus.isComplete,
+        guestStatus: guests.map(guest => ({
+          guestNumber: guest.guest_number,
+          isCompleted: !!guest.checkin_submitted_at,
+          adminVerified: guest.admin_verified || false,
+          displayName: guest.guest_firstname && guest.guest_lastname 
+            ? `${guest.guest_firstname} ${guest.guest_lastname}`.trim()
+            : `Guest #${guest.guest_number}`
+        }))
+      }
     });
 
   } catch (error) {

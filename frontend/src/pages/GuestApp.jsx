@@ -149,17 +149,26 @@ export default function GuestApp() {
     try {
       setLoading(true)
       
-      // Get complete guest dashboard data using new schema
+      // Get complete guest dashboard data using new multi-guest schema
       const response = await fetch(`/api/guest/${token}`)
       if (!response.ok) {
         throw new Error('Reservation not found')
       }
       
       const data = await response.json()
+      console.log('GuestApp loaded data:', data)
+      
       setDashboardData(data)
+      
+      // Update completion detection for multi-guest structure
+      const allGuestsCompleted = data.reservation?.all_guests_completed || false
+      const primaryGuestCompleted = data.guests?.find(g => g.is_primary_guest)?.is_completed || false
+      
       setCheckinStatus({ 
-        completed: data.checkin_status === 'completed',
-        access_read: data.reservation?.access_read || false
+        completed: allGuestsCompleted || data.checkin_status === 'completed',
+        access_read: data.reservation?.access_read || false,
+        allGuestsCompleted: allGuestsCompleted,
+        primaryGuestCompleted: primaryGuestCompleted
       })
       
       // If access_read is true, show the access code immediately

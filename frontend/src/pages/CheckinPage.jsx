@@ -136,6 +136,7 @@ export default function CheckinPage() {
           checkinCompleted={checkinCompleted}
           isModificationMode={isModificationMode}
           guestData={guestData}
+          reservation={reservation}
         />
       )}
       
@@ -153,5 +154,3 @@ export default function CheckinPage() {
     </CheckinLayout>
   )
 }
-
-
