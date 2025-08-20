@@ -194,8 +194,8 @@ export default function TimelineGrid({
                 dragState.originalReservation.roomUnitId !== targetRoomUnitId) {
               // SWAP OPERATION: Check if swap is possible
               console.log('Swap detection:', {
-                dragged: dragState.originalReservation.bookingName || dragState.originalReservation.id,
-                target: targetReservation.bookingName || targetReservation.id,
+                dragged: dragState.originalReservation.booking_name || dragState.originalReservation.id,
+                target: targetReservation.booking_name || targetReservation.id,
                 draggedId: dragState.originalReservation.id,
                 targetId: targetReservation.id
               });

@@ -5,6 +5,7 @@ const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
 const communicationService = require('../services/communicationService');
 const automationService = require('../services/automationService');
+const stripeService = require('../services/stripeService');
 const { adminAuth } = require('../middleware/auth');
 
 // Beds24 webhook endpoint
@@ -294,7 +295,7 @@ async function handleNewBooking(webhookData) {
     
     console.log('Processing new booking:', {
       beds24BookingId: bookingInfo.beds24BookingId,
-      bookingName: bookingInfo.bookingName,
+      bookingFirstname: bookingInfo.bookingFirstname,
       propertyId: bookingInfo.propertyId,
       roomTypeId: bookingInfo.roomTypeId,
       roomUnitId: bookingInfo.roomUnitId
@@ -357,7 +358,7 @@ async function handleBookingUpdate(webhookData) {
     
     console.log('Processing booking update:', {
       beds24BookingId: bookingInfo.beds24BookingId,
-      bookingName: bookingInfo.bookingName,
+      bookingFirstname: bookingInfo.bookingFirstname,
       checkInDate: bookingInfo.checkInDate,
       checkOutDate: bookingInfo.checkOutDate
     });
@@ -433,6 +434,77 @@ async function handleBookingCancellation(webhookData) {
     throw error;
   }
 }
+
+// Stripe webhook endpoint
+router.post('/stripe', async (req, res) => {
+  try {
+    console.log('Received Stripe webhook');
+    
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    
+    if (!endpointSecret) {
+      console.warn('STRIPE_WEBHOOK_SECRET not configured - webhook NOT verified');
+    }
+
+    let event;
+    
+    if (endpointSecret) {
+      try {
+        // req.body is a Buffer here because of express.raw
+        event = stripeService.constructEvent(req.body, sig, endpointSecret);
+      } catch (err) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+      }
+    } else {
+      // For local testing without verification:
+      event = JSON.parse(req.body.toString('utf8'));
+    }
+
+    console.log('Stripe event:', event.id, event.type);
+
+    // Idempotency guard (recommended to prevent duplicate processing)
+    const alreadyHandled = await stripeService.hasProcessedEvent(event.id);
+    if (alreadyHandled) {
+      console.log('Event already processed:', event.id);
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        // Mark paid only if the session is paid
+        const session = event.data.object;
+        await stripeService.handleCheckoutSessionCompleted(session);
+        break;
+      }
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object;
+        await stripeService.handlePaymentSuccess(pi);
+        break;
+      }
+      case 'payment_intent.payment_failed': {
+        await stripeService.handlePaymentFailure(event.data.object);
+        break;
+      }
+      case 'payment_intent.canceled': {
+        await stripeService.handlePaymentCanceled(event.data.object);
+        break;
+      }
+      default:
+        console.log(`Unhandled Stripe event type: ${event.type}`);
+    }
+
+    // Mark event stored AFTER successful handling
+    await stripeService.markEventProcessed(event.id);
+
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook error:', err);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+});
 
 // Test endpoint for webhook testing
 router.post('/test', async (req, res) => {

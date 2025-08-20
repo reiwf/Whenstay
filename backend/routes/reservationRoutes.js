@@ -48,50 +48,6 @@ router.get('/beds24/:bookingId', async (req, res) => {
 });
 
 
-// Test endpoint to create a sample reservation
-router.post('/test', async (req, res) => {
-  try {
-const testReservation = {
-      beds24BookingId: `test-${Date.now()}`,
-      guestName: req.body.guestName || 'Test Guest',
-      guestEmail: req.body.guestEmail || 'test@example.com',
-      checkInDate: req.body.checkInDate || new Date().toISOString().split('T')[0],
-      checkOutDate: req.body.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
-      roomNumber: req.body.roomNumber || '101',
-      numGuests: req.body.numGuests || 1,
-      totalAmount: req.body.totalAmount || 100,
-      currency: req.body.currency || 'JPY'
-    };
-    
-    // Create reservation
-    const reservation = await reservationService.createReservation(testReservation);
-    
-    // Update status to invited
-    await reservationService.updateReservationStatus(reservation.id, 'invited');
-    
-    // Send check-in invitation
-    const emailService = require('../services/emailService');
-    await emailService.sendCheckinInvitation(
-      testReservation.guestEmail,
-      testReservation.guestName,
-      reservation.check_in_token,
-      testReservation.checkInDate
-    );
-    
-    res.status(201).json({
-      message: 'Test reservation created successfully',
-      reservation: {
-        id: reservation.id,
-        checkinToken: reservation.check_in_token,
-        checkinUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkin/${reservation.check_in_token}`
-      }
-    });
-  } catch (error) {
-    console.error('Error creating test reservation:', error);
-    res.status(500).json({ error: 'Failed to create test reservation' });
-  }
-});
-
 // Manual Beds24 sync with authentication
 router.post('/sync/beds24', adminAuth, async (req, res) => {
   try {
@@ -247,15 +203,10 @@ router.put('/:id', adminAuth, async (req, res) => {
     const reservationUpdateData = {};
 
     // Booking contact information (kept in reservations table)
-    if (updateData.bookingName !== undefined) reservationUpdateData.bookingName = updateData.bookingName;
+    if (updateData.bookingFirstname !== undefined) reservationUpdateData.bookingFirstname = updateData.bookingFirstname;
+    if (updateData.bookingLastname !== undefined) reservationUpdateData.bookingLastname = updateData.bookingLastname;
     if (updateData.bookingEmail !== undefined) reservationUpdateData.bookingEmail = updateData.bookingEmail;
     if (updateData.bookingPhone !== undefined) reservationUpdateData.bookingPhone = updateData.bookingPhone;
-    if (updateData.bookingLastname !== undefined) reservationUpdateData.bookingLastname = updateData.bookingLastname;
-
-    // Legacy field mappings for backward compatibility
-    if (updateData.guestName !== undefined) reservationUpdateData.bookingName = updateData.guestName;
-    if (updateData.guestEmail !== undefined) reservationUpdateData.bookingEmail = updateData.guestEmail;
-    if (updateData.phoneNumber !== undefined) reservationUpdateData.bookingPhone = updateData.phoneNumber;
 
     // Reservation details
     if (updateData.checkInDate !== undefined) reservationUpdateData.checkInDate = updateData.checkInDate;
@@ -431,8 +382,9 @@ router.get('/:id/guests/:guestNumber', adminAuth, async (req, res) => {
 router.post('/', adminAuth, async (req, res) => {
   try {
     const {
-      guestName,
-      guestEmail,
+      bookingFirstname,
+      bookingLastname,
+      bookingEmail,
       checkInDate,
       checkOutDate,
       roomNumber,
@@ -443,13 +395,15 @@ router.post('/', adminAuth, async (req, res) => {
       beds24BookingId
     } = req.body;
 
-    if (!guestName || !guestEmail || !checkInDate || !checkOutDate) {
-      return res.status(400).json({ error: 'Guest name, email, check-in date, and check-out date are required' });
+    if (!(bookingFirstname) || !bookingEmail || !checkInDate || !checkOutDate) {
+      return res.status(400).json({ error: 'Guest first name, email, check-in date, and check-out date are required' });
     }
 
     const reservationData = {
-      guestName,
-      guestEmail,
+      bookingFirstname: bookingFirstname || null,
+      bookingLastname: bookingLastname || null,
+      bookingEmail: bookingEmail || null,
+      bookingPhone: phoneNumber || null,
       checkInDate,
       checkOutDate,
       roomNumber: roomNumber || 'TBD',

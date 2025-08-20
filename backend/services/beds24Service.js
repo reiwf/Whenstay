@@ -387,7 +387,7 @@ class Beds24Service {
         beds24BookingId: booking.id?.toString(),
         
         // Guest information (updated mapping)
-        bookingName: booking.firstName || '', // As requested
+        bookingFirstname: booking.firstName || '', 
         bookingLastname: booking.lastName || '',
         bookingEmail: booking.email || '',
         bookingPhone: booking.phone || booking.mobile || '',
@@ -444,7 +444,7 @@ class Beds24Service {
 
       console.log('Processed reservation data:', {
         beds24BookingId: reservationData.beds24BookingId,
-        bookingName: reservationData.bookingName,
+        bookingFirstname: reservationData.bookingName,
         bookingLastname: reservationData.bookingLastname,
         propertyId: reservationData.propertyId,
         roomTypeId: reservationData.roomTypeId,

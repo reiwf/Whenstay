@@ -251,7 +251,6 @@ router.post('/reservations/swap', async (req, res) => {
 /**
  * POST /api/calendar/allocate
  * Smart gap-fill allocation across multiple rooms
- * Body: { guestName, guestEmail?, checkInDate, checkOutDate, roomUnitIds[], allowSwaps?, numGuests? }
  */
 router.post('/allocate', async (req, res) => {
   try {

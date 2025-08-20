@@ -65,10 +65,11 @@ export function useReservations() {
       // Map frontend data to backend expected format
       const mappedData = {
         // Basic booking information (maps to booking_* fields in DB)
-        guestName: reservationData.bookingName || reservationData.guestName,
-        guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
-        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        bookingFirstname: reservationData.bookingFirstname,
         bookingLastname: reservationData.bookingLastname,
+        bookingEmail: reservationData.bookingEmail || reservationData.guestEmail,
+        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        
         
         // Stay details
         checkInDate: reservationData.checkInDate,
@@ -146,10 +147,11 @@ export function useReservations() {
       // Map frontend data to backend expected format
       const mappedData = {
         // Basic booking information
-        guestName: reservationData.bookingName || reservationData.guestName,
-        guestEmail: reservationData.bookingEmail || reservationData.guestEmail,
-        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        bookingFirstname: reservationData.bookingFirstname,
         bookingLastname: reservationData.bookingLastname,
+        bookingEmail: reservationData.bookingEmail || reservationData.guestEmail,
+        phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
+        
         
         // Stay details
         checkInDate: reservationData.checkInDate,

@@ -146,22 +146,22 @@ export default function BookingInfoSection({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Name *
+                  Booking First Name *
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.bookingName}
-                  onChange={(e) => setFormData({ ...formData, bookingName: e.target.value })}
+                  value={formData.bookingFirstname}
+                  onChange={(e) => setFormData({ ...formData, bookingFirstname: e.target.value })}
                   className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                    errors.bookingName ? 'border-red-300' : 'border-gray-300'
+                    errors.bookingFirstname ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="John Smith"
+                  placeholder="John"
                 />
-                {errors.bookingName && (
+                {errors.bookingFirstname && (
                   <p className="text-red-500 text-xs mt-1 flex items-center">
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    {errors.bookingName}
+                    {errors.bookingFirstname}
                   </p>
                 )}
               </div>

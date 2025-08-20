@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       strictPort: false,
+      headers: {
+        'Content-Security-Policy': "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com; object-src 'none'; frame-src 'self' https://js.stripe.com https://hooks.stripe.com;"
+      },
       proxy: {
         '/api': {
           target: 'http://127.0.0.1:3001',
@@ -40,7 +43,15 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0, // Prevent inlining of flag assets
     },
     optimizeDeps: {
-      include: ['react-phone-number-input/flags'],
+      include: [
+        'react-phone-number-input/flags',
+        '@stripe/stripe-js',
+        '@stripe/react-stripe-js'
+      ],
+    },
+    define: {
+      // Ensure proper module resolution for Stripe
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV)
     },
   }
 })

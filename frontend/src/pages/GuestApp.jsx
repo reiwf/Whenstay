@@ -23,10 +23,13 @@ import {
   Coffee,
   Unlock,
   FileText,
-  ArrowLeft
+  ArrowLeft,
+  CreditCard
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import GuestMessagePanel from '../components/communication/GuestMessagePanel'
+import { PaymentProvider } from '../contexts/PaymentContext'
+import AccommodationTaxWidget from '../components/payment/AccommodationTaxWidget'
 
 export default function GuestApp() {
   const { token } = useParams()
@@ -38,6 +41,7 @@ export default function GuestApp() {
   const [activeSection, setActiveSection] = useState('overview')
   const [countdown, setCountdown] = useState('')
   const [accessCodeRevealed, setAccessCodeRevealed] = useState(false)
+  const [paymentRefreshTrigger, setPaymentRefreshTrigger] = useState(0)
 
   useEffect(() => {
     if (token) {
@@ -58,6 +62,41 @@ export default function GuestApp() {
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location.state, navigate, location.pathname])
+
+  // Handle payment return from Stripe
+  useEffect(() => {
+    const handlePaymentReturn = async () => {
+      const urlParams = new URLSearchParams(location.search)
+      const paymentSuccess = urlParams.get('payment_success')
+      const paymentCanceled = urlParams.get('payment_canceled')
+
+      if (paymentSuccess === 'true') {
+        toast.success('Payment completed successfully! 🎉', {
+          duration: 6000,
+        })
+        
+        // Clear the URL parameters
+        navigate(location.pathname, { replace: true })
+        
+        // Trigger a refresh of the page data to update payment status
+        // This will cause the payment widget to refresh automatically
+        if (token) {
+          loadGuestData()
+          // Also trigger payment widget refresh
+          setPaymentRefreshTrigger(prev => prev + 1)
+        }
+      } else if (paymentCanceled === 'true') {
+        toast.error('Payment was canceled. You can try again anytime.', {
+          duration: 4000,
+        })
+        
+        // Clear the URL parameters
+        navigate(location.pathname, { replace: true })
+      }
+    }
+
+    handlePaymentReturn()
+  }, [location.search, location.pathname, navigate, token])
 
   // Countdown timer effect
   useEffect(() => {
@@ -810,6 +849,50 @@ export default function GuestApp() {
     </div>
   )
 
+  const renderPaymentSection = () => {
+    return (
+      <div className="space-y-6">
+        {/* Payment Section Header */}
+        <div className="card">
+          <div className="flex items-center mb-4">
+            <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-3 flex-shrink-0" />
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Service Payments</h2>
+              <p className="text-sm text-gray-600">Manage additional service payments for your stay</p>
+            </div>
+          </div>
+
+          {/* Check-in Status Info */}
+          {!checkinStatus?.completed && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mr-3 mt-1 flex-shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold text-yellow-900 mb-1">
+                    Complete Check-in Required
+                  </h3>
+                  <p className="text-sm text-yellow-800">
+                    Please complete your check-in process before accessing payment services.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Payment Widget - Only show if check-in is completed */}
+        {checkinStatus?.completed && (
+          <PaymentProvider>
+            <AccommodationTaxWidget 
+              guestToken={token} 
+              refreshTrigger={paymentRefreshTrigger}
+            />
+          </PaymentProvider>
+        )}
+      </div>
+    )
+  }
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -826,6 +909,8 @@ export default function GuestApp() {
         return renderReservationSection()
       case 'property':
         return renderPropertySection()
+      case 'payment':
+        return renderPaymentSection()
       case 'documents':
         return renderDocumentsSection()
       default:
@@ -837,6 +922,7 @@ export default function GuestApp() {
     { id: 'overview', label: 'Room key', icon: Home },
     { id: 'reservation', label: 'Reservation', icon: FileText },
     { id: 'property', label: 'Property', icon: Building },
+    { id: 'payment', label: 'Payment', icon: CreditCard },
     { id: 'documents', label: 'Contact', icon: MessageCircle }
   ]
 
@@ -881,7 +967,7 @@ export default function GuestApp() {
         <div className="fixed left-1/2 -translate-x-1/2 bottom-0 z-10
                         w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
           <div className="bg-white border-t border-primary-200">
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-5 gap-1">
               {navigationItems.map((item) => {
                 const IconComponent = item.icon
                 const isActive = activeSection === item.id

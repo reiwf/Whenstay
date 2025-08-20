@@ -13,31 +13,9 @@ const PORT = process.env.PORT || 3001;
 
 app.set('trust proxy', 1);
 
-// Security middleware with custom CSP
+// Security middleware - disable CSP temporarily to test Stripe integration
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      connectSrc: [
-        "'self'",
-        "https://nwdsuuwlmockdqzxkkbm.supabase.co",
-        "wss://nwdsuuwlmockdqzxkkbm.supabase.co",
-        "https://api.staylabel.com",
-        "wss://api.staylabel.com"
-      ],
-      imgSrc: [
-        "'self'",
-        "https://nwdsuuwlmockdqzxkkbm.supabase.co",
-        "https://api.staylabel.com",
-        "data:"
-      ],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      upgradeInsecureRequests: []
-    }
-  }
+  contentSecurityPolicy: false
 }));
 app.use(cors({
   origin: [
@@ -59,7 +37,10 @@ const limiter = rateLimit({
 
 app.use('/api/', limiter);
 
-// Body parsing middleware
+// Stripe webhook needs raw body for signature verification
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
+
+// Body parsing middleware for other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -86,6 +67,7 @@ const pricingRoutes = require('./routes/pricingRoutes');
 const roomTypeRoutes = require('./routes/roomTypeRoutes');
 const marketDemandRoutes = require('./routes/marketDemandRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
+const upsellRoutes = require('./routes/upsellRoutes');
 
 // API routes
 app.use('/api/webhooks', webhookRoutes);
@@ -105,6 +87,7 @@ app.use('/api/pricing', pricingRoutes);
 app.use('/api/room-types', roomTypeRoutes);
 app.use('/api/market-demand', marketDemandRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/upsell', upsellRoutes);
 
 // Serve static files from frontend build
 // In development: frontend is at ../frontend/dist

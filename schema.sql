@@ -2121,26 +2121,6 @@ $$;
 
 
 --
--- Name: update_verified_at(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_verified_at() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    IF NEW.admin_verified = TRUE AND OLD.admin_verified = FALSE THEN
-        NEW.verified_at = NOW();
-        NEW.status = 'completed';
-    ELSIF NEW.admin_verified = FALSE THEN
-        NEW.verified_at = NULL;
-        -- Don't auto-change status back, admin might want to keep it submitted
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-
---
 -- Name: add_prefixes(text, text); Type: FUNCTION; Schema: storage; Owner: -
 --
 
@@ -3203,6 +3183,171 @@ COMMENT ON COLUMN auth.users.is_sso_user IS 'Auth: Set this column to true when 
 
 
 --
+-- Name: accommodation_tax_invoices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.accommodation_tax_invoices (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    guest_token character varying(8) NOT NULL,
+    nights integer NOT NULL,
+    num_guests integer NOT NULL,
+    total_amount numeric(10,2) NOT NULL,
+    room_rate_per_person_per_night numeric(10,2) NOT NULL,
+    tax_rate numeric(10,2) NOT NULL,
+    tax_amount numeric(10,2) NOT NULL,
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    status character varying(20) DEFAULT 'pending'::character varying,
+    stripe_payment_intent_id character varying(100),
+    paid_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT positive_amounts CHECK (((nights > 0) AND (num_guests > 0) AND (total_amount >= (0)::numeric) AND (room_rate_per_person_per_night >= (0)::numeric) AND (tax_rate >= (0)::numeric) AND (tax_amount >= (0)::numeric))),
+    CONSTRAINT valid_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'exempted'::character varying, 'failed'::character varying])::text[])))
+);
+
+
+--
+-- Name: TABLE accommodation_tax_invoices; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.accommodation_tax_invoices IS 'Tracks accommodation tax calculations and payment status for reservations';
+
+
+--
+-- Name: COLUMN accommodation_tax_invoices.guest_token; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.accommodation_tax_invoices.guest_token IS 'Guest check-in token for easy lookup';
+
+
+--
+-- Name: COLUMN accommodation_tax_invoices.tax_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.accommodation_tax_invoices.tax_rate IS 'Tax rate per person per night in JPY';
+
+
+--
+-- Name: COLUMN accommodation_tax_invoices.status; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.accommodation_tax_invoices.status IS 'Payment status: pending, paid, exempted, failed';
+
+
+--
+-- Name: properties; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.properties (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    name character varying(255) NOT NULL,
+    address text NOT NULL,
+    owner_id uuid,
+    description text,
+    property_type character varying(100) DEFAULT 'apartment'::character varying,
+    wifi_name character varying(255),
+    wifi_password character varying(255),
+    house_rules text,
+    check_in_instructions text,
+    emergency_contact character varying(255),
+    property_amenities jsonb,
+    location_info jsonb,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    access_time time without time zone,
+    default_cleaner_id uuid,
+    beds24_property_id bigint,
+    departure_time time without time zone
+);
+
+
+--
+-- Name: TABLE properties; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.properties IS 'Properties/buildings owned by users';
+
+
+--
+-- Name: reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservations (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    beds24_booking_id character varying(255) NOT NULL,
+    booking_name character varying(255) NOT NULL,
+    booking_email character varying(255) NOT NULL,
+    booking_phone character varying(50),
+    check_in_date date NOT NULL,
+    check_out_date date NOT NULL,
+    num_guests integer DEFAULT 1,
+    total_amount numeric(10,2),
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    check_in_token character varying(8),
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    booking_source text,
+    num_adults integer,
+    num_children integer,
+    special_requests text,
+    property_id uuid,
+    room_type_id uuid,
+    room_unit_id uuid,
+    "apiReference" text,
+    booking_lastname text,
+    "rateDescription" text,
+    commission numeric,
+    "apiMessage" text,
+    "bookingTime" timestamp with time zone,
+    comments text,
+    price numeric,
+    "timeStamp" timestamp with time zone,
+    lang text,
+    access_read boolean DEFAULT false,
+    status text
+);
+
+
+--
+-- Name: accommodation_tax_details; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.accommodation_tax_details AS
+ SELECT ati.id,
+    ati.reservation_id,
+    ati.guest_token,
+    ati.nights,
+    ati.num_guests,
+    ati.total_amount,
+    ati.room_rate_per_person_per_night,
+    ati.tax_rate,
+    ati.tax_amount,
+    ati.currency,
+    ati.status,
+    ati.stripe_payment_intent_id,
+    ati.paid_at,
+    ati.created_at,
+    ati.updated_at,
+    r.booking_name,
+    r.booking_email,
+    r.check_in_date,
+    r.check_out_date,
+    p.name AS property_name
+   FROM ((public.accommodation_tax_invoices ati
+     LEFT JOIN public.reservations r ON ((ati.reservation_id = r.id)))
+     LEFT JOIN public.properties p ON ((r.property_id = p.id)));
+
+
+--
+-- Name: VIEW accommodation_tax_details; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.accommodation_tax_details IS 'Accommodation tax invoices with reservation and property details';
+
+
+--
 -- Name: automation_rules; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3428,6 +3573,28 @@ CREATE TABLE public.guest_channel_consents (
     created_at timestamp with time zone DEFAULT now(),
     CONSTRAINT guest_channel_consents_channel_check CHECK ((channel = ANY (ARRAY['whatsapp'::text, 'email'::text, 'sms'::text])))
 );
+
+
+--
+-- Name: guest_payment_services; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guest_payment_services (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    service_key character varying(50) NOT NULL,
+    name character varying(100) NOT NULL,
+    description text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE guest_payment_services; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.guest_payment_services IS 'Defines available payment services for guests (accommodation tax, damage deposit, etc.)';
 
 
 --
@@ -3703,6 +3870,47 @@ CREATE TABLE public.messages (
 
 
 --
+-- Name: payment_intents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payment_intents (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    service_type character varying(50) NOT NULL,
+    stripe_payment_intent_id character varying(100) NOT NULL,
+    amount numeric(10,2) NOT NULL,
+    currency character varying(3) NOT NULL,
+    status character varying(50) NOT NULL,
+    client_secret character varying(1000),
+    metadata jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT positive_amount CHECK ((amount > (0)::numeric))
+);
+
+
+--
+-- Name: TABLE payment_intents; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.payment_intents IS 'Tracks Stripe payment intents for all guest payment services';
+
+
+--
+-- Name: COLUMN payment_intents.service_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payment_intents.service_type IS 'Type of service: accommodation_tax, damage_deposit, etc.';
+
+
+--
+-- Name: COLUMN payment_intents.status; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payment_intents.status IS 'Stripe payment intent status';
+
+
+--
 -- Name: pricing_audit; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3808,41 +4016,6 @@ CREATE TABLE public.pricing_runs (
 
 
 --
--- Name: properties; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.properties (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    name character varying(255) NOT NULL,
-    address text NOT NULL,
-    owner_id uuid,
-    description text,
-    property_type character varying(100) DEFAULT 'apartment'::character varying,
-    wifi_name character varying(255),
-    wifi_password character varying(255),
-    house_rules text,
-    check_in_instructions text,
-    emergency_contact character varying(255),
-    property_amenities jsonb,
-    location_info jsonb,
-    is_active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    access_time time without time zone,
-    default_cleaner_id uuid,
-    beds24_property_id bigint,
-    departure_time time without time zone
-);
-
-
---
--- Name: TABLE properties; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.properties IS 'Properties/buildings owned by users';
-
-
---
 -- Name: property_images; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3891,7 +4064,8 @@ CREATE TABLE public.room_types (
     beds24_roomtype_id bigint,
     min_price numeric(10,2),
     max_price numeric(10,2),
-    total_units integer
+    total_units integer,
+    sort_order integer
 );
 
 
@@ -3972,6 +4146,87 @@ CREATE VIEW public.property_summary AS
 
 
 --
+-- Name: reservation_guests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservation_guests (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    guest_number integer NOT NULL,
+    is_primary_guest boolean DEFAULT false NOT NULL,
+    guest_firstname character varying(255),
+    guest_lastname character varying(255),
+    guest_contact character varying(50),
+    guest_mail character varying(255),
+    passport_url text,
+    guest_address text,
+    estimated_checkin_time time without time zone,
+    travel_purpose character varying(255),
+    emergency_contact_name character varying(255),
+    emergency_contact_phone character varying(50),
+    agreement_accepted boolean DEFAULT false,
+    checkin_submitted_at timestamp with time zone,
+    admin_verified boolean DEFAULT false,
+    verified_at timestamp with time zone,
+    verified_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT reservation_guests_guest_number_positive CHECK ((guest_number > 0)),
+    CONSTRAINT reservation_guests_primary_guest_logic CHECK ((((is_primary_guest = true) AND (guest_number = 1)) OR (is_primary_guest = false)))
+);
+
+
+--
+-- Name: reservation_all_guests_details; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.reservation_all_guests_details AS
+ SELECT r.id AS reservation_id,
+    r.beds24_booking_id,
+    r.booking_name,
+    r.check_in_date,
+    r.check_out_date,
+    r.num_guests,
+    r.status,
+    p.name AS property_name,
+    rt.name AS room_type_name,
+    ru.unit_number,
+    rg.id AS guest_id,
+    rg.guest_number,
+    rg.is_primary_guest,
+    rg.guest_firstname,
+    rg.guest_lastname,
+    rg.guest_contact,
+    rg.guest_mail,
+    rg.passport_url,
+    rg.guest_address,
+    rg.estimated_checkin_time,
+    rg.travel_purpose,
+    rg.emergency_contact_name,
+    rg.emergency_contact_phone,
+    rg.agreement_accepted,
+    rg.checkin_submitted_at,
+    rg.admin_verified,
+    rg.verified_at,
+    rg.verified_by,
+    rg.created_at AS guest_created_at,
+    rg.updated_at AS guest_updated_at
+   FROM ((((public.reservations r
+     JOIN public.reservation_guests rg ON ((r.id = rg.reservation_id)))
+     LEFT JOIN public.properties p ON ((r.property_id = p.id)))
+     LEFT JOIN public.room_types rt ON ((r.room_type_id = rt.id)))
+     LEFT JOIN public.room_units ru ON ((r.room_unit_id = ru.id)))
+  ORDER BY r.check_in_date DESC, rg.guest_number;
+
+
+--
+-- Name: VIEW reservation_all_guests_details; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.reservation_all_guests_details IS 'Detailed view showing all guests for each reservation, useful for admin interfaces and guest management.';
+
+
+--
 -- Name: reservation_segments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4006,62 +4261,6 @@ CREATE TABLE public.reservation_webhook_logs (
 
 
 --
--- Name: reservations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.reservations (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    beds24_booking_id character varying(255) NOT NULL,
-    booking_name character varying(255) NOT NULL,
-    booking_email character varying(255) NOT NULL,
-    booking_phone character varying(50),
-    check_in_date date NOT NULL,
-    check_out_date date NOT NULL,
-    num_guests integer DEFAULT 1,
-    total_amount numeric(10,2),
-    currency character varying(3) DEFAULT 'JPY'::character varying,
-    status public.reservation_status,
-    check_in_token character varying(8),
-    guest_lastname character varying(255),
-    guest_firstname character varying(255),
-    guest_contact character varying(50),
-    guest_mail character varying(255),
-    passport_url text,
-    guest_address text,
-    estimated_checkin_time time without time zone,
-    travel_purpose character varying(255),
-    emergency_contact_name character varying(255),
-    emergency_contact_phone character varying(50),
-    agreement_accepted boolean DEFAULT false,
-    checkin_submitted_at timestamp with time zone,
-    admin_verified boolean DEFAULT false,
-    verified_at timestamp with time zone,
-    verified_by uuid,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    booking_source text,
-    num_adults integer,
-    num_children integer,
-    special_requests text,
-    property_id uuid,
-    room_type_id uuid,
-    room_unit_id uuid,
-    "apiReference" text,
-    booking_lastname text,
-    "rateDescription" text,
-    commission numeric,
-    "apiMessage" text,
-    "bookingTime" timestamp with time zone,
-    comments text,
-    price numeric,
-    "timeStamp" timestamp with time zone,
-    lang text,
-    access_read boolean DEFAULT false,
-    status_temp text
-);
-
-
---
 -- Name: reservations_details; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -4085,21 +4284,6 @@ CREATE VIEW public.reservations_details AS
     r.num_children,
     r.special_requests,
     r.check_in_token,
-    r.guest_lastname,
-    r.guest_firstname,
-    r.guest_contact,
-    r.guest_mail,
-    r.passport_url,
-    r.guest_address,
-    r.estimated_checkin_time,
-    r.travel_purpose,
-    r.emergency_contact_name,
-    r.emergency_contact_phone,
-    r.agreement_accepted,
-    r.checkin_submitted_at,
-    r.admin_verified,
-    r.verified_at,
-    r.verified_by,
     r.created_at,
     r.updated_at,
     r."apiReference",
@@ -4113,10 +4297,38 @@ CREATE VIEW public.reservations_details AS
     r."timeStamp",
     r.lang,
     r.access_read,
+    pg.guest_firstname,
+    pg.guest_lastname,
+    pg.guest_contact,
+    pg.guest_mail,
+    pg.passport_url,
+    pg.guest_address,
+    pg.estimated_checkin_time,
+    pg.travel_purpose,
+    pg.emergency_contact_name,
+    pg.emergency_contact_phone,
+    pg.agreement_accepted,
+    pg.checkin_submitted_at,
+    pg.admin_verified,
+    pg.verified_at,
+    pg.verified_by,
+        CASE
+            WHEN (r.num_guests <= 1) THEN
+            CASE
+                WHEN (pg.checkin_submitted_at IS NOT NULL) THEN true
+                ELSE false
+            END
+            ELSE (( SELECT count(*) AS count
+               FROM public.reservation_guests rg_check
+              WHERE ((rg_check.reservation_id = r.id) AND (rg_check.checkin_submitted_at IS NOT NULL))) = COALESCE(r.num_guests, 1))
+        END AS all_guests_checked_in,
+    ( SELECT count(*) AS count
+           FROM public.reservation_guests rg_count
+          WHERE ((rg_count.reservation_id = r.id) AND (rg_count.checkin_submitted_at IS NOT NULL))) AS completed_guest_checkins,
     p.name AS property_name,
     p.address AS property_address,
     p.owner_id AS property_owner_id,
-    p.description AS property_description,
+    p.description,
     p.property_type,
     p.wifi_name AS property_wifi_name,
     p.wifi_password AS property_wifi_password,
@@ -4160,11 +4372,12 @@ CREATE VIEW public.reservations_details AS
     ru.beds24_unit_id,
     up.first_name AS verified_by_name,
     up.last_name AS verified_by_lastname
-   FROM ((((public.reservations r
+   FROM (((((public.reservations r
+     LEFT JOIN public.reservation_guests pg ON (((r.id = pg.reservation_id) AND (pg.guest_number = 1))))
      LEFT JOIN public.properties p ON ((r.property_id = p.id)))
      LEFT JOIN public.room_types rt ON ((r.room_type_id = rt.id)))
      LEFT JOIN public.room_units ru ON ((r.room_unit_id = ru.id)))
-     LEFT JOIN public.user_profiles up ON ((r.verified_by = up.id)));
+     LEFT JOIN public.user_profiles up ON ((pg.verified_by = up.id)));
 
 
 --
@@ -4187,7 +4400,7 @@ CREATE VIEW public.room_availability AS
    FROM (((public.properties p
      LEFT JOIN public.room_types rt ON ((p.id = rt.property_id)))
      LEFT JOIN public.room_units ru ON ((rt.id = ru.room_type_id)))
-     LEFT JOIN public.reservations r ON (((ru.id = r.room_unit_id) AND (r.status = ANY (ARRAY['confirmed'::public.reservation_status, 'checked_in'::public.reservation_status])) AND (r.check_in_date <= CURRENT_DATE) AND (r.check_out_date > CURRENT_DATE))))
+     LEFT JOIN public.reservations r ON (((ru.id = r.room_unit_id) AND (r.status = ANY (ARRAY['confirmed'::text, 'checked_in'::text])) AND (r.check_in_date <= CURRENT_DATE) AND (r.check_out_date > CURRENT_DATE))))
   WHERE (p.is_active = true)
   GROUP BY p.id, p.name, rt.id, rt.name, rt.base_price, rt.max_guests, ru.id, ru.unit_number, ru.is_active, rt.is_active, p.is_active;
 
@@ -4259,6 +4472,17 @@ COMMENT ON COLUMN public.seasonality_settings.year_recurring IS 'If true, applie
 --
 
 COMMENT ON COLUMN public.seasonality_settings.display_order IS 'Order for UI display and conflict resolution';
+
+
+--
+-- Name: stripe_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stripe_events (
+    id text NOT NULL,
+    processed_at timestamp with time zone DEFAULT now(),
+    created_at timestamp with time zone DEFAULT now()
+);
 
 
 --
@@ -4639,6 +4863,14 @@ ALTER TABLE ONLY auth.users
 
 
 --
+-- Name: accommodation_tax_invoices accommodation_tax_invoices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodation_tax_invoices
+    ADD CONSTRAINT accommodation_tax_invoices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: automation_rules automation_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4724,6 +4956,22 @@ ALTER TABLE ONLY public.events
 
 ALTER TABLE ONLY public.guest_channel_consents
     ADD CONSTRAINT guest_channel_consents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guest_payment_services guest_payment_services_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_payment_services
+    ADD CONSTRAINT guest_payment_services_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guest_payment_services guest_payment_services_service_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_payment_services
+    ADD CONSTRAINT guest_payment_services_service_key_key UNIQUE (service_key);
 
 
 --
@@ -4839,6 +5087,22 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: payment_intents payment_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_intents
+    ADD CONSTRAINT payment_intents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payment_intents payment_intents_stripe_payment_intent_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_intents
+    ADD CONSTRAINT payment_intents_stripe_payment_intent_id_key UNIQUE (stripe_payment_intent_id);
+
+
+--
 -- Name: pricing_audit pricing_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4908,6 +5172,22 @@ ALTER TABLE ONLY public.properties
 
 ALTER TABLE ONLY public.property_images
     ADD CONSTRAINT property_images_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: reservation_guests reservation_guests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_guests
+    ADD CONSTRAINT reservation_guests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: reservation_guests reservation_guests_reservation_guest_number_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_guests
+    ADD CONSTRAINT reservation_guests_reservation_guest_number_unique UNIQUE (reservation_id, guest_number);
 
 
 --
@@ -5007,6 +5287,14 @@ ALTER TABLE ONLY public.seasonality_settings
 
 
 --
+-- Name: stripe_events stripe_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stripe_events
+    ADD CONSTRAINT stripe_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: thread_channels thread_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5044,6 +5332,14 @@ ALTER TABLE ONLY public.message_deliveries
 
 ALTER TABLE ONLY public.guest_channel_consents
     ADD CONSTRAINT unique_reservation_channel UNIQUE (reservation_id, channel);
+
+
+--
+-- Name: accommodation_tax_invoices unique_reservation_tax; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodation_tax_invoices
+    ADD CONSTRAINT unique_reservation_tax UNIQUE (reservation_id);
 
 
 --
@@ -5462,6 +5758,27 @@ CREATE INDEX users_is_anonymous_idx ON auth.users USING btree (is_anonymous);
 
 
 --
+-- Name: idx_accommodation_tax_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_accommodation_tax_reservation ON public.accommodation_tax_invoices USING btree (reservation_id);
+
+
+--
+-- Name: idx_accommodation_tax_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_accommodation_tax_status ON public.accommodation_tax_invoices USING btree (status);
+
+
+--
+-- Name: idx_accommodation_tax_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_accommodation_tax_token ON public.accommodation_tax_invoices USING btree (guest_token);
+
+
+--
 -- Name: idx_automation_rules_enabled_property; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5714,6 +6031,27 @@ CREATE INDEX idx_messages_thread_created ON public.messages USING btree (thread_
 
 
 --
+-- Name: idx_payment_intents_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_intents_reservation ON public.payment_intents USING btree (reservation_id);
+
+
+--
+-- Name: idx_payment_intents_service; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_intents_service ON public.payment_intents USING btree (service_type);
+
+
+--
+-- Name: idx_payment_intents_stripe; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_intents_stripe ON public.payment_intents USING btree (stripe_payment_intent_id);
+
+
+--
 -- Name: idx_pricing_audit_latest; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5784,6 +6122,41 @@ CREATE INDEX idx_property_images_room_unit_id ON public.property_images USING bt
 
 
 --
+-- Name: idx_reservation_guests_admin_verified; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_guests_admin_verified ON public.reservation_guests USING btree (admin_verified, verified_at);
+
+
+--
+-- Name: idx_reservation_guests_checkin_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_guests_checkin_status ON public.reservation_guests USING btree (reservation_id, checkin_submitted_at);
+
+
+--
+-- Name: idx_reservation_guests_guest_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_guests_guest_number ON public.reservation_guests USING btree (reservation_id, guest_number);
+
+
+--
+-- Name: idx_reservation_guests_primary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_guests_primary ON public.reservation_guests USING btree (reservation_id, is_primary_guest) WHERE (is_primary_guest = true);
+
+
+--
+-- Name: idx_reservation_guests_reservation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_guests_reservation_id ON public.reservation_guests USING btree (reservation_id);
+
+
+--
 -- Name: idx_reservation_segments_dates; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5819,13 +6192,6 @@ CREATE INDEX idx_reservation_segments_room_unit_id ON public.reservation_segment
 
 
 --
--- Name: idx_reservations_admin_verified; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_admin_verified ON public.reservations USING btree (admin_verified);
-
-
---
 -- Name: idx_reservations_beds24_booking_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5854,27 +6220,6 @@ CREATE INDEX idx_reservations_check_in_token ON public.reservations USING btree 
 
 
 --
--- Name: idx_reservations_checkin_submitted; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_checkin_submitted ON public.reservations USING btree (checkin_submitted_at);
-
-
---
--- Name: idx_reservations_created_dates; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_created_dates ON public.reservations USING btree (created_at, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
-
-
---
--- Name: idx_reservations_occupancy_calc; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_occupancy_calc ON public.reservations USING btree (room_type_id, check_in_date, check_out_date, status);
-
-
---
 -- Name: idx_reservations_property_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5889,13 +6234,6 @@ CREATE INDEX idx_reservations_property_id ON public.reservations USING btree (pr
 
 
 --
--- Name: idx_reservations_room_type_dates; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_room_type_dates ON public.reservations USING btree (room_type_id, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
-
-
---
 -- Name: idx_reservations_room_type_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5903,24 +6241,10 @@ CREATE INDEX idx_reservations_room_type_id ON public.reservations USING btree (r
 
 
 --
--- Name: idx_reservations_room_unit_dates; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_room_unit_dates ON public.reservations USING btree (room_unit_id, check_in_date, check_out_date) WHERE (status = ANY (ARRAY['new'::public.reservation_status, 'confirmed'::public.reservation_status, 'checked_in'::public.reservation_status, 'completed'::public.reservation_status]));
-
-
---
 -- Name: idx_reservations_room_unit_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_reservations_room_unit_id ON public.reservations USING btree (room_unit_id);
-
-
---
--- Name: idx_reservations_room_unit_occupancy; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_reservations_room_unit_occupancy ON public.reservations USING btree (room_unit_id, check_in_date, check_out_date, status);
 
 
 --
@@ -6033,6 +6357,13 @@ CREATE INDEX idx_seasonality_location_active ON public.seasonality_settings USIN
 --
 
 CREATE UNIQUE INDEX idx_seasonality_location_order ON public.seasonality_settings USING btree (location_id, display_order) WHERE (is_active = true);
+
+
+--
+-- Name: idx_stripe_events_processed_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_stripe_events_processed_at ON public.stripe_events USING btree (processed_at);
 
 
 --
@@ -6344,6 +6675,13 @@ CREATE TRIGGER trigger_seasonality_settings_updated_at BEFORE UPDATE ON public.s
 
 
 --
+-- Name: accommodation_tax_invoices update_accommodation_tax_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_accommodation_tax_updated_at BEFORE UPDATE ON public.accommodation_tax_invoices FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: cleaning_tasks update_cleaning_task_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6369,6 +6707,13 @@ CREATE TRIGGER update_comp_sets_updated_at BEFORE UPDATE ON public.comp_sets FOR
 --
 
 CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: guest_payment_services update_guest_payment_services_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_guest_payment_services_updated_at BEFORE UPDATE ON public.guest_payment_services FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -6400,6 +6745,13 @@ CREATE TRIGGER update_market_tuning_updated_at BEFORE UPDATE ON public.market_tu
 
 
 --
+-- Name: payment_intents update_payment_intents_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_payment_intents_updated_at BEFORE UPDATE ON public.payment_intents FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: pricing_rules update_pricing_rules_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6414,10 +6766,10 @@ CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON public.properties F
 
 
 --
--- Name: reservations update_reservations_verified_at; Type: TRIGGER; Schema: public; Owner: -
+-- Name: reservation_guests update_reservation_guests_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER update_reservations_verified_at BEFORE UPDATE ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.update_verified_at();
+CREATE TRIGGER update_reservation_guests_updated_at BEFORE UPDATE ON public.reservation_guests FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -6576,6 +6928,14 @@ ALTER TABLE ONLY auth.sessions
 
 ALTER TABLE ONLY auth.sso_domains
     ADD CONSTRAINT sso_domains_sso_provider_id_fkey FOREIGN KEY (sso_provider_id) REFERENCES auth.sso_providers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: accommodation_tax_invoices accommodation_tax_invoices_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodation_tax_invoices
+    ADD CONSTRAINT accommodation_tax_invoices_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
 
 
 --
@@ -6755,6 +7115,14 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: payment_intents payment_intents_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_intents
+    ADD CONSTRAINT payment_intents_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
 -- Name: pricing_audit pricing_audit_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6827,6 +7195,22 @@ ALTER TABLE ONLY public.property_images
 
 
 --
+-- Name: reservation_guests reservation_guests_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_guests
+    ADD CONSTRAINT reservation_guests_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: reservation_guests reservation_guests_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_guests
+    ADD CONSTRAINT reservation_guests_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: reservation_segments reservation_segments_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6864,14 +7248,6 @@ ALTER TABLE ONLY public.reservations
 
 ALTER TABLE ONLY public.reservations
     ADD CONSTRAINT reservations_room_unit_id_fkey FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE SET NULL;
-
-
---
--- Name: reservations reservations_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.reservations
-    ADD CONSTRAINT reservations_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.user_profiles(id) ON DELETE SET NULL;
 
 
 --

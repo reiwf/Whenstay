@@ -262,7 +262,7 @@ export class StatusUtils {
       'checked_out': '#6b7280',  // gray
       'cancelled': '#ef4444',    // red
       'pending': '#f59e0b',      // yellow
-      'new': '#707cbfff',          // purple
+      'new': '#3b82f6',          // purple
       'no_show': '#f97316'       // orange
     };
     
@@ -689,7 +689,7 @@ export class SwapUtils {
     if (hasConflictA) {
       return { 
         isValid: false, 
-        reason: `${reservationA.bookingName || 'Reservation A'} would conflict in room ${reservationB.roomUnitId}` 
+        reason: `${reservationA.booking_name || 'Reservation A'} would conflict in room ${reservationB.roomUnitId}` 
       };
     }
 
@@ -698,7 +698,7 @@ export class SwapUtils {
     if (hasConflictB) {
       return { 
         isValid: false, 
-        reason: `${reservationB.bookingName || 'Reservation B'} would conflict in room ${reservationA.roomUnitId}` 
+        reason: `${reservationB.booking_name || 'Reservation B'} would conflict in room ${reservationA.roomUnitId}` 
       };
     }
 

@@ -188,13 +188,12 @@ export default function ReservationPage() {
 
   const renderGuestInfo = (reservation) => {
     const bookingName = reservation.booking_name || reservation.guest_name
-    const bookingLastname = reservation.booking_lastname || ''
-    const fullName = bookingLastname ? `${bookingName} ${bookingLastname}` : bookingName
+
     
     return (
       <div className="space-y-1">
         <div className="text-sm font-medium text-gray-900">
-          {fullName}
+          {bookingName}
         </div>
         <div className="text-sm text-gray-500">
           {reservation.booking_email || reservation.guest_email}

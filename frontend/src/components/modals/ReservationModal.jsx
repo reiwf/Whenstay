@@ -28,7 +28,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const [formData, setFormData] = useState({
     // Basic booking information - maps directly to database columns
     beds24BookingId: '',
-    bookingName: '',
+    bookingFirstname: '', // Changed from bookingName - DB trigger will build booking_name
     bookingEmail: '',
     bookingPhone: '',
     bookingLastname: '',
@@ -88,7 +88,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       setFormData({
         // Basic booking information - maps directly to database columns
         beds24BookingId: reservation.beds24_booking_id || '',
-        bookingName: reservation.booking_name || '',
+        bookingFirstname: reservation.booking_firstname || '', // Changed from booking_name
         bookingEmail: reservation.booking_email || '',
         bookingPhone: reservation.booking_phone || '',
         bookingLastname: reservation.booking_lastname || '',
@@ -145,7 +145,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       // Reset form for new reservation
       setFormData({
         beds24BookingId: '',
-        bookingName: '',
+        bookingFirstname: '', // Changed from bookingName
         bookingEmail: '',
         bookingPhone: '',
         bookingLastname: '',
@@ -221,8 +221,8 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     if (!formData.beds24BookingId.trim()) {
       newErrors.beds24BookingId = 'Beds24 Booking ID is required'
     }
-    if (!formData.bookingName.trim()) {
-      newErrors.bookingName = 'Booking name is required'
+    if (!formData.bookingFirstname.trim()) {
+      newErrors.bookingFirstname = 'Booking first name is required'
     }
     if (formData.bookingEmail && !/\S+@\S+\.\S+/.test(formData.bookingEmail)) {
       newErrors.bookingEmail = 'Please enter a valid email address'
@@ -301,7 +301,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       const submitData = {
         // Core booking information
         beds24BookingId: formData.beds24BookingId,
-        bookingName: formData.bookingName,
+        bookingFirstname: formData.bookingFirstname, // Changed from bookingName - trigger will build booking_name
         bookingEmail: formData.bookingEmail,
         bookingPhone: formData.bookingPhone || null,
         bookingLastname: formData.bookingLastname || null,
