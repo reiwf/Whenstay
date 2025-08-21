@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, MessageCircle, Clock } from 'lucide-react';
+import { Search, MessageCircle, Clock, Users, Crown } from 'lucide-react';
 import airbnbLogo from '../../../shared/airbnblogo.png';
 
 const CHANNEL_ICONS = {
@@ -146,9 +146,19 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
             <div className="grid grid-cols-[1fr_auto] grid-rows-2 gap-x-2 h-[72px] px-3 py-2">
               {/* Row 1: Subject (left) + Time (right) */}
               <div className="min-w-0 self-center">
-                <p className="text-sm font-medium text-primary-900 truncate">
-                  {thread.subject || 'No subject'}
-                </p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-primary-900 truncate">
+                    {thread.subject || 'No subject'}
+                  </p>
+                  {/* Group booking indicators */}
+                  {thread.reservations?.is_group_master && (
+                    <Crown className="w-3 h-3 text-purple-600 flex-shrink-0" title="Group Master" />
+                  )}
+                  {(thread.reservations?.is_group_master || thread.reservations?.booking_group_master_id) && (
+                    <Users className="w-3 h-3 text-purple-600 flex-shrink-0" 
+                           title={`Group Booking${thread.reservations?.group_room_count ? ` (${thread.reservations.group_room_count} rooms)` : ''}`} />
+                  )}
+                </div>
               </div>
               <span className="text-xs text-primary-500 self-center">
                 {formatTimestamp(thread.last_message_at)}

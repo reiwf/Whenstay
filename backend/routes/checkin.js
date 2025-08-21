@@ -6,6 +6,91 @@ const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
 const { supabaseAdmin } = require('../config/supabase');
 
+// Helper function to detect and get group booking information
+async function getGroupBookingInfo(reservationId) {
+  try {
+    const groupInfo = await reservationService.isGroupBooking(reservationId);
+    console.log('Initial group check result:', groupInfo);
+    
+    if (!groupInfo || !groupInfo.isGroupBooking) {
+      console.log('✗ Not a group booking (no booking_group_master_id)');
+      return { isGroupBooking: false };
+    }
+    
+    const masterBookingId = groupInfo.masterBookingId;
+    console.log('Getting group reservations for master ID:', masterBookingId);
+    
+    const groupReservations = await reservationService.getGroupBookingReservations(masterBookingId);
+    const groupSummary = await reservationService.getGroupBookingSummary(masterBookingId);
+    
+    // Strict validation: Only return group booking info if there are actually multiple rooms
+    const totalRooms = groupReservations ? groupReservations.length : 0;
+    const isActuallyGroupBooking = totalRooms > 1;
+    
+    console.log('Group booking validation:', { 
+      reservationId, 
+      masterBookingId,
+      totalRooms, 
+      isActuallyGroupBooking,
+      groupInfo 
+    });
+    
+    if (!isActuallyGroupBooking) {
+      console.log('✗ Single reservation detected (totalRooms <= 1), not returning group booking info');
+      return { isGroupBooking: false };
+    }
+    
+    console.log('✓ Confirmed group booking with', totalRooms, 'rooms');
+    return {
+      isGroupBooking: true,
+      groupReservations,
+      groupSummary,
+      masterReservation: groupReservations.find(r => r.is_group_master) || groupReservations[0]
+    };
+  } catch (error) {
+    console.error('Error getting group booking info:', error);
+    return { isGroupBooking: false };
+  }
+}
+
+// Helper function to get group check-in completion status
+async function getGroupCheckInStatus(groupReservations) {
+  const statusMap = {
+    totalRooms: groupReservations.length,
+    completedRooms: 0,
+    totalGuests: 0,
+    completedGuests: 0,
+    roomStatuses: []
+  };
+
+  for (const reservation of groupReservations) {
+    const completionStatus = await reservationService.validateAllGuestsComplete(reservation.id);
+    const numGuests = reservation.num_guests || 1;
+    
+    statusMap.totalGuests += numGuests;
+    statusMap.completedGuests += completionStatus.completedGuests;
+    
+    if (completionStatus.isComplete) {
+      statusMap.completedRooms++;
+    }
+    
+    statusMap.roomStatuses.push({
+      reservationId: reservation.id,
+      roomNumber: reservation.room_number,
+      roomType: reservation.room_type_name,
+      numGuests,
+      completedGuests: completionStatus.completedGuests,
+      isComplete: completionStatus.isComplete
+    });
+  }
+
+  return {
+    ...statusMap,
+    allRoomsComplete: statusMap.completedRooms === statusMap.totalRooms,
+    allGuestsComplete: statusMap.completedGuests === statusMap.totalGuests
+  };
+}
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -41,8 +126,17 @@ router.get('/:token', async (req, res) => {
     const reservation = dashboardData.reservation;
     const guests = dashboardData.guests || [];
     
+    // Get group booking information
+    const groupInfo = await getGroupBookingInfo(reservation.id);
+    
     // Check if ALL guests have completed check-in (new multi-guest logic)
     const allGuestsCompleted = reservation.all_guests_completed;
+    
+    // For group bookings, also get group-wide check-in status
+    let groupCheckInStatus = null;
+    if (groupInfo.isGroupBooking) {
+      groupCheckInStatus = await getGroupCheckInStatus(groupInfo.groupReservations);
+    }
     
     // Build reservation response
     const reservationResponse = {
@@ -118,7 +212,20 @@ router.get('/:token', async (req, res) => {
           id: reservation.id,
           submitted_at: primaryGuest?.checkin_submitted_at,
           admin_verified: primaryGuest?.admin_verified || false
-        }
+        },
+        // Group booking information
+        groupBooking: groupInfo.isGroupBooking ? {
+          isGroupBooking: true,
+          groupCheckInStatus,
+          summary: groupInfo.groupSummary,
+          rooms: groupInfo.groupReservations.map(r => ({
+            reservationId: r.id,
+            roomNumber: r.room_number,
+            roomType: r.room_type_name,
+            isMaster: r.is_group_master,
+            numGuests: r.num_guests
+          }))
+        } : { isGroupBooking: false }
       });
     }
 
@@ -146,7 +253,21 @@ router.get('/:token', async (req, res) => {
         agreementAccepted: guest.agreement_accepted,
         submittedAt: guest.checkin_submitted_at,
         adminVerified: guest.admin_verified
-      }))
+      })),
+      // Group booking information
+      groupBooking: groupInfo.isGroupBooking ? {
+        isGroupBooking: true,
+        groupCheckInStatus,
+        summary: groupInfo.groupSummary,
+        rooms: groupInfo.groupReservations.map(r => ({
+          reservationId: r.id,
+          roomNumber: r.room_number,
+          roomType: r.room_type_name,
+          isMaster: r.is_group_master,
+          numGuests: r.num_guests,
+          checkInToken: r.checkin_token
+        }))
+      } : { isGroupBooking: false }
     });
 
   } catch (error) {
@@ -556,5 +677,296 @@ router.get('/:token/status', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Get group booking overview for unified check-in
+router.get('/:token/group-overview', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Get reservation by token
+    const reservation = await reservationService.getReservationByToken(token);
+    
+    if (!reservation) {
+      return res.status(404).json({ error: 'Invalid or expired check-in link' });
+    }
+
+    // Get group booking information
+    const groupInfo = await getGroupBookingInfo(reservation.id);
+    
+    if (!groupInfo.isGroupBooking) {
+      return res.status(400).json({ error: 'This reservation is not part of a group booking' });
+    }
+
+    // Get detailed information for each room in the group
+    const roomDetails = [];
+    for (const groupReservation of groupInfo.groupReservations) {
+      try {
+        // Try to get dashboard data if checkin_token is available
+        let dashboardData = null;
+        if (groupReservation.checkin_token) {
+          try {
+            dashboardData = await reservationService.getGuestAppData(groupReservation.checkin_token);
+          } catch (dashboardError) {
+            console.log(`Could not get dashboard data for reservation ${groupReservation.id}:`, dashboardError.message);
+          }
+        }
+        
+        const guests = await reservationService.getReservationGuests(groupReservation.id);
+        const completionStatus = await reservationService.validateAllGuestsComplete(groupReservation.id);
+        
+        roomDetails.push({
+          reservationId: groupReservation.id,
+          roomNumber: dashboardData?.room?.room_number || groupReservation.room_number || groupReservation.unit_number || 'TBD',
+          roomType: dashboardData?.room?.room_type_name || groupReservation.room_type_name || 'Standard Room',
+          isMaster: groupReservation.is_group_master,
+          numGuests: groupReservation.num_guests,
+          checkInToken: groupReservation.checkin_token,
+          completionStatus,
+          guests: guests.map(guest => ({
+            guestNumber: guest.guest_number,
+            firstName: guest.guest_firstname,
+            lastName: guest.guest_lastname,
+            isCompleted: guest.is_completed,
+            displayName: guest.display_name,
+            isPrimaryGuest: guest.is_primary_guest
+          })),
+          // Debug info
+          hasValidToken: !!groupReservation.checkin_token,
+          dashboardDataAvailable: !!dashboardData
+        });
+      } catch (roomError) {
+        console.error(`Error processing room ${groupReservation.id}:`, roomError);
+        // Add room with basic info even if detailed data fails
+        roomDetails.push({
+          reservationId: groupReservation.id,
+          roomNumber: groupReservation.room_number || 'TBD',
+          roomType: groupReservation.room_type_name || 'Standard Room',
+          isMaster: groupReservation.is_group_master,
+          numGuests: groupReservation.num_guests,
+          checkInToken: groupReservation.checkin_token,
+          completionStatus: { isComplete: false, completedGuests: 0, requiredGuests: groupReservation.num_guests || 1 },
+          guests: [],
+          error: 'Failed to load detailed room information'
+        });
+      }
+    }
+
+    // Get overall group check-in status
+    const groupCheckInStatus = await getGroupCheckInStatus(groupInfo.groupReservations);
+
+    res.status(200).json({
+      groupBooking: {
+        isGroupBooking: true,
+        summary: groupInfo.groupSummary,
+        groupCheckInStatus,
+        rooms: roomDetails,
+        masterReservation: groupInfo.masterReservation
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting group overview:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get unified group check-in status
+router.get('/:token/group-status', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Get reservation by token
+    const reservation = await reservationService.getReservationByToken(token);
+    
+    if (!reservation) {
+      return res.status(404).json({ error: 'Invalid or expired check-in link' });
+    }
+
+    // Get group booking information
+    const groupInfo = await getGroupBookingInfo(reservation.id);
+    
+    if (!groupInfo.isGroupBooking) {
+      return res.status(400).json({ error: 'This reservation is not part of a group booking' });
+    }
+
+    // Get group check-in status
+    const groupCheckInStatus = await getGroupCheckInStatus(groupInfo.groupReservations);
+
+    res.status(200).json({
+      groupBooking: {
+        isGroupBooking: true,
+        groupCheckInStatus,
+        summary: groupInfo.groupSummary
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting group status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Submit unified group check-in (all guests across all rooms)
+router.post('/:token/submit-group-checkin', 
+  [
+    body('roomGuests').isObject().withMessage('Room guests data is required'),
+    body('agreementAccepted').equals('true').withMessage('Agreement must be accepted')
+  ],
+  async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { roomGuests, agreementAccepted, submittedAt } = req.body;
+      
+      // Validate basic input structure
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ 
+          error: 'Validation failed', 
+          details: errors.array() 
+        });
+      }
+
+      // Get reservation by token
+      const reservation = await reservationService.getReservationByToken(token);
+      
+      if (!reservation) {
+        return res.status(404).json({ error: 'Invalid or expired check-in link' });
+      }
+
+      // Get group booking information
+      const groupInfo = await getGroupBookingInfo(reservation.id);
+      
+      if (!groupInfo.isGroupBooking) {
+        return res.status(400).json({ error: 'This reservation is not part of a group booking' });
+      }
+
+      // Validate that all rooms in group are included in submission
+      const submittedRoomIds = Object.keys(roomGuests);
+      const groupReservationIds = groupInfo.groupReservations.map(r => r.id);
+      
+      const missingRooms = groupReservationIds.filter(id => !submittedRoomIds.includes(id));
+      if (missingRooms.length > 0) {
+        return res.status(400).json({ 
+          error: `Missing guest data for reservations: ${missingRooms.join(', ')}` 
+        });
+      }
+
+      // Process guests for each room in the group
+      const processedRooms = [];
+      const failedRooms = [];
+
+      for (const [reservationId, guests] of Object.entries(roomGuests)) {
+        try {
+          const groupReservation = groupInfo.groupReservations.find(r => r.id === reservationId);
+          if (!groupReservation) {
+            throw new Error(`Reservation ${reservationId} not found in group`);
+          }
+
+          // Validate number of guests for this room
+          const expectedGuests = groupReservation.num_guests || 1;
+          if (guests.length !== expectedGuests) {
+            throw new Error(`Expected ${expectedGuests} guests, but received ${guests.length}`);
+          }
+
+          // Process each guest for this room
+          const roomProcessedGuests = [];
+          for (let i = 0; i < guests.length; i++) {
+            const guestInfo = guests[i];
+            const guestNumber = i + 1;
+
+            const guestInfoForDb = {
+              firstName: guestInfo.firstName,
+              lastName: guestInfo.lastName,
+              personalEmail: guestInfo.personalEmail,
+              contactNumber: guestInfo.contactNumber,
+              address: guestInfo.address,
+              estimatedCheckinTime: guestInfo.estimatedCheckinTime,
+              travelPurpose: guestInfo.travelPurpose,
+              emergencyContactName: guestInfo.emergencyContactName,
+              emergencyContactPhone: guestInfo.emergencyContactPhone,
+              passportUrl: guestInfo.passportUrl,
+              agreementAccepted: agreementAccepted === 'true' || agreementAccepted === true,
+              submittedAt: submittedAt || new Date().toISOString()
+            };
+
+            const updatedGuest = await reservationService.createOrUpdateGuest(reservationId, guestNumber, guestInfoForDb);
+            roomProcessedGuests.push({
+              guestNumber,
+              id: updatedGuest.id,
+              name: `${guestInfo.firstName} ${guestInfo.lastName}`.trim()
+            });
+
+            // Send confirmation email to primary guests with email addresses
+            if (guestInfo.personalEmail && guestInfo.personalEmail.trim()) {
+              try {
+                await emailService.sendCheckinConfirmation(
+                  guestInfo.personalEmail,
+                  `${guestInfo.firstName} ${guestInfo.lastName}`,
+                  groupReservation.check_in_date
+                );
+              } catch (emailError) {
+                console.log(`Email service not available for room ${reservationId}, guest ${guestNumber}:`, emailError.message);
+              }
+            }
+          }
+
+          processedRooms.push({
+            reservationId,
+            roomNumber: groupReservation.room_number,
+            processedGuests: roomProcessedGuests
+          });
+
+        } catch (error) {
+          console.error(`Error processing room ${reservationId}:`, error);
+          failedRooms.push({
+            reservationId,
+            error: error.message
+          });
+        }
+      }
+
+      // Get final group check-in status
+      const finalGroupStatus = await getGroupCheckInStatus(groupInfo.groupReservations);
+
+      // Send admin notification if entire group is complete
+      if (finalGroupStatus.allRoomsComplete) {
+        try {
+          const masterReservation = groupInfo.masterReservation;
+          await emailService.sendAdminNotification(
+            masterReservation.booking_name,
+            masterReservation.booking_email,
+            masterReservation.check_in_date,
+            masterReservation.id,
+            `Group booking with ${finalGroupStatus.totalRooms} rooms completed`
+          );
+        } catch (emailError) {
+          console.log('Email service not available:', emailError.message);
+        }
+      }
+
+      // Determine response status
+      const hasFailures = failedRooms.length > 0;
+      const allSuccessful = processedRooms.length === groupInfo.groupReservations.length;
+
+      res.status(allSuccessful ? 200 : 207).json({
+        message: allSuccessful 
+          ? 'Group check-in completed successfully'
+          : `${processedRooms.length} of ${groupInfo.groupReservations.length} rooms processed successfully`,
+        data: {
+          processedRooms,
+          failedRooms,
+          groupStatus: finalGroupStatus,
+          allRoomsComplete: finalGroupStatus.allRoomsComplete,
+          allGuestsComplete: finalGroupStatus.allGuestsComplete
+        },
+        warnings: hasFailures ? 'Some rooms failed to process' : undefined
+      });
+
+    } catch (error) {
+      console.error('Error submitting group check-in:', error);
+      res.status(500).json({ error: 'Failed to submit group check-in' });
+    }
+  }
+);
 
 module.exports = router;

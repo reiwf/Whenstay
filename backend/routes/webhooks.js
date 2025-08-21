@@ -148,7 +148,7 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
-    console.log(`Processing ${messages.length} messages from webhook`);
+    console.log(`🎯 [WEBHOOK MESSAGES] Processing ${messages.length} messages from webhook`);
 
     // Get booking information to find the reservation
     const booking = webhookData.booking || webhookData;
@@ -161,6 +161,8 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
+    console.log(`🎯 [WEBHOOK MESSAGES] Looking for reservation with Beds24 booking ID: ${beds24BookingId}`);
+
     // Find the reservation to get thread context
     const reservation = await reservationService.getReservationByBeds24Id(beds24BookingId.toString());
     
@@ -169,30 +171,72 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
-    // Find or create communication thread for this reservation
-    const thread = await communicationService.findOrCreateThreadByReservation(
-      reservation.id,
-      {
-        channels: [{ channel, external_thread_id: beds24BookingId.toString() }]
-      }
-    );
+    console.log(`🎯 [WEBHOOK MESSAGES] Found reservation ${reservation.id} for Beds24 booking ${beds24BookingId}`);
 
-    console.log(`Processing messages for thread: ${thread.id}, reservation: ${reservation.id}, channel: ${channel}`);
+    // CRITICAL FIX: For group bookings, ensure we find/create the unified thread properly
+    // Check if this is part of a group booking
+    const groupInfo = await communicationService.getGroupBookingInfo(reservation.id);
+    
+    if (groupInfo.isGroupBooking) {
+      console.log(`🎯 [WEBHOOK MESSAGES] Group booking detected! Master: ${groupInfo.masterReservationId}, Total rooms: ${groupInfo.totalRooms}`);
+      
+      // For group bookings, always use the master reservation ID to ensure unified thread
+      const masterReservationId = groupInfo.masterReservationId;
+      
+      console.log(`🎯 [WEBHOOK MESSAGES] Using master reservation ${masterReservationId} for unified group thread`);
+      
+      // Find or create communication thread using the master reservation
+      const thread = await communicationService.findOrCreateThreadByReservation(
+        masterReservationId,
+        {
+          channels: [{ channel, external_thread_id: beds24BookingId.toString() }]
+        }
+      );
 
-    // Process each message
-    for (const message of messages) {
-      try {
-        await processIndividualMessage(message, thread.id, channel);
-      } catch (messageError) {
-        console.error('Error processing individual message:', {
-          messageId: message.id,
-          error: messageError.message
-        });
-        // Continue processing other messages even if one fails
+      console.log(`🎯 [WEBHOOK MESSAGES] Processing messages for GROUP thread: ${thread.id}, master reservation: ${masterReservationId}, channel: ${channel}`);
+
+      // Process each message
+      for (const message of messages) {
+        try {
+          await processIndividualMessage(message, thread.id, channel);
+        } catch (messageError) {
+          console.error('Error processing individual message:', {
+            messageId: message.id,
+            error: messageError.message
+          });
+          // Continue processing other messages even if one fails
+        }
       }
+
+      console.log(`🎯 [WEBHOOK MESSAGES] Successfully processed ${messages.length} messages for GROUP reservation ${masterReservationId}`);
+    } else {
+      console.log(`🎯 [WEBHOOK MESSAGES] Individual booking detected for reservation ${reservation.id}`);
+      
+      // Find or create communication thread for this individual reservation
+      const thread = await communicationService.findOrCreateThreadByReservation(
+        reservation.id,
+        {
+          channels: [{ channel, external_thread_id: beds24BookingId.toString() }]
+        }
+      );
+
+      console.log(`🎯 [WEBHOOK MESSAGES] Processing messages for INDIVIDUAL thread: ${thread.id}, reservation: ${reservation.id}, channel: ${channel}`);
+
+      // Process each message
+      for (const message of messages) {
+        try {
+          await processIndividualMessage(message, thread.id, channel);
+        } catch (messageError) {
+          console.error('Error processing individual message:', {
+            messageId: message.id,
+            error: messageError.message
+          });
+          // Continue processing other messages even if one fails
+        }
+      }
+
+      console.log(`🎯 [WEBHOOK MESSAGES] Successfully processed ${messages.length} messages for INDIVIDUAL reservation ${reservation.id}`);
     }
-
-    console.log(`Successfully processed ${messages.length} messages for reservation ${reservation.id}`);
 
   } catch (error) {
     console.error('Error processing webhook messages:', error);
@@ -202,14 +246,14 @@ async function processWebhookMessages(webhookData) {
 
 // Process an individual message from Beds24
 async function processIndividualMessage(message, threadId, channel) {
-  // console.log('Processing message:', {
-  //   id: message.id,
-  //   source: message.source,
-  //   time: message.time,
-  //   read: message.read,
-  //   channel: channel,
-  //   content: message.message?.substring(0, 50) + '...'
-  // });
+  console.log(`📨 [INDIVIDUAL MESSAGE] Processing message ${message.id} for thread ${threadId}, channel: ${channel}`, {
+    id: message.id,
+    source: message.source,
+    time: message.time,
+    read: message.read,
+    channel: channel,
+    content: message.message?.substring(0, 50) + '...'
+  });
 
   // Check if this is an echo of our outbound message (host source)
   if (message.source === 'host') {
@@ -287,7 +331,7 @@ async function processIndividualMessage(message, threadId, channel) {
   // console.log(`Successfully processed message ${message.id} as message ${result.id}`);
 }
 
-// Handle new booking webhook
+// Handle new booking webhook with group booking support
 async function handleNewBooking(webhookData) {
   try {
     // Process webhook data to extract booking information with enhanced mapping
@@ -296,6 +340,9 @@ async function handleNewBooking(webhookData) {
     console.log('Processing new booking:', {
       beds24BookingId: bookingInfo.beds24BookingId,
       bookingFirstname: bookingInfo.bookingFirstname,
+      isGroupBooking: bookingInfo.bookingGroupMasterId ? true : false,
+      isGroupMaster: bookingInfo.isGroupMaster,
+      groupRoomCount: bookingInfo.groupRoomCount,
       propertyId: bookingInfo.propertyId,
       roomTypeId: bookingInfo.roomTypeId,
       roomUnitId: bookingInfo.roomUnitId
@@ -335,13 +382,18 @@ async function handleNewBooking(webhookData) {
     
     console.log(`Created new reservation: ${reservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
-    // Process automation rules for the new reservation
-    try {
-      await automationService.processReservationAutomation(reservation, false);
-      console.log(`Automation processing completed for new reservation: ${reservation.id}`);
-    } catch (automationError) {
-      console.error(`Error processing automation for new reservation ${reservation.id}:`, automationError);
-      // Don't throw error - automation failure shouldn't break webhook processing
+    // Handle group booking automation - only process for group master to avoid duplication
+    if (bookingInfo.isGroupMaster || !bookingInfo.bookingGroupMasterId) {
+      // Process automation rules for the new reservation
+      try {
+        await automationService.processReservationAutomation(reservation, false);
+        console.log(`Automation processing completed for ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${reservation.id}`);
+      } catch (automationError) {
+        console.error(`Error processing automation for reservation ${reservation.id}:`, automationError);
+        // Don't throw error - automation failure shouldn't break webhook processing
+      }
+    } else {
+      console.log(`Skipping automation for non-master group booking: ${reservation.id} (group master: ${bookingInfo.bookingGroupMasterId})`);
     }
     
   } catch (error) {
@@ -350,7 +402,7 @@ async function handleNewBooking(webhookData) {
   }
 }
 
-// Handle booking update webhook
+// Handle booking update webhook with group booking support
 async function handleBookingUpdate(webhookData) {
   try {
     // Process webhook data with enhanced mapping
@@ -359,6 +411,9 @@ async function handleBookingUpdate(webhookData) {
     console.log('Processing booking update:', {
       beds24BookingId: bookingInfo.beds24BookingId,
       bookingFirstname: bookingInfo.bookingFirstname,
+      isGroupBooking: bookingInfo.bookingGroupMasterId ? true : false,
+      isGroupMaster: bookingInfo.isGroupMaster,
+      groupRoomCount: bookingInfo.groupRoomCount,
       checkInDate: bookingInfo.checkInDate,
       checkOutDate: bookingInfo.checkOutDate
     });
@@ -382,13 +437,18 @@ async function handleBookingUpdate(webhookData) {
     
     console.log(`Updated reservation: ${updatedReservation.id} for Beds24 booking: ${bookingInfo.beds24BookingId}`);
     
-    // Process automation rules for the updated reservation (will cancel existing and reschedule)
-    try {
-      await automationService.processReservationAutomation(updatedReservation, true);
-      console.log(`Automation processing completed for updated reservation: ${updatedReservation.id}`);
-    } catch (automationError) {
-      console.error(`Error processing automation for updated reservation ${updatedReservation.id}:`, automationError);
-      // Don't throw error - automation failure shouldn't break webhook processing
+    // Handle group booking automation - only process for group master to avoid duplication
+    if (bookingInfo.isGroupMaster || !bookingInfo.bookingGroupMasterId) {
+      // Process automation rules for the updated reservation (will cancel existing and reschedule)
+      try {
+        await automationService.processReservationAutomation(updatedReservation, true);
+        console.log(`Automation processing completed for updated ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${updatedReservation.id}`);
+      } catch (automationError) {
+        console.error(`Error processing automation for updated reservation ${updatedReservation.id}:`, automationError);
+        // Don't throw error - automation failure shouldn't break webhook processing
+      }
+    } else {
+      console.log(`Skipping automation for non-master group booking update: ${updatedReservation.id} (group master: ${bookingInfo.bookingGroupMasterId})`);
     }
     
   } catch (error) {

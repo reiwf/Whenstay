@@ -28,6 +28,12 @@ class ReservationService {
         room_type_id: reservationData.roomTypeId || null,
         room_unit_id: reservationData.roomUnitId || null,
         
+        // Group booking fields (NEW)
+        booking_group_master_id: reservationData.bookingGroupMasterId || null,
+        is_group_master: reservationData.isGroupMaster || false,
+        group_room_count: reservationData.groupRoomCount || 1,
+        booking_group_ids: reservationData.bookingGroupIds ? JSON.stringify(reservationData.bookingGroupIds) : null,
+        
         // Additional Beds24 webhook fields
         lang: reservationData.lang || null,
         apiReference: reservationData.apiReference || null,
@@ -172,6 +178,12 @@ class ReservationService {
       if (reservationData.propertyId !== undefined) updateData.property_id = reservationData.propertyId;
       if (reservationData.roomTypeId !== undefined) updateData.room_type_id = reservationData.roomTypeId;
       if (reservationData.roomUnitId !== undefined) updateData.room_unit_id = reservationData.roomUnitId;
+      
+      // Group booking fields (NEW)
+      if (reservationData.bookingGroupMasterId !== undefined) updateData.booking_group_master_id = reservationData.bookingGroupMasterId;
+      if (reservationData.isGroupMaster !== undefined) updateData.is_group_master = reservationData.isGroupMaster;
+      if (reservationData.groupRoomCount !== undefined) updateData.group_room_count = reservationData.groupRoomCount;
+      if (reservationData.bookingGroupIds !== undefined) updateData.booking_group_ids = reservationData.bookingGroupIds ? JSON.stringify(reservationData.bookingGroupIds) : null;
       
       // Additional Beds24 specific fields
       if (reservationData.lang !== undefined) updateData.lang = reservationData.lang;
@@ -2233,6 +2245,373 @@ class ReservationService {
       return stats;
     } catch (error) {
       console.error('Database error fetching cleaning task stats:', error);
+      throw error;
+    }
+  }
+
+  // GROUP BOOKING OPERATIONS
+
+  // Get all reservations in a group booking by master booking ID
+  async getGroupBookingReservations(masterBookingId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            address
+          ),
+          room_types (
+            id,
+            name,
+            description
+          ),
+          room_units (
+            id,
+            unit_number,
+            floor_number
+          )
+        `)
+        .eq('booking_group_master_id', masterBookingId)
+        .order('is_group_master', { ascending: false })
+        .order('beds24_booking_id', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching group booking reservations:', error);
+        throw new Error('Failed to fetch group booking reservations');
+      }
+
+      // Transform data for consistency
+      const transformedData = (data || []).map(reservation => ({
+        ...reservation,
+        guest_name: reservation.booking_name,
+        guest_email: reservation.booking_email,
+        guest_phone: reservation.booking_phone,
+        property_name: reservation.properties?.name || 'Unknown Property',
+        room_type_name: reservation.room_types?.name || 'Standard Room',
+        room_number: reservation.room_units?.unit_number || 'TBD',
+        booking_group_ids: reservation.booking_group_ids ? JSON.parse(reservation.booking_group_ids) : null
+      }));
+
+      return transformedData;
+    } catch (error) {
+      console.error('Database error fetching group booking reservations:', error);
+      throw error;
+    }
+  }
+
+  // Get group booking summary with aggregated information
+  async getGroupBookingSummary(masterBookingId) {
+    try {
+      // Get all reservations in the group
+      const groupReservations = await this.getGroupBookingReservations(masterBookingId);
+      
+      if (!groupReservations.length) {
+        return null;
+      }
+
+      const masterReservation = groupReservations.find(r => r.is_group_master);
+      
+      // Calculate group summary
+      const summary = {
+        masterBookingId: masterBookingId,
+        masterReservation: masterReservation,
+        totalRooms: groupReservations.length,
+        groupIds: masterReservation?.booking_group_ids || [],
+        
+        // Guest information (from master reservation)
+        guestName: masterReservation?.booking_name || 'Unknown Guest',
+        guestEmail: masterReservation?.booking_email || null,
+        guestPhone: masterReservation?.booking_phone || null,
+        
+        // Date information
+        checkInDate: masterReservation?.check_in_date,
+        checkOutDate: masterReservation?.check_out_date,
+        
+        // Financial information
+        totalAmount: groupReservations.reduce((sum, r) => sum + (r.total_amount || 0), 0),
+        currency: masterReservation?.currency || 'JPY',
+        
+        // Status information
+        groupStatus: this.calculateGroupStatus(groupReservations),
+        reservations: groupReservations.map(r => ({
+          id: r.id,
+          beds24BookingId: r.beds24_booking_id,
+          propertyName: r.property_name,
+          roomNumber: r.room_number,
+          roomTypeName: r.room_type_name,
+          totalAmount: r.total_amount,
+          status: r.status,
+          isGroupMaster: r.is_group_master
+        })),
+        
+        // Property information (unique properties in group)
+        properties: [...new Set(groupReservations.map(r => r.property_name))],
+        
+        // Metadata
+        createdAt: masterReservation?.created_at,
+        updatedAt: Math.max(...groupReservations.map(r => new Date(r.updated_at).getTime()))
+      };
+
+      return summary;
+    } catch (error) {
+      console.error('Database error fetching group booking summary:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to calculate overall group status
+  calculateGroupStatus(reservations) {
+    const statuses = reservations.map(r => r.status);
+    
+    // If any reservation is cancelled, group is partially cancelled
+    if (statuses.includes('cancelled') && statuses.some(s => s !== 'cancelled')) {
+      return 'partially_cancelled';
+    }
+    
+    // If all are cancelled, group is cancelled
+    if (statuses.every(s => s === 'cancelled')) {
+      return 'cancelled';
+    }
+    
+    // If all are confirmed, group is confirmed
+    if (statuses.every(s => s === 'confirmed')) {
+      return 'confirmed';
+    }
+    
+    // Mixed statuses
+    return 'mixed_status';
+  }
+
+  // Update status for entire group booking
+  async updateGroupBookingStatus(masterBookingId, newStatus) {
+    try {
+      console.log(`Updating group booking status for master ID: ${masterBookingId} to: ${newStatus}`);
+      
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('booking_group_master_id', masterBookingId)
+        .select('id, beds24_booking_id, status, is_group_master');
+
+      if (error) {
+        console.error('Error updating group booking status:', error);
+        throw new Error('Failed to update group booking status');
+      }
+
+      const updatedCount = data?.length || 0;
+      console.log(`Updated status for ${updatedCount} reservations in group ${masterBookingId}`);
+
+      return {
+        masterBookingId,
+        newStatus,
+        updatedReservations: data,
+        updatedCount
+      };
+    } catch (error) {
+      console.error('Database error updating group booking status:', error);
+      throw error;
+    }
+  }
+
+  // Cancel entire group booking
+  async cancelGroupBooking(masterBookingId, reason = null) {
+    try {
+      console.log(`Cancelling group booking with master ID: ${masterBookingId}`);
+      
+      // Get current group reservations before cancelling
+      const currentReservations = await this.getGroupBookingReservations(masterBookingId);
+      const activereservations = currentReservations.filter(r => r.status !== 'cancelled');
+      
+      if (activereservations.length === 0) {
+        return {
+          masterBookingId,
+          message: 'All reservations in group are already cancelled',
+          cancelledReservations: []
+        };
+      }
+
+      // Cancel all active reservations in the group
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString(),
+          comments: reason ? `Group cancellation: ${reason}` : 'Group booking cancelled'
+        })
+        .eq('booking_group_master_id', masterBookingId)
+        .neq('status', 'cancelled') // Only update non-cancelled reservations
+        .select('id, beds24_booking_id, status, is_group_master, property_id, room_unit_id');
+
+      if (error) {
+        console.error('Error cancelling group booking:', error);
+        throw new Error('Failed to cancel group booking');
+      }
+
+      const cancelledCount = data?.length || 0;
+      console.log(`Cancelled ${cancelledCount} reservations in group ${masterBookingId}`);
+
+      return {
+        masterBookingId,
+        reason,
+        cancelledReservations: data,
+        cancelledCount,
+        message: `Successfully cancelled ${cancelledCount} reservations in the group`
+      };
+    } catch (error) {
+      console.error('Database error cancelling group booking:', error);
+      throw error;
+    }
+  }
+
+  // Check if a reservation belongs to a group booking
+  async isGroupBooking(reservationId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .select('booking_group_master_id, is_group_master, group_room_count')
+        .eq('id', reservationId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking if reservation is group booking:', error);
+        throw new Error('Failed to check group booking status');
+      }
+
+      if (!data) {
+        return false;
+      }
+
+      return {
+        isGroupBooking: !!data.booking_group_master_id,
+        isGroupMaster: data.is_group_master || false,
+        masterBookingId: data.booking_group_master_id,
+        groupRoomCount: data.group_room_count || 1
+      };
+    } catch (error) {
+      console.error('Database error checking group booking status:', error);
+      throw error;
+    }
+  }
+
+  // Find group booking by any reservation ID in the group
+  async findGroupBookingByReservationId(reservationId) {
+    try {
+      // First get the reservation to find the master booking ID
+      const { data: reservation, error: resError } = await supabaseAdmin
+        .from('reservations')
+        .select('booking_group_master_id, is_group_master')
+        .eq('id', reservationId)
+        .single();
+
+      if (resError) {
+        console.error('Error finding reservation for group lookup:', resError);
+        throw new Error('Failed to find reservation');
+      }
+
+      if (!reservation.booking_group_master_id) {
+        return null; // Not a group booking
+      }
+
+      // Get the full group booking summary
+      return this.getGroupBookingSummary(reservation.booking_group_master_id);
+    } catch (error) {
+      console.error('Database error finding group booking by reservation ID:', error);
+      throw error;
+    }
+  }
+
+  // Get all group bookings with pagination and filtering
+  async getGroupBookings(filters = {}) {
+    try {
+      const {
+        propertyId,
+        status,
+        checkInDateFrom,
+        checkInDateTo,
+        limit = 50,
+        offset = 0,
+        sortBy = 'created_at',
+        sortOrder = 'desc'
+      } = filters;
+
+      // Query for group master reservations only
+      let query = supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          properties (
+            id,
+            name,
+            address
+          )
+        `)
+        .eq('is_group_master', true)
+        .not('booking_group_master_id', 'is', null);
+
+      // Apply filters
+      if (propertyId) {
+        query = query.eq('property_id', propertyId);
+      }
+
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (checkInDateFrom) {
+        query = query.gte('check_in_date', checkInDateFrom);
+      }
+
+      if (checkInDateTo) {
+        query = query.lte('check_in_date', checkInDateTo);
+      }
+
+      // Apply sorting
+      const ascending = sortOrder === 'asc';
+      query = query.order(sortBy, { ascending });
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching group bookings:', error);
+        throw new Error('Failed to fetch group bookings');
+      }
+
+      // Get full summaries for each group booking
+      const groupBookings = await Promise.all(
+        (data || []).map(async (masterReservation) => {
+          try {
+            return await this.getGroupBookingSummary(masterReservation.booking_group_master_id);
+          } catch (summaryError) {
+            console.error(`Error getting summary for group ${masterReservation.booking_group_master_id}:`, summaryError);
+            // Return basic info if summary fails
+            return {
+              masterBookingId: masterReservation.booking_group_master_id,
+              masterReservation,
+              totalRooms: masterReservation.group_room_count || 1,
+              guestName: masterReservation.booking_name,
+              checkInDate: masterReservation.check_in_date,
+              checkOutDate: masterReservation.check_out_date,
+              groupStatus: masterReservation.status,
+              error: 'Failed to load complete group details'
+            };
+          }
+        })
+      );
+
+      return groupBookings.filter(Boolean); // Remove any null results
+    } catch (error) {
+      console.error('Database error fetching group bookings:', error);
       throw error;
     }
   }

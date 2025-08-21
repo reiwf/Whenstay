@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Users, Home, Clock, CheckCircle, Edit, AlertTriangle, LayoutPanelLeft } from 'lucide-react'
+import { Calendar, MapPin, Users, Home, Clock, CheckCircle, Edit, AlertTriangle, LayoutPanelLeft, Crown, Building } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import StepNavigation from '../shared/StepNavigation'
 
@@ -10,7 +10,12 @@ export default function Step1ReservationOverview({
   guestData, 
   isModificationMode, 
   onEnterModificationMode, 
-  onExitModificationMode 
+  onExitModificationMode,
+  // Group booking props
+  groupBooking,
+  isGroupBooking,
+  groupCheckInMode,
+  onToggleGroupCheckInMode
 }) {
   const { token } = useParams()
 
@@ -140,6 +145,128 @@ export default function Step1ReservationOverview({
               Cancel Modification
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Group Booking Information */}
+      {isGroupBooking && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4 sm:p-6 mb-6 sm:mb-8">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start">
+              <Crown className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 mr-3 mt-1 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-amber-900 mb-2">
+                  Group Booking Detected
+                </h3>
+                <p className="text-sm sm:text-base text-amber-800 mb-4">
+                  This reservation is part of a group booking with {groupBooking?.summary?.totalRooms || groupBooking?.rooms?.length || 'multiple'} rooms. 
+                  You can check in for this room individually or use unified group check-in for all rooms at once.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Group Summary */}
+          {groupBooking && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-lg sm:text-xl font-bold text-amber-900">
+                  {groupBooking.summary?.totalRooms || groupBooking.rooms?.length || 0}
+                </div>
+                <div className="text-xs sm:text-sm text-amber-700">Total Rooms</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg sm:text-xl font-bold text-amber-900">
+                  {groupBooking.groupCheckInStatus?.totalGuests || 
+                   groupBooking.summary?.totalGuests || 
+                   (groupBooking.rooms?.reduce((sum, room) => sum + (room.numGuests || 0), 0)) || 0}
+                </div>
+                <div className="text-xs sm:text-sm text-amber-700">Total Guests</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg sm:text-xl font-bold text-green-700">
+                  {groupBooking.groupCheckInStatus?.completedRooms || 0}
+                </div>
+                <div className="text-xs sm:text-sm text-amber-700">Completed Rooms</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg sm:text-xl font-bold text-green-700">
+                  {groupBooking.groupCheckInStatus?.completedGuests || 0}
+                </div>
+                <div className="text-xs sm:text-sm text-amber-700">Completed Guests</div>
+              </div>
+            </div>
+          )}
+
+          {/* Room List in Group Mode */}
+          {groupCheckInMode && groupBooking?.rooms && (
+            <div className="mb-4">
+              <h4 className="text-sm sm:text-base font-semibold text-amber-900 mb-3">
+                Rooms in This Group
+              </h4>
+              <div className="space-y-2">
+                {groupBooking.rooms.map(room => (
+                  <div 
+                    key={room.reservationId} 
+                    className={`flex items-center justify-between p-3 rounded-md border ${
+                      room.completionStatus?.isComplete 
+                        ? 'bg-green-50 border-green-200' 
+                        : 'bg-white border-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-center flex-1 min-w-0">
+                      {room.isMaster && <Crown className="w-4 h-4 text-amber-600 mr-2 flex-shrink-0" />}
+                      <Building className="w-4 h-4 text-amber-600 mr-2 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          Room {room.roomNumber} - {room.roomType}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {room.numGuests} {room.numGuests === 1 ? 'guest' : 'guests'}
+                          {room.isMaster && <span className="ml-1 text-amber-600">(Master)</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {room.completionStatus?.isComplete ? (
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <span className="text-xs text-amber-600 font-medium">
+                          {room.completionStatus?.completedGuests || 0}/{room.numGuests}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mode Toggle Button */}
+          {onToggleGroupCheckInMode && (
+            <div className="flex justify-center">
+              <button
+                onClick={onToggleGroupCheckInMode}
+                className={`inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-1 focus:ring-offset-2 ${
+                  groupCheckInMode
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 focus:ring-amber-500'
+                    : 'bg-amber-600 text-white hover:bg-amber-700 focus:ring-amber-500'
+                }`}
+              >
+                {groupCheckInMode ? (
+                  <>
+                    <Users className="w-4 h-4 mr-2" />
+                    Switch to Single Room Mode
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-4 h-4 mr-2" />
+                    Switch to Unified Group Check-in
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

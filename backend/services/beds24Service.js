@@ -344,7 +344,7 @@ class Beds24Service {
     }
   }
 
-  // Enhanced webhook data processing with complete field mapping
+  // Enhanced webhook data processing with complete field mapping and group booking support
   async processWebhookData(webhookData) {
     try {
       // Extract booking information from webhook payload
@@ -357,12 +357,26 @@ class Beds24Service {
 
       console.log('Processing Beds24 booking:', {
         id: booking.id,
+        masterId: booking.masterId,
         propertyId: booking.propertyId,
         roomId: booking.roomId,
         unitId: booking.unitId,
         firstName: booking.firstName,
         lastName: booking.lastName
       });
+
+      // Detect group booking information
+      const groupInfo = this.extractGroupBookingInfo(booking);
+      
+      if (groupInfo.isGroupBooking) {
+        console.log('🔗 Group booking detected:', {
+          bookingId: booking.id,
+          masterId: groupInfo.masterId,
+          isGroupMaster: groupInfo.isGroupMaster,
+          totalRooms: groupInfo.totalRooms,
+          groupIds: groupInfo.groupIds
+        });
+      }
 
       // Enhanced debug: Log the actual booking object structure and field values
       console.log('Booking object keys:', Object.keys(booking));
@@ -449,6 +463,12 @@ class Beds24Service {
         bookingSource: booking.referer || booking.channel || 'Beds24',
         status: this.mapBeds24Status(booking.status),
         
+        // Group booking information (NEW)
+        bookingGroupMasterId: groupInfo.masterId,
+        isGroupMaster: groupInfo.isGroupMaster,
+        groupRoomCount: groupInfo.totalRooms,
+        bookingGroupIds: groupInfo.groupIds,
+        
         // Additional Beds24 specific fields
         apiReference: booking.apiReference || '',
         rateDescription: booking.rateDescription || '',
@@ -486,7 +506,9 @@ class Beds24Service {
         roomTypeId: reservationData.roomTypeId,
         roomUnitId: reservationData.roomUnitId,
         checkInDate: reservationData.checkInDate,
-        checkOutDate: reservationData.checkOutDate
+        checkOutDate: reservationData.checkOutDate,
+        isGroupBooking: groupInfo.isGroupBooking,
+        isGroupMaster: reservationData.isGroupMaster
       });
 
       return reservationData;
@@ -494,6 +516,51 @@ class Beds24Service {
       console.error('Error processing webhook data:', error);
       throw new Error(`Invalid webhook data format: ${error.message}`);
     }
+  }
+
+  // Extract group booking information from Beds24 booking data
+  extractGroupBookingInfo(booking) {
+    const groupInfo = {
+      isGroupBooking: false,
+      masterId: null,
+      isGroupMaster: false,
+      totalRooms: 1,
+      groupIds: null
+    };
+
+    // Check for group booking indicators
+    if (booking.bookingGroup && typeof booking.bookingGroup === 'object') {
+      const { master, ids } = booking.bookingGroup;
+      
+      if (master && Array.isArray(ids) && ids.length > 1) {
+        groupInfo.isGroupBooking = true;
+        groupInfo.masterId = master.toString();
+        groupInfo.isGroupMaster = booking.id?.toString() === master.toString();
+        groupInfo.totalRooms = ids.length;
+        groupInfo.groupIds = ids.map(id => id.toString());
+        
+        console.log('📋 Group booking info extracted:', {
+          currentBookingId: booking.id,
+          masterId: groupInfo.masterId,
+          isGroupMaster: groupInfo.isGroupMaster,
+          totalRooms: groupInfo.totalRooms,
+          groupIds: groupInfo.groupIds
+        });
+      }
+    } else if (booking.masterId && booking.masterId.toString() !== booking.id?.toString()) {
+      // Alternative: masterId field indicates this is part of a group
+      groupInfo.isGroupBooking = true;
+      groupInfo.masterId = booking.masterId.toString();
+      groupInfo.isGroupMaster = false; // This booking is not the master
+      
+      console.log('📋 Group booking detected via masterId:', {
+        currentBookingId: booking.id,
+        masterId: groupInfo.masterId,
+        isGroupMaster: groupInfo.isGroupMaster
+      });
+    }
+
+    return groupInfo;
   }
 
 

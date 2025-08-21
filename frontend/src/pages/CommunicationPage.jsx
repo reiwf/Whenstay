@@ -22,6 +22,7 @@ export default function CommunicationPage() {
     selectThread,
     markMessageAsRead,
     reservation,
+    groupBookingInfo,
     messageListRef,
     connectionStatus
   } = useRealtimeCommunication();
@@ -216,6 +217,8 @@ export default function CommunicationPage() {
                     onThreadAction={handleThreadAction}
                     onMarkAsRead={markMessageAsRead}
                     loading={loading}
+                    reservation={reservation}
+                    groupBookingInfo={groupBookingInfo}
                   />
                 </div>
 

@@ -3,6 +3,7 @@ import { Send, Calendar, Archive, X, ChevronDown, Clock } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import ChannelSelector from './ChannelSelector';
 import ScheduleModal from './ScheduleModal';
+import GroupBookingPanel from './GroupBookingPanel';
 
 export default function MessagePanel({
   thread,
@@ -12,7 +13,9 @@ export default function MessagePanel({
   onSendMessage,
   onThreadAction,
   onMarkAsRead,
-  loading
+  loading,
+  reservation,
+  groupBookingInfo
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -180,6 +183,16 @@ export default function MessagePanel({
           </div>
         </div>
       </div>
+
+      {/* Group Booking Panel - shows when applicable */}
+      {groupBookingInfo?.is_group_booking && (
+        <div className="border-b border-gray-200 p-3 sm:p-4 bg-white">
+          <GroupBookingPanel 
+            groupBookingInfo={groupBookingInfo}
+            reservation={reservation}
+          />
+        </div>
+      )}
 
       {/* Messages */}
       <div 

@@ -10,6 +10,7 @@ export function useCommunication() {
   const [templates, setTemplates] = useState([])
   const [selectedThread, setSelectedThread] = useState(null)
   const [reservation, setReservation] = useState(null)
+  const [groupBookingInfo, setGroupBookingInfo] = useState(null)
 
   // Load message threads
   const loadThreads = useCallback(async (params = {}) => {
@@ -215,18 +216,78 @@ export function useCommunication() {
   const loadReservationDetails = useCallback(async (reservationId) => {
     if (!reservationId) {
       setReservation(null)
+      setGroupBookingInfo(null)
       return null
     }
     
     try {
+      // Load regular reservation details
       const response = await adminAPI.getReservationDetails(reservationId)
       const reservationData = response.data.reservation
       setReservation(reservationData)
+
+      // Load group booking information
+      try {
+        const groupResponse = await adminAPI.getGroupBookingInfo(reservationId)
+        setGroupBookingInfo(groupResponse.data)
+      } catch (groupError) {
+        console.log('No group booking info available:', groupError)
+        setGroupBookingInfo(null)
+      }
+
       return reservationData
     } catch (error) {
       console.error('Error loading reservation details:', error)
       setReservation(null)
+      setGroupBookingInfo(null)
       return null
+    }
+  }, [])
+
+  // Send a group message
+  const sendGroupMessage = useCallback(async (reservationId, messageData) => {
+    try {
+      const response = await adminAPI.sendGroupMessage({
+        reservation_id: reservationId,
+        ...messageData
+      })
+      const newMessage = response.data.message
+      
+      // Add the new message to local state if we're viewing this thread
+      if (selectedThread && selectedThread.id === newMessage.thread_id) {
+        setMessages(prev => [...prev, newMessage])
+      }
+      
+      // Update thread preview in threads list
+      setThreads(prev => 
+        prev.map(thread => 
+          thread.id === newMessage.thread_id 
+            ? { 
+                ...thread, 
+                last_message_at: newMessage.created_at,
+                last_message_preview: messageData.content.substring(0, 160)
+              }
+            : thread
+        )
+      )
+      
+      toast.success('Group message sent successfully')
+      return newMessage
+    } catch (error) {
+      console.error('Error sending group message:', error)
+      toast.error('Failed to send group message')
+      throw error
+    }
+  }, [selectedThread])
+
+  // Load group booking threads
+  const loadGroupBookingThreads = useCallback(async (masterReservationId) => {
+    try {
+      const response = await adminAPI.getGroupBookingThreads(masterReservationId)
+      return response.data.threads || []
+    } catch (error) {
+      console.error('Error loading group booking threads:', error)
+      return []
     }
   }, [])
 
@@ -286,6 +347,7 @@ export function useCommunication() {
     templates,
     selectedThread,
     reservation,
+    groupBookingInfo,
     
     // Actions
     loadThreads,
@@ -302,10 +364,15 @@ export function useCommunication() {
     selectThread,
     refresh,
     
+    // Group booking actions
+    sendGroupMessage,
+    loadGroupBookingThreads,
+    
     // State setters
     setSelectedThread,
     setMessages,
-    setThreads
+    setThreads,
+    setGroupBookingInfo
   }
 }
 

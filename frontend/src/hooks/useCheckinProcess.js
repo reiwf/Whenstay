@@ -9,6 +9,12 @@ export function useCheckinProcess(reservationId) {
   const [existingCheckin, setExistingCheckin] = useState(null)
   const [guestData, setGuestData] = useState(null)
   const [isModificationMode, setIsModificationMode] = useState(false)
+  
+  // Group booking state
+  const [groupBooking, setGroupBooking] = useState(null)
+  const [isGroupBooking, setIsGroupBooking] = useState(false)
+  const [groupCheckInMode, setGroupCheckInMode] = useState(false)
+  
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -55,6 +61,29 @@ export function useCheckinProcess(reservationId) {
       setReservation(reservationData)
       setCheckinCompleted(allGuestsCompleted)
       setExistingCheckin(response.data.checkin || null)
+      
+      // Handle group booking information - Only for actual group bookings
+      const groupBookingData = response.data.groupBooking
+      console.log('Group booking data from API:', groupBookingData)
+      
+      // Strict validation: Only enable group features if this is confirmed as a group booking
+      const isActuallyGroupBooking = groupBookingData && 
+                                    groupBookingData.isGroupBooking === true && 
+                                    groupBookingData.summary && 
+                                    (groupBookingData.summary.totalRooms > 1 || groupBookingData.rooms?.length > 1)
+      
+      if (isActuallyGroupBooking) {
+        setIsGroupBooking(true)
+        setGroupBooking(groupBookingData)
+        console.log('✓ Confirmed group booking detected:', {
+          totalRooms: groupBookingData.summary?.totalRooms || groupBookingData.rooms?.length,
+          isGroupBooking: groupBookingData.isGroupBooking
+        })
+      } else {
+        setIsGroupBooking(false)
+        setGroupBooking(null)
+        console.log('✗ Single reservation (not a group booking)')
+      }
       
       // Set guest data with multi-guest support
       setGuestData({
@@ -265,6 +294,152 @@ export function useCheckinProcess(reservationId) {
     }
   }
 
+  // Group booking functions
+  const loadGroupOverview = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch(`/api/checkin/${reservationId}/group-overview`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load group overview')
+      }
+      
+      const data = await response.json()
+      setGroupBooking(data.groupBooking)
+      console.log('Group overview loaded:', data.groupBooking)
+      
+      // Initialize group form data structure
+      const roomGuests = {}
+      data.groupBooking.rooms.forEach(room => {
+        roomGuests[room.reservationId] = room.guests.map(guest => ({
+          guestNumber: guest.guestNumber,
+          firstName: guest.firstName || '',
+          lastName: guest.lastName || '',
+          personalEmail: guest.guestNumber === 1 ? guest.personalEmail || '' : '',
+          contactNumber: guest.guestNumber === 1 ? guest.contactNumber || '' : '',
+          address: guest.guestNumber === 1 ? guest.address || '' : '',
+          estimatedCheckinTime: guest.guestNumber === 1 ? guest.estimatedCheckinTime || '' : '',
+          travelPurpose: guest.guestNumber === 1 ? guest.travelPurpose || '' : '',
+          emergencyContactName: guest.guestNumber === 1 ? guest.emergencyContactName || '' : '',
+          emergencyContactPhone: guest.guestNumber === 1 ? guest.emergencyContactPhone || '' : '',
+          passportUrl: guest.passportUrl || null,
+          isPrimaryGuest: guest.isPrimaryGuest || false,
+          isCompleted: guest.isCompleted || false
+        }))
+      })
+      
+      setFormData(prev => ({
+        ...prev,
+        groupRoomGuests: roomGuests
+      }))
+      
+    } catch (error) {
+      console.error('Error loading group overview:', error)
+      const errorMessage = error.message || 'Failed to load group overview'
+      setError(errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  const toggleGroupCheckInMode = () => {
+    if (!isGroupBooking) {
+      toast.error('This is not a group booking')
+      return
+    }
+    
+    if (!groupCheckInMode) {
+      // Entering group mode - load group overview
+      setGroupCheckInMode(true)
+      setCurrentStep(1)
+      loadGroupOverview()
+      toast.success('Switched to unified group check-in mode')
+    } else {
+      // Exiting group mode - reload single reservation
+      setGroupCheckInMode(false)
+      setCurrentStep(1)
+      loadReservation()
+      toast.info('Switched back to single room check-in mode')
+    }
+  }
+  
+  const submitGroupCheckin = async () => {
+    try {
+      setSubmitting(true)
+      setError(null)
+
+      const roomGuests = formData.groupRoomGuests || {}
+      
+      const submissionData = {
+        roomGuests,
+        agreementAccepted: formData.agreementAccepted.toString(),
+        submittedAt: new Date().toISOString(),
+        isModification: isModificationMode
+      }
+
+      console.log('Submitting group check-in with token:', reservationId, 'and data:', submissionData)
+
+      const response = await fetch(`/api/checkin/${reservationId}/submit-group-checkin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submissionData)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to submit group check-in')
+      }
+
+      const responseData = await response.json()
+      console.log('Group submit response:', responseData)
+
+      if (responseData.message && responseData.data) {
+        const successMessage = isModificationMode 
+          ? 'Group check-in information updated successfully!' 
+          : responseData.data.allRoomsComplete
+            ? 'All rooms in group check-in completed successfully!'
+            : `${responseData.data.processedRooms.length} rooms processed successfully!`
+        
+        toast.success(successMessage)
+        
+        // Reload group overview to get updated status
+        if (isModificationMode) {
+          setIsModificationMode(false)
+        }
+        await loadGroupOverview()
+        
+        return {
+          success: true,
+          allRoomsComplete: responseData.data.allRoomsComplete,
+          allGuestsComplete: responseData.data.allGuestsComplete,
+          processedRooms: responseData.data.processedRooms,
+          groupStatus: responseData.data.groupStatus,
+          message: successMessage
+        }
+      } else {
+        throw new Error(responseData.message || 'Failed to submit group check-in')
+      }
+      
+    } catch (error) {
+      console.error('Error submitting group check-in:', error)
+      const errorMessage = error.message || 'Failed to submit group check-in'
+      setError(errorMessage)
+      toast.error(errorMessage)
+      return {
+        success: false,
+        error: errorMessage
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const validateCurrentStep = () => {
     switch (currentStep) {
       case 1:
@@ -330,6 +505,11 @@ export function useCheckinProcess(reservationId) {
     guestData,
     isModificationMode,
     
+    // Group booking state
+    groupBooking,
+    isGroupBooking,
+    groupCheckInMode,
+    
     // Actions
     updateFormData,
     nextStep,
@@ -338,6 +518,11 @@ export function useCheckinProcess(reservationId) {
     loadReservation,
     enterModificationMode,
     exitModificationMode,
+    
+    // Group booking actions
+    loadGroupOverview,
+    toggleGroupCheckInMode,
+    submitGroupCheckin,
     
     // Computed
     validateCurrentStep,

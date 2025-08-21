@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const reservationService = require('../services/reservationService');
-const { supabase } = require('../config/supabase');
+const { supabaseAdmin } = require('../config/supabase');
+const supabase = supabaseAdmin; // Use admin client to bypass RLS policies
 
 // Get guest dashboard data by check-in token
 router.get('/:token', async (req, res) => {
@@ -49,7 +50,7 @@ router.post('/:token/access-read', async (req, res) => {
   }
 });
 
-// GET /api/guest/:token/thread - Get or create communication thread for guest
+// GET /api/guest/:token/thread - Get existing communication thread for guest (READ-ONLY)
 router.get('/:token/thread', async (req, res) => {
   try {
     const { token } = req.params;
@@ -58,6 +59,8 @@ router.get('/:token/thread', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
+    console.log(`🎯 [GUEST THREAD] Getting thread for token: ${token}`);
+
     // Get reservation data to validate token and get reservation info
     const dashboardData = await reservationService.getGuestAppData(token);
     if (!dashboardData) {
@@ -65,48 +68,24 @@ router.get('/:token/thread', async (req, res) => {
     }
 
     const reservationId = dashboardData.reservation.id;
-    const bookingName = dashboardData.reservation.booking_name;
-    const bookingLastname = dashboardData.reservation.booking_lastname;
-    const guestEmail = dashboardData.reservation.guest_email;
+    console.log(`🎯 [GUEST THREAD] Found reservation: ${reservationId}`);
 
-    // Create full name for subject
-    const fullGuestName = bookingLastname ? `${bookingName} ${bookingLastname}` : bookingName;
+    // ENHANCED: Use group-aware thread lookup to find existing unified threads
+    const communicationService = require('../services/communicationService');
+    
+    // Check if this is part of a group booking
+    const groupInfo = await communicationService.getGroupBookingInfo(reservationId);
+    console.log(`🎯 [GUEST THREAD] Group booking info:`, groupInfo);
 
-    // Check if a thread already exists for this reservation
-    const { data: existingThread, error: threadError } = await supabase
-      .from('message_threads')
-      .select(`
-        id,
-        reservation_id,
-        subject,
-        status,
-        priority,
-        last_message_at,
-        last_message_preview,
-        created_at,
-        updated_at
-      `)
-      .eq('reservation_id', reservationId)
-      .eq('status', 'open')
-      .maybeSingle();
+    let thread = null;
 
-    if (threadError) throw threadError;
-
-    let thread = existingThread;
-
-    // Create thread if it doesn't exist
-    if (!thread) {
-      const { data: threadId, error: createError } = await supabase.rpc('create_message_thread', {
-        p_reservation_id: reservationId,
-        p_subject: fullGuestName,
-        p_guest_external_address: guestEmail,
-        p_guest_display_name: fullGuestName
-      });
-
-      if (createError) throw createError;
-
-      // Get the complete thread data
-      const { data: newThread, error: getThreadError } = await supabase
+    if (groupInfo.isGroupBooking) {
+      console.log(`🎯 [GUEST THREAD] Group booking detected! Looking for unified thread using master reservation: ${groupInfo.masterReservationId}`);
+      
+      // For group bookings, look for thread using master reservation ID
+      const masterReservationId = groupInfo.masterReservationId;
+      
+      const { data: groupThread, error: groupThreadError } = await supabase
         .from('message_threads')
         .select(`
           id,
@@ -119,17 +98,64 @@ router.get('/:token/thread', async (req, res) => {
           created_at,
           updated_at
         `)
-        .eq('id', threadId)
-        .single();
+        .eq('reservation_id', masterReservationId)
+        .in('status', ['open', 'closed']) // Include closed threads too
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (getThreadError) throw getThreadError;
-      thread = newThread;
+      if (groupThreadError) throw groupThreadError;
+      
+      if (groupThread) {
+        console.log(`✅ [GUEST THREAD] Found existing group thread: ${groupThread.id} for master reservation: ${masterReservationId}`);
+        thread = groupThread;
+      } else {
+        console.log(`❌ [GUEST THREAD] No existing group thread found for master reservation: ${masterReservationId}`);
+      }
+    } else {
+      console.log(`🎯 [GUEST THREAD] Individual booking detected. Looking for individual thread for reservation: ${reservationId}`);
+      
+      // For individual bookings, look for thread using this reservation ID
+      const { data: individualThread, error: individualThreadError } = await supabase
+        .from('message_threads')
+        .select(`
+          id,
+          reservation_id,
+          subject,
+          status,
+          priority,
+          last_message_at,
+          last_message_preview,
+          created_at,
+          updated_at
+        `)
+        .eq('reservation_id', reservationId)
+        .in('status', ['open', 'closed']) // Include closed threads too
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (individualThreadError) throw individualThreadError;
+      
+      if (individualThread) {
+        console.log(`✅ [GUEST THREAD] Found existing individual thread: ${individualThread.id} for reservation: ${reservationId}`);
+        thread = individualThread;
+      } else {
+        console.log(`❌ [GUEST THREAD] No existing individual thread found for reservation: ${reservationId}`);
+      }
+    }
+
+    // CHANGED: No longer auto-create threads - return null if none exists
+    if (thread) {
+      console.log(`🎯 [GUEST THREAD] Returning existing thread: ${thread.id} (status: ${thread.status})`);
+    } else {
+      console.log(`🎯 [GUEST THREAD] No existing thread found, returning null (thread will be created on first message)`);
     }
 
     res.json({ thread });
 
   } catch (error) {
-    console.error('Error getting/creating guest thread:', error);
+    console.error('Error getting guest thread:', error);
     res.status(500).json({ error: 'Failed to get communication thread' });
   }
 });
@@ -144,6 +170,8 @@ router.get('/:token/thread/messages', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
+    console.log(`📨 [GUEST MESSAGES] Getting messages for token: ${token}`);
+
     // Get reservation data to validate token
     const dashboardData = await reservationService.getGuestAppData(token);
     if (!dashboardData) {
@@ -151,20 +179,69 @@ router.get('/:token/thread/messages', async (req, res) => {
     }
 
     const reservationId = dashboardData.reservation.id;
+    console.log(`📨 [GUEST MESSAGES] Found reservation: ${reservationId}`);
 
-    // Get thread for this reservation
-    const { data: thread, error: threadError } = await supabase
-      .from('message_threads')
-      .select('id')
-      .eq('reservation_id', reservationId)
-      .eq('status', 'open')
-      .maybeSingle();
+    // ENHANCED: Use group-aware thread lookup to find the unified thread
+    const communicationService = require('../services/communicationService');
+    
+    // Check if this is part of a group booking
+    const groupInfo = await communicationService.getGroupBookingInfo(reservationId);
+    console.log(`📨 [GUEST MESSAGES] Group booking info:`, groupInfo);
 
-    if (threadError) throw threadError;
+    let thread = null;
+
+    if (groupInfo.isGroupBooking) {
+      console.log(`📨 [GUEST MESSAGES] Group booking detected! Looking for unified thread using master reservation: ${groupInfo.masterReservationId}`);
+      
+      // For group bookings, look for thread using master reservation ID
+      const masterReservationId = groupInfo.masterReservationId;
+      
+      const { data: groupThread, error: groupThreadError } = await supabase
+        .from('message_threads')
+        .select('id, status')
+        .eq('reservation_id', masterReservationId)
+        .in('status', ['open', 'closed']) // Include closed threads too
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (groupThreadError) throw groupThreadError;
+      
+      if (groupThread) {
+        console.log(`✅ [GUEST MESSAGES] Found existing group thread: ${groupThread.id} for master reservation: ${masterReservationId}`);
+        thread = groupThread;
+      } else {
+        console.log(`❌ [GUEST MESSAGES] No existing group thread found for master reservation: ${masterReservationId}`);
+      }
+    } else {
+      console.log(`📨 [GUEST MESSAGES] Individual booking detected. Looking for individual thread for reservation: ${reservationId}`);
+      
+      // For individual bookings, look for thread using this reservation ID
+      const { data: individualThread, error: individualThreadError } = await supabase
+        .from('message_threads')
+        .select('id, status')
+        .eq('reservation_id', reservationId)
+        .in('status', ['open', 'closed']) // Include closed threads too
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (individualThreadError) throw individualThreadError;
+      
+      if (individualThread) {
+        console.log(`✅ [GUEST MESSAGES] Found existing individual thread: ${individualThread.id} for reservation: ${reservationId}`);
+        thread = individualThread;
+      } else {
+        console.log(`❌ [GUEST MESSAGES] No existing individual thread found for reservation: ${reservationId}`);
+      }
+    }
 
     if (!thread) {
+      console.log(`📨 [GUEST MESSAGES] No thread found, returning empty messages array`);
       return res.json({ messages: [] });
     }
+
+    console.log(`📨 [GUEST MESSAGES] Loading messages for thread: ${thread.id} (status: ${thread.status})`);
 
     // Get messages for the thread
     const { data: messages, error: messagesError } = await supabase
@@ -195,6 +272,8 @@ router.get('/:token/thread/messages', async (req, res) => {
 
     if (messagesError) throw messagesError;
 
+    console.log(`📨 [GUEST MESSAGES] Found ${messages.length} messages for thread: ${thread.id}`);
+
     res.json({ messages });
 
   } catch (error) {
@@ -221,6 +300,8 @@ router.post('/:token/thread/messages', async (req, res) => {
       return res.status(400).json({ error: 'Message content too long (max 1000 characters)' });
     }
 
+    console.log(`📨 [GUEST MESSAGE] Sending message for token: ${token}`);
+
     // Get reservation data to validate token
     const dashboardData = await reservationService.getGuestAppData(token);
     if (!dashboardData) {
@@ -230,37 +311,42 @@ router.post('/:token/thread/messages', async (req, res) => {
     const reservationId = dashboardData.reservation.id;
     const bookingName = dashboardData.reservation.booking_name;
     const bookingLastname = dashboardData.reservation.booking_lastname;
-    const guestName = dashboardData.reservation.guest_name;
     const guestEmail = dashboardData.reservation.guest_email;
 
-    // Create full name for subject
+    console.log(`📨 [GUEST MESSAGE] Found reservation: ${reservationId}, guest: ${bookingName}`);
+
+    // Create full name for subject generation
     const fullGuestName = bookingLastname ? `${bookingName} ${bookingLastname}` : bookingName;
 
-    // Get or create thread for this reservation
-    let { data: thread, error: threadError } = await supabase
-      .from('message_threads')
-      .select('id')
-      .eq('reservation_id', reservationId)
-      .eq('status', 'open')
-      .maybeSingle();
+    // ENHANCED: Use group-aware thread creation through CommunicationService
+    const communicationService = require('../services/communicationService');
+    
+    console.log(`📨 [GUEST MESSAGE] Using group-aware thread lookup/creation for reservation: ${reservationId}`);
+    
+    // Find or create thread using the unified group booking logic
+    const thread = await communicationService.findOrCreateThreadByReservation(
+      reservationId,
+      {
+        subject: fullGuestName, // Will be enhanced by group-aware logic if needed
+        participants: [
+          {
+            type: 'guest',
+            external_address: guestEmail,
+            display_name: fullGuestName
+          }
+        ],
+        channels: [
+          {
+            channel: 'inapp',
+            external_thread_id: reservationId // Use reservation ID as fallback
+          }
+        ]
+      }
+    );
 
-    if (threadError) throw threadError;
-
-    // Create thread if it doesn't exist
-    if (!thread) {
-      const { data: threadId, error: createError } = await supabase.rpc('create_message_thread', {
-        p_reservation_id: reservationId,
-        p_subject: fullGuestName,
-        p_guest_external_address: guestEmail,
-        p_guest_display_name: fullGuestName
-      });
-
-      if (createError) throw createError;
-      thread = { id: threadId };
-    }
+    console.log(`📨 [GUEST MESSAGE] Using thread: ${thread.id} (reservation: ${thread.reservation_id}) for guest message`);
 
     // Send the message using the CommunicationService to ensure delivery tracking
-    const communicationService = require('../services/communicationService');
     const message = await communicationService.sendMessage({
       thread_id: thread.id,
       channel: 'inapp',
@@ -268,6 +354,8 @@ router.post('/:token/thread/messages', async (req, res) => {
       origin_role: 'guest',
       parent_message_id: parent_message_id
     });
+
+    console.log(`✅ [GUEST MESSAGE] Message sent successfully: ${message.id} in thread: ${thread.id}`);
 
     // Get the complete message data with delivery information
     const { data: messageWithDeliveries, error: getMessageError } = await supabase
@@ -295,7 +383,12 @@ router.post('/:token/thread/messages', async (req, res) => {
 
     if (getMessageError) throw getMessageError;
 
-    res.status(201).json({ message: messageWithDeliveries });
+    console.log(`📨 [GUEST MESSAGE] Returning message data: ${messageWithDeliveries.id}`);
+
+    res.status(201).json({ 
+      message: messageWithDeliveries,
+      thread: thread // Include thread info so frontend can update its state
+    });
 
   } catch (error) {
     console.error('Error sending guest message:', error);

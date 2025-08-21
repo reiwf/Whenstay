@@ -69,6 +69,11 @@ const marketDemandRoutes = require('./routes/marketDemandRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const upsellRoutes = require('./routes/upsellRoutes');
 
+// Debug middleware to log all API requests
+app.use('/api/*', (req, res, next) => {
+  next();
+});
+
 // API routes
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/reservations', reservationRoutes);

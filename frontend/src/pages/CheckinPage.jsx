@@ -29,6 +29,11 @@ export default function CheckinPage() {
     submitCheckin,
     enterModificationMode,
     exitModificationMode,
+    // Group booking state and functions
+    groupBooking,
+    isGroupBooking,
+    groupCheckInMode,
+    toggleGroupCheckInMode,
   } = useCheckinProcess(token)
 
   const handleSubmit = async () => {
@@ -111,6 +116,11 @@ export default function CheckinPage() {
           isModificationMode={isModificationMode}
           onEnterModificationMode={enterModificationMode}
           onExitModificationMode={exitModificationMode}
+          // Group booking props
+          groupBooking={groupBooking}
+          isGroupBooking={isGroupBooking}
+          groupCheckInMode={groupCheckInMode}
+          onToggleGroupCheckInMode={toggleGroupCheckInMode}
         />
       )}
       

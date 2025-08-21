@@ -1651,6 +1651,20 @@ $$;
 
 
 --
+-- Name: set_reservation_booking_name(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_reservation_booking_name() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.booking_name := trim(concat_ws(' ', NEW.booking_firstname, NEW.booking_lastname));
+    RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3306,7 +3320,8 @@ CREATE TABLE public.reservations (
     "timeStamp" timestamp with time zone,
     lang text,
     access_read boolean DEFAULT false,
-    status text
+    status text,
+    booking_firstname text
 );
 
 
@@ -4270,7 +4285,9 @@ CREATE VIEW public.reservations_details AS
     r.property_id,
     r.room_type_id,
     r.room_unit_id,
-    r.booking_name,
+    TRIM(BOTH FROM concat_ws(' '::text, r.booking_firstname, r.booking_lastname)) AS booking_name,
+    r.booking_firstname,
+    r.booking_lastname,
     r.booking_email,
     r.booking_phone,
     r.check_in_date,
@@ -4287,7 +4304,6 @@ CREATE VIEW public.reservations_details AS
     r.created_at,
     r.updated_at,
     r."apiReference",
-    r.booking_lastname,
     r."rateDescription",
     r.commission,
     r."apiMessage",
@@ -6567,6 +6583,13 @@ CREATE TRIGGER set_checkin_token BEFORE INSERT ON public.reservations FOR EACH R
 --
 
 CREATE TRIGGER set_ct_booking_name BEFORE INSERT OR UPDATE OF reservation_id ON public.cleaning_tasks FOR EACH ROW EXECUTE FUNCTION public.set_ct_booking_name();
+
+
+--
+-- Name: reservations set_reservation_booking_name; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_reservation_booking_name BEFORE INSERT OR UPDATE OF booking_firstname, booking_lastname ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.set_reservation_booking_name();
 
 
 --

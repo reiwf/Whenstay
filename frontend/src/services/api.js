@@ -270,6 +270,16 @@ export const adminAPI = {
   
   createCommunicationThread: (threadData) => 
     api.post('/communication/threads', threadData),
+
+  // Group booking communication
+  sendGroupMessage: (messageData) => 
+    api.post('/communication/group-message', messageData),
+  
+  getGroupBookingThreads: (masterReservationId) => 
+    api.get(`/communication/group/${masterReservationId}/threads`),
+  
+  getGroupBookingInfo: (reservationId) => 
+    api.get(`/communication/reservation/${reservationId}/group-info`),
   
   // Automation Management
   getAutomationRules: (params = {}) => api.get('/automation/rules', { params }),

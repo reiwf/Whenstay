@@ -31,6 +31,7 @@ export function useRealtimeCommunication() {
   const [templates, setTemplates] = useState([])
   const [selectedThread, setSelectedThread] = useState(null)
   const [reservation, setReservation] = useState(null)
+  const [groupBookingInfo, setGroupBookingInfo] = useState(null)
   const [typingUsers, setTypingUsers] = useState([])
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   
@@ -101,6 +102,7 @@ export function useRealtimeCommunication() {
                     console.log(`Clearing selection for closed/archived thread ${payload.new.id}`)
                     setMessages([])
                     setReservation(null)
+                    setGroupBookingInfo(null)
                     
                     // Cleanup subscriptions
                     if (messagesChannelRef.current) {
@@ -124,6 +126,7 @@ export function useRealtimeCommunication() {
               if (selectedThread?.id === payload.old.id) {
                 setMessages([])
                 setReservation(null)
+                setGroupBookingInfo(null)
               }
               break
           }
@@ -491,6 +494,7 @@ export function useRealtimeCommunication() {
         setSelectedThread(null)
         setMessages([])
         setReservation(null)
+        setGroupBookingInfo(null)
         
         // Cleanup subscriptions
         if (messagesChannelRef.current) {
@@ -676,6 +680,7 @@ export function useRealtimeCommunication() {
   const loadReservationDetails = useCallback(async (reservationId) => {
     if (!reservationId) {
       setReservation(null)
+      setGroupBookingInfo(null)
       return null
     }
     
@@ -700,9 +705,26 @@ export function useRealtimeCommunication() {
         if (process.env.NODE_ENV === 'development') {
           console.log('Reservation loaded successfully for ID:', reservationId)
         }
+        
+        // Load group booking information if this reservation is part of a group
+        try {
+          const groupResponse = await adminAPI.getGroupBookingInfo(reservationId)
+          if (groupResponse.data && groupResponse.data.isGroupBooking) {
+            setGroupBookingInfo(groupResponse.data)
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Group booking info loaded for reservation:', reservationId)
+            }
+          } else {
+            setGroupBookingInfo(null)
+          }
+        } catch (groupError) {
+          console.warn('Failed to load group booking info:', groupError)
+          setGroupBookingInfo(null)
+        }
       } else {
         console.warn('Invalid reservation data structure received')
         setReservation({ error: true, message: 'Invalid reservation data structure returned from API' })
+        setGroupBookingInfo(null)
       }
       
       return reservationData
@@ -712,6 +734,7 @@ export function useRealtimeCommunication() {
       // Set reservation to an error state instead of null to differentiate from loading
       const errorMessage = error.response?.data?.error || error.message || 'Failed to load reservation details'
       setReservation({ error: true, message: errorMessage })
+      setGroupBookingInfo(null)
       return null
     }
   }, [])
@@ -733,6 +756,7 @@ export function useRealtimeCommunication() {
         await loadReservationDetails(thread.reservation_id)
       } else {
         setReservation(null)
+        setGroupBookingInfo(null)
       }
       
       // Mark messages as read using the loaded messages data
@@ -787,6 +811,7 @@ export function useRealtimeCommunication() {
     templates,
     selectedThread,
     reservation,
+    groupBookingInfo,
     typingUsers,
     connectionStatus,
     

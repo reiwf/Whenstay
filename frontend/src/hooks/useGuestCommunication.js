@@ -283,6 +283,7 @@ export function useGuestCommunication(token) {
 
     try {
       setSending(true)
+      console.log(`📤 [GUEST SEND] Sending message, current thread:`, thread?.id || 'none')
       
       // Optimistic update - add message immediately
       optimisticMessage = {
@@ -309,6 +310,10 @@ export function useGuestCommunication(token) {
       })
 
       const newMessage = data.message
+      const returnedThread = data.thread
+      
+      console.log(`✅ [GUEST SEND] Message sent successfully:`, newMessage.id)
+      console.log(`🎯 [GUEST SEND] Thread info:`, returnedThread?.id || 'none')
       
       // Mark this message as processed to prevent real-time duplicate
       processedMessageIds.current.add(newMessage.id)
@@ -320,8 +325,18 @@ export function useGuestCommunication(token) {
         )
       )
       
-      // Update thread's last message info if we have the thread
-      if (thread) {
+      // ENHANCED: Handle thread creation for first message
+      if (returnedThread && (!thread || thread.id !== returnedThread.id)) {
+        console.log(`🎉 [GUEST SEND] New thread created or updated: ${returnedThread.id}, setting up real-time subscriptions`)
+        
+        // Update thread state
+        setThread(returnedThread)
+        
+        // Set up real-time subscriptions for the new thread
+        setupMessagesSubscription(returnedThread.id)
+        setupThreadSubscription(returnedThread.id)
+      } else if (thread) {
+        // Update existing thread's last message info
         setThread(prev => prev ? ({
           ...prev,
           last_message_at: newMessage.created_at,
@@ -343,7 +358,7 @@ export function useGuestCommunication(token) {
     } finally {
       setSending(false)
     }
-  }, [token, thread, apiCall, scrollToBottom])
+  }, [token, thread, apiCall, scrollToBottom, setupMessagesSubscription, setupThreadSubscription])
 
   // Initialize thread and load messages with real-time setup
   const initialize = useCallback(async () => {
@@ -351,14 +366,21 @@ export function useGuestCommunication(token) {
 
     try {
       setLoading(true);
+      console.log(`🚀 [GUEST COMM] Initializing guest communication for token: ${token}`);
 
       const threadData = await loadThread();
 
       if (threadData?.id) {
+        console.log(`✅ [GUEST COMM] Found existing thread: ${threadData.id}, loading messages and setting up real-time`);
         await loadMessages();
         // Setup real-time subscriptions after loading data
         setupMessagesSubscription(threadData.id);
         setupThreadSubscription(threadData.id);
+      } else {
+        console.log(`📭 [GUEST COMM] No existing thread found, ready to create on first message`);
+        // No thread exists yet - this is fine, it will be created when they send their first message
+        // Don't set up subscriptions until thread exists
+        setMessages([]); // Ensure we have empty messages array
       }
     } catch (error) {
       console.error('Error initializing guest communication:', error);

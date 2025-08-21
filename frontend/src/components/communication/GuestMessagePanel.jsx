@@ -67,12 +67,12 @@ export default function GuestMessagePanel({ token, guestName }) {
     refresh();
   };
 
-  if (loading && !thread) {
+  if (loading && !thread && messages.length === 0) {
     return (
       <div className="h-full flex items-center justify-center bg-primary-50">
         <div className="text-center">
           <LoadingSpinner size="large" />
-          <p className="text-primary-600 mt-4">Setting up your support chat...</p>
+          <p className="text-primary-600 mt-4">Checking for existing conversations...</p>
         </div>
       </div>
     );
@@ -125,10 +125,13 @@ export default function GuestMessagePanel({ token, guestName }) {
             </div>
             <div>
               <h3 className="text-lg font-medium text-primary-900 mb-2">
-                Welcome to Support Chat!
+                {!thread ? 'Start a Conversation' : 'Welcome to Support Chat!'}
               </h3>
               <p className="text-primary-600 text-sm max-w-sm mx-auto">
-                Need help during your stay? Send us a message and our support team will get back to you quickly.
+                {!thread 
+                  ? 'Send your first message below to start chatting with our support team. We\'ll get back to you quickly!' 
+                  : 'Need help during your stay? Send us a message and our support team will get back to you quickly.'
+                }
               </p>
             </div>
           </div>
