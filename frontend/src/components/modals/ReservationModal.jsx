@@ -301,7 +301,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
       const submitData = {
         // Core booking information
         beds24BookingId: formData.beds24BookingId,
-        bookingFirstname: formData.bookingFirstname, // Changed from bookingName - trigger will build booking_name
+        bookingFirstname: formData.bookingFirstname, 
         bookingEmail: formData.bookingEmail,
         bookingPhone: formData.bookingPhone || null,
         bookingLastname: formData.bookingLastname || null,

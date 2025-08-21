@@ -9,7 +9,7 @@ class ReservationService {
             
       const insertData = {
         beds24_booking_id: reservationData.beds24BookingId || `MANUAL-${Date.now()}`,
-        booking_firstname: reservationData.bookingFirstName || null,
+        booking_firstname: reservationData.bookingFirstname || null,
         booking_email: reservationData.bookingEmail || reservationData.guestEmail,
         booking_phone: reservationData.bookingPhone || reservationData.guestPhone || null,
         check_in_date: reservationData.checkInDate,

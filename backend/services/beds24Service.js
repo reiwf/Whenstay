@@ -364,6 +364,12 @@ class Beds24Service {
         lastName: booking.lastName
       });
 
+      // Enhanced debug: Log the actual booking object structure and field values
+      console.log('Booking object keys:', Object.keys(booking));
+      console.log('firstName value:', booking.firstName, 'typeof:', typeof booking.firstName);
+      console.log('lastName value:', booking.lastName, 'typeof:', typeof booking.lastName);
+      console.log('Full booking object:', JSON.stringify(booking, null, 2));
+
       // Resolve property and room mappings
       let propertyId = null;
       let roomTypeId = null;
@@ -381,14 +387,44 @@ class Beds24Service {
         roomUnitId = await this.findOrCreateRoomUnit(booking.unitId, roomTypeId);
       }
 
+      // Extract firstName with multiple fallback strategies
+      let firstName = '';
+      let lastName = '';
+      
+      // Try direct field access first
+      if (booking.firstName && typeof booking.firstName === 'string' && booking.firstName.trim()) {
+        firstName = booking.firstName.trim();
+      }
+      
+      if (booking.lastName && typeof booking.lastName === 'string' && booking.lastName.trim()) {
+        lastName = booking.lastName.trim();
+      }
+      
+      // Additional fallback checks for different field names or formats
+      if (!firstName) {
+        firstName = booking.first_name || booking.firstname || booking.FirstName || '';
+        if (firstName && typeof firstName === 'string') {
+          firstName = firstName.trim();
+        }
+      }
+      
+      if (!lastName) {
+        lastName = booking.last_name || booking.lastname || booking.LastName || '';
+        if (lastName && typeof lastName === 'string') {
+          lastName = lastName.trim();
+        }
+      }
+      
+      console.log('Extracted firstName:', firstName, 'lastName:', lastName);
+
       // Build comprehensive reservation data
       const reservationData = {
         // Core booking identification
         beds24BookingId: booking.id?.toString(),
         
-        // Guest information (updated mapping)
-        bookingFirstname: booking.firstName || '', 
-        bookingLastname: booking.lastName || '',
+        // Guest information (enhanced mapping with fallbacks)
+        bookingFirstname: firstName,
+        bookingLastname: lastName,
         bookingEmail: booking.email || '',
         bookingPhone: booking.phone || booking.mobile || '',
         
@@ -426,8 +462,8 @@ class Beds24Service {
         // Special requests and notes
         specialRequests: booking.message || booking.notes || booking.comments || null,
         
-        // Legacy compatibility fields
-        guestName: `${booking.firstName || ''} ${booking.lastName || ''}`.trim(),
+        // Legacy compatibility fields (use extracted values)
+        guestName: `${firstName} ${lastName}`.trim(),
         guestEmail: booking.email || '',
         guestPhone: booking.phone || booking.mobile || '',
         roomNumber: booking.unitId || booking.roomId || null
@@ -444,7 +480,7 @@ class Beds24Service {
 
       console.log('Processed reservation data:', {
         beds24BookingId: reservationData.beds24BookingId,
-        bookingFirstname: reservationData.bookingName,
+        bookingFirstname: reservationData.bookingFirstname,
         bookingLastname: reservationData.bookingLastname,
         propertyId: reservationData.propertyId,
         roomTypeId: reservationData.roomTypeId,
