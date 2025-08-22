@@ -398,6 +398,13 @@
     transform: scale(1);
   }
 }
+/* Modern countdown micro-animation + numeric alignment */
+@keyframes pop {
+  from { transform: translateY(4px); opacity: .6; filter: blur(.3px); }
+  to   { transform: translateY(0);   opacity: 1;  filter: blur(0); }
+}
+.animate-pop { animation: pop .22s ease-out; }
+
 
 /* Progress bar */
 .progress-bar {

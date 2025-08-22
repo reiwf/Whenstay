@@ -33,6 +33,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import GuestMessagePanel from '../components/communication/GuestMessagePanel'
 import JourneyRoadmap from '../components/guest/JourneyRoadmap'
 import GuestProfile from '../components/guest/GuestProfile'
+import LayoutShell from '../components/layout/LayoutShell'
 
 export default function GuestApp() {
   const { token } = useParams()
@@ -42,11 +43,76 @@ export default function GuestApp() {
   const [dashboardData, setDashboardData] = useState(null)
   const [checkinStatus, setCheckinStatus] = useState(null)
   const [activeSection, setActiveSection] = useState('reservation')
-  const [countdown, setCountdown] = useState('')
   const [accessCodeRevealed, setAccessCodeRevealed] = useState(false)
   const [paymentRefreshTrigger, setPaymentRefreshTrigger] = useState(0)
   const [services, setServices] = useState([])
   const [servicesLoading, setServicesLoading] = useState(false)
+
+  function StatusChip({ ok, okText = 'Ready', waitText = 'Pending' }) {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium
+        ${ok ? 'bg-white/15 text-white' : 'bg-black/10 text-white/90'} backdrop-blur`}>
+        {ok ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+        {ok ? okText : waitText}
+      </span>
+    )
+  }
+
+  function SegmentedTabs({ items, active, onSelect }) {
+    return (
+      <div className="px-4">
+        <div className="mx-auto -mt-4 w-full max-w-[430px]">
+          <div className="rounded-full bg-white shadow ring-1 ring-black/5 overflow-hidden">
+            <nav className="grid grid-cols-3">
+              {items.map(({ id, label, icon: Icon }) => {
+                const isActive = active === id
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onSelect(id)}
+                    className={`flex items-center justify-center gap-2 py-2.5 text-sm transition
+                      ${isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:bg-gray-50'}`}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function FloatingBottomNav({ items, active, onSelect }) {
+    return (
+      <div className="fixed left-1/2 bottom-4 z-20 -translate-x-1/2 w-full px-4">
+        <div className="mx-auto max-w-[430px]">
+          <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg ring-1 ring-black/5">
+            <div className="grid grid-cols-3">
+              {items.map(({ id, label, icon: Icon }) => {
+                const isActive = active === id
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onSelect(id)}
+                    className={`flex flex-col items-center py-3 px-3 text-[11px] transition
+                      ${isActive ? 'text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <Icon className={`w-5 h-5 mb-0.5 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
 
   useEffect(() => {
     if (token) {
@@ -102,92 +168,6 @@ export default function GuestApp() {
 
     handlePaymentReturn()
   }, [location.search, location.pathname, navigate, token])
-
-  // Countdown timer effect
-  useEffect(() => {
-    let intervalId = null
-
-    const updateCountdown = () => {
-      if (!dashboardData || !dashboardData.property?.access_time || canAccessRoomDetails()) {
-        setCountdown('')
-        return
-      }
-
-      const { reservation, property } = dashboardData
-      const now = new Date()
-      const today = now.getFullYear() + '-' + 
-                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                   String(now.getDate()).padStart(2, '0')
-      
-      const checkinDateObj = new Date(reservation.check_in_date)
-      const checkinDate = checkinDateObj.getFullYear() + '-' + 
-                         String(checkinDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
-                         String(checkinDateObj.getDate()).padStart(2, '0')
-
-      // Create target access time
-      const [accessHour, accessMinute] = property.access_time.split(':').map(num => parseInt(num, 10))
-      
-      let targetTime
-      if (today < checkinDate) {
-        // Before check-in date - target is access time on check-in date
-        targetTime = new Date(checkinDateObj)
-        targetTime.setHours(accessHour, accessMinute, 0, 0)
-      } else if (today === checkinDate) {
-        // On check-in date - target is access time today
-        targetTime = new Date()
-        targetTime.setHours(accessHour, accessMinute, 0, 0)
-      } else {
-        // After check-in date - no countdown needed
-        setCountdown('')
-        return
-      }
-
-      const timeDiff = targetTime.getTime() - now.getTime()
-      
-      if (timeDiff <= 0) {
-        setCountdown('Available now!')
-        return
-      }
-
-      // Calculate time remaining
-      const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
-      const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60))
-      const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000)
-
-      // Set countdown as object with individual values
-      setCountdown({
-        days,
-        hours,
-        minutes,
-        seconds,
-        expired: false
-      })
-    }
-
-    if (dashboardData && !canAccessRoomDetails()) {
-      updateCountdown()
-      intervalId = setInterval(updateCountdown, 1000)
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
-  }, [dashboardData, checkinStatus])
-
-   const formatCountdown = (countdown) => {
-    if (!countdown || countdown.expired) return null
-    
-    const parts = []
-    if (countdown.days > 0) parts.push(`${countdown.days}d`)
-    if (countdown.hours > 0) parts.push(`${countdown.hours}h`)
-    if (countdown.minutes > 0) parts.push(`${countdown.minutes}m`)
-    if (countdown.seconds > 0 || parts.length === 0) parts.push(`${countdown.seconds}s`)
-    
-    return parts.join(' ')
-  }
 
   const loadGuestData = async () => {
     try {
@@ -463,30 +443,7 @@ export default function GuestApp() {
   const renderOverviewSection = () => {
     return (
       <div className="space-y-8">
-        {/* Welcome Banner */}
-        <div className="card">
-          <div className="text-center">
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
-              Hello, {reservation?.guest_name}!
-            </p>
-            <p className="text-sm sm:text-base text-primary-600 mb-4">
-              Thank you for choosing us for your stay
-            </p>
-            
-            {checkinStatus?.completed ? (
-              <span className="status-badge status-completed">
-                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
-                Check-in Complete
-              </span>
-            ) : (
-              <span className="status-badge status-pending">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
-                Check-in Pending
-              </span>
-            )}
-          </div>
-        </div>
-
+        
         {/* Journey Roadmap */}
         <JourneyRoadmap 
           checkinCompleted={checkinStatus?.completed}
@@ -600,58 +557,6 @@ export default function GuestApp() {
             </div>
           </div>
         )}
-
-        {/* Access Time Information with Countdown */}
-        {!canAccessRoomDetails() && checkinStatus?.completed && property.access_time && (
-          <div className="card border-primary-200 bg-primary-50">
-            <div className="flex items-center mb-4">
-              <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-2 flex-shrink-0" />
-              <h2 className="text-base sm:text-lg font-semibold text-primary-900">Room Access Countdown</h2>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Countdown Display */}
-              {countdown && typeof countdown === 'object' && !countdown.expired && (
-                <div className="bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 border border-primary-300 rounded-lg p-4 sm:p-6 text-center">
-                  <div className="mb-3 sm:mb-4">
-                    <p className="text-xs sm:text-sm text-primary-950 mb-2">Room access available in:</p>
-                  </div>
-                  
-                  {/* Time breakdown - always show when countdown exists */}
-                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-center">
-                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.days || 0}</div>
-                      <div className="text-xs text-primary-700 font-medium">Days</div>
-                    </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.hours || 0}</div>
-                      <div className="text-xs text-primary-700 font-medium">Hours</div>
-                    </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.minutes || 0}</div>
-                      <div className="text-xs text-primary-700 font-medium">Minutes</div>
-                    </div>
-                    <div className="bg-white border border-primary-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-primary-900">{countdown.seconds || 0}</div>
-                      <div className="text-xs text-primary-700 font-medium">Seconds</div>
-                    </div>
-                  </div>
-                  <p className="text-xs sm:text-sm text-primary-950 mt-2">Comeback later</p>
-                </div>
-              )}
-              
-              {/* Access Time Information */}
-              <div className="bg-primary-100 border border-primary-300 rounded-lg p-3 sm:p-4">
-                <p className="text-sm sm:text-base text-primary-800">
-                  <strong>Room access details will be available at {formatAccessTime(property.access_time)} on {new Date(reservation.check_in_date).toLocaleDateString()}.</strong>
-                </p>
-                <p className="text-xs sm:text-sm text-primary-700 mt-2">
-                  Your room access code and detailed instructions will automatically appear when the access time arrives.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}        
       </div>    
     )
   }
@@ -682,30 +587,7 @@ export default function GuestApp() {
 
     return (
       <div className="space-y-6">
-        {/* Welcome Banner */}
-        <div className="card">
-          <div className="text-center">
-            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
-              Hello, {reservation?.guest_name}!
-            </p>
-            <p className="text-sm sm:text-base text-primary-600 mb-4">
-              Thank you for choosing us for your stay
-            </p>
-            
-            {checkinStatus?.completed ? (
-              <span className="status-badge status-completed">
-                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
-                Check-in Complete
-              </span>
-            ) : (
-              <span className="status-badge status-pending">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
-                Check-in Pending
-              </span>
-            )}
-          </div>
-        </div>
-
+       
         {/* Journey Roadmap */}
         <JourneyRoadmap 
           checkinCompleted={checkinStatus?.completed}
@@ -1130,7 +1012,7 @@ export default function GuestApp() {
         <div className="card border-purple-200 bg-purple-50">
           <div className="flex items-center mb-4">
             <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mr-2 flex-shrink-0" />
-            <h2 className="text-lg sm:text-xl font-semibold text-purple-900">Additional Services</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-purple-900">Addon</h2>
           </div>
 
           {servicesLoading ? (
@@ -1258,55 +1140,6 @@ export default function GuestApp() {
             </div>
           )}
         </div>
-
-        {/* Access Time Countdown */}
-        {!canAccessStayInfo() && checkinStatus?.completed && property.access_time && (
-          <div className="card border-yellow-200 bg-yellow-50">
-            <div className="flex items-center mb-4">
-              <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mr-2 flex-shrink-0" />
-              <h3 className="text-base sm:text-lg font-semibold text-yellow-900">Access Countdown</h3>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Countdown Display */}
-              {countdown && typeof countdown === 'object' && !countdown.expired && (
-                <div className="bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 border border-yellow-300 rounded-lg p-4 sm:p-6 text-center">
-                  <div className="mb-3 sm:mb-4">
-                    <p className="text-xs sm:text-sm text-yellow-950 mb-2">Stay information available in:</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-center">
-                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.days || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Days</div>
-                    </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.hours || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Hours</div>
-                    </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.minutes || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Minutes</div>
-                    </div>
-                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
-                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.seconds || 0}</div>
-                      <div className="text-xs text-yellow-700 font-medium">Seconds</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3 sm:p-4">
-                <p className="text-sm sm:text-base text-yellow-800">
-                  <strong>Stay information will be available at {formatAccessTime(property.access_time)} on {checkInDate.toLocaleDateString()}.</strong>
-                </p>
-                <p className="text-xs sm:text-sm text-yellow-700 mt-2">
-                  Room access code, house manual, and detailed stay information will automatically appear when the access time arrives.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
@@ -1549,74 +1382,20 @@ export default function GuestApp() {
   ]
 
   return (
-    <div className="min-h-screen bg-primary-50">
-      {/* App wrapper with responsive max-width */}
-      <div className="border rounded-lg mx-auto w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
+  <LayoutShell
+    headerVariant="compact"
+    token={token} 
+    guestName={reservation?.guest_name}
+    navigationItems={navigationItems}       
+    activeSection={activeSection}          
+    setActiveSection={setActiveSection}     
+    checkinCompleted={!!checkinStatus?.completed}
+    accessUnlocked={canAccessRoomDetails()} 
+  >
+    {/* Keep your current section render as-is */}
+    {renderContent()}
+  </LayoutShell>
+)
 
-        {/* Mobile Header (sticky inside wrapper so it stays centered) */}
-        <div className="bg-white shadow-sm border-b border-primary-200 sticky top-0 z-10 rounded-lg">
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center ml-2 space-x-3">
-                <div>
-                  <h1 className="text-sm font-semibold text-primary-900 truncate">
-                    Hello, {reservation?.guest_name}!
-                  </h1>
-                  <p className="text-sm text-primary-600 truncate">
-                    Label ID : {token}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex flex-col min-h-[calc(100vh-56px-64px)]"> 
-          {/* subtract header/footer heights roughly to avoid hidden content */}
-          <div className="flex-1 pb-20 px-4 py-6">
-            {/* If you still want a wider inner area on certain tabs, keep it responsive but capped */}
-            <div className={activeSection === 'documents'
-              ? 'max-w-none'
-              : 'mx-auto w-full max-w-[720px]'}  // optional inner cap
-            >
-              {renderContent()}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Navigation — fixed and centered to wrapper width */}
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-0 z-10
-                        w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
-          <div className="bg-white border-t border-primary-200">
-            <div className="grid grid-cols-3 gap-1">
-              {navigationItems.map((item) => {
-                const IconComponent = item.icon
-                const isActive = activeSection === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveSection(item.id)}
-                    className={`flex flex-col items-center py-3 px-2 transition-colors ${
-                      isActive
-                        ? 'text-primary-600 bg-primary-50 border rounded-lg'
-                        : 'text-primary-400 hover:text-primary-900 hover:bg-primary-50'
-                    }`}
-                  >
-                    <IconComponent className={`w-5 h-5 mb-1 ${
-                      isActive ? 'text-primary-600' : 'text-primary-400'
-                    }`} />
-                    <span className="text-xs truncate">
-                      {item.label}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 
 }

@@ -155,7 +155,7 @@ export default function ReservationPage() {
   const handleCopyCheckinUrl = async (reservation) => {
     if (!reservation.check_in_token) return
     
-    const checkinUrl = `${window.location.origin}/checkin/${reservation.check_in_token}`
+    const checkinUrl = `${window.location.origin}/guest/${reservation.check_in_token}`
     
     try {
       await navigator.clipboard.writeText(checkinUrl)
@@ -172,7 +172,7 @@ export default function ReservationPage() {
 
   const openCheckinPage = (reservation) => {
     if (!reservation.check_in_token) return
-    const checkinUrl = `/checkin/${reservation.check_in_token}`
+    const checkinUrl = `/guest/${reservation.check_in_token}`
     window.open(checkinUrl, '_blank')
   }
 
