@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const beds24Service = require('../services/beds24Service');
 const reservationService = require('../services/reservationService');
+const guestServicesService = require('../services/guestServicesService');
 const { adminAuth } = require('../middleware/auth');
 
 // Get reservations from Beds24 (for testing/debugging)
@@ -447,6 +448,248 @@ router.post('/:reservationId/send-invitation', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error sending invitation:', error);
     res.status(500).json({ error: 'Failed to send invitation' });
+  }
+});
+
+// GUEST SERVICES ADMIN ENDPOINTS
+
+// Get all services (available and enabled) for a reservation
+router.get('/:id/services', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId } = req.params;
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get all services and their status for this reservation
+    const allServices = await guestServicesService.getAllServices();
+    const enabledServices = await guestServicesService.getEnabledServicesForReservation(reservationId);
+    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
+
+    // Combine the data
+    const servicesWithStatus = allServices.map(service => {
+      const enabled = enabledServices.find(e => e.service_id === service.id);
+      const purchased = purchasedServices.find(p => p.service_id === service.id);
+
+      return {
+        ...service,
+        is_enabled: !!enabled,
+        enabled_at: enabled?.enabled_at || null,
+        enabled_by: enabled?.enabled_by || null,
+        is_purchased: !!purchased,
+        purchased_at: purchased?.purchased_at || null,
+        purchase_amount: purchased?.amount || null,
+        stripe_payment_intent_id: purchased?.stripe_payment_intent_id || null,
+        can_enable: service.is_active && service.admin_approval_required
+      };
+    });
+
+    res.status(200).json({
+      message: 'Services retrieved successfully',
+      data: {
+        reservation: {
+          id: reservation.id,
+          booking_name: reservation.booking_name,
+          check_in_date: reservation.check_in_date,
+          check_out_date: reservation.check_out_date,
+          status: reservation.status
+        },
+        services: servicesWithStatus
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching reservation services:', error);
+    res.status(500).json({ error: 'Failed to fetch reservation services' });
+  }
+});
+
+// Enable a service for a reservation
+router.post('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+    const { enabled_by } = req.body; // Admin user ID who enabled the service
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Check if service exists and requires admin approval
+    const service = await guestServicesService.getServiceById(serviceIdNum);
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    if (!service.admin_approval_required) {
+      return res.status(400).json({ 
+        error: 'This service does not require admin approval and is automatically available' 
+      });
+    }
+
+    if (!service.is_active) {
+      return res.status(400).json({ error: 'Service is not active' });
+    }
+
+    // Enable the service for the reservation
+    const result = await guestServicesService.enableServiceForReservation(
+      reservationId,
+      serviceIdNum,
+      enabled_by || null
+    );
+
+    res.status(200).json({
+      message: 'Service enabled successfully',
+      data: {
+        reservation_id: reservationId,
+        service_id: serviceIdNum,
+        service_name: service.name,
+        enabled_at: result.enabled_at,
+        enabled_by: result.enabled_by
+      }
+    });
+  } catch (error) {
+    console.error('Error enabling service for reservation:', error);
+    if (error.message.includes('already enabled')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to enable service for reservation' });
+    }
+  }
+});
+
+// Disable a service for a reservation
+router.delete('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Check if service is enabled for this reservation
+    const enabledServices = await guestServicesService.getEnabledServicesForReservation(reservationId);
+    const enabledService = enabledServices.find(s => s.service_id === serviceIdNum);
+
+    if (!enabledService) {
+      return res.status(404).json({ error: 'Service is not enabled for this reservation' });
+    }
+
+    // Check if service has been purchased
+    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
+    const purchasedService = purchasedServices.find(s => s.service_id === serviceIdNum);
+
+    if (purchasedService) {
+      return res.status(400).json({ 
+        error: 'Cannot disable service that has already been purchased by the guest' 
+      });
+    }
+
+    // Disable the service
+    const result = await guestServicesService.disableServiceForReservation(reservationId, serviceIdNum);
+
+    res.status(200).json({
+      message: 'Service disabled successfully',
+      data: {
+        reservation_id: reservationId,
+        service_id: serviceIdNum,
+        disabled_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error disabling service for reservation:', error);
+    res.status(500).json({ error: 'Failed to disable service for reservation' });
+  }
+});
+
+// Get purchased services for a reservation (admin view)
+router.get('/:id/services/purchased', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId } = req.params;
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get purchased services with full details
+    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
+
+    // Calculate total amount and effective times
+    const totalAmount = purchasedServices.reduce((sum, service) => sum + (service.amount || 0), 0);
+    
+    // Get effective times with service overrides
+    const effectiveTimes = await guestServicesService.calculateEffectiveTimes(
+      reservationId,
+      reservation.check_in_date,
+      reservation.check_out_date,
+      reservation.access_time,
+      reservation.departure_time || '11:00:00'
+    );
+
+    res.status(200).json({
+      message: 'Purchased services retrieved successfully',
+      data: {
+        reservation: {
+          id: reservation.id,
+          booking_name: reservation.booking_name,
+          check_in_date: reservation.check_in_date,
+          check_out_date: reservation.check_out_date,
+          original_access_time: reservation.access_time,
+          original_departure_time: reservation.departure_time || '11:00:00'
+        },
+        purchased_services: purchasedServices,
+        summary: {
+          total_services: purchasedServices.length,
+          total_amount: totalAmount,
+          currency: purchasedServices[0]?.currency || 'JPY',
+          effective_access_time: effectiveTimes.accessTime,
+          effective_departure_time: effectiveTimes.departureTime,
+          time_modifications: {
+            access_time_changed: effectiveTimes.accessTime !== reservation.access_time,
+            departure_time_changed: effectiveTimes.departureTime !== (reservation.departure_time || '11:00:00')
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching purchased services:', error);
+    res.status(500).json({ error: 'Failed to fetch purchased services' });
+  }
+});
+
+// Get all available services (admin management)
+router.get('/services/all', adminAuth, async (req, res) => {
+  try {
+    const services = await guestServicesService.getAllServices();
+
+    res.status(200).json({
+      message: 'All services retrieved successfully',
+      data: {
+        services
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching all services:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
 

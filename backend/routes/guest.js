@@ -27,6 +27,33 @@ router.get('/:token', async (req, res) => {
   }
 });
 
+// GET /api/guest/:token/profile - Get guest profile with reservation history
+router.get('/:token/profile', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    console.log(`👤 [GUEST PROFILE] Getting guest profile for token: ${token}`);
+
+    // Get guest profile data with complete reservation history
+    const profileData = await reservationService.getGuestProfile(token);
+
+    if (!profileData) {
+      return res.status(404).json({ error: 'Guest profile not found or invalid token' });
+    }
+
+    console.log(`✅ [GUEST PROFILE] Found profile for guest with ${profileData.reservationHistory.length} reservations`);
+
+    res.json(profileData);
+  } catch (error) {
+    console.error('Error fetching guest profile:', error);
+    res.status(500).json({ error: 'Failed to fetch guest profile' });
+  }
+});
+
 // Update access_read status to true when guest views access code
 router.post('/:token/access-read', async (req, res) => {
   try {
@@ -442,6 +469,95 @@ router.post('/:token/messages/:messageId/read', async (req, res) => {
   } catch (error) {
     console.error('Error marking guest message as read:', error);
     res.status(500).json({ error: 'Failed to mark message as read' });
+  }
+});
+
+// GET /api/guest/:token/services - Get available services for guest purchase
+router.get('/:token/services', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    console.log(`🛍️ [GUEST SERVICES] Getting services for token: ${token}`);
+
+    // Get available services for this guest
+    const guestServicesService = require('../services/guestServicesService');
+    const services = await guestServicesService.getAvailableServicesForGuest(token);
+
+    console.log(`✅ [GUEST SERVICES] Found ${services.length} services for guest`);
+
+    res.json(services);
+
+  } catch (error) {
+    console.error('Error fetching guest services:', error);
+    res.status(500).json({ error: 'Failed to fetch available services' });
+  }
+});
+
+// POST /api/guest/:token/services/:serviceId/purchase - Create Stripe checkout for service purchase
+router.post('/:token/services/:serviceId/purchase', async (req, res) => {
+  try {
+    const { token, serviceId } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    if (!serviceId) {
+      return res.status(400).json({ error: 'Service ID is required' });
+    }
+
+    console.log(`💳 [GUEST SERVICE PURCHASE] Creating checkout for service: ${serviceId}, token: ${token}`);
+
+    // Get reservation data to validate token and get reservation ID
+    const reservationData = await reservationService.getReservationByToken(token);
+    if (!reservationData) {
+      return res.status(404).json({ error: 'Reservation not found or invalid token' });
+    }
+
+    console.log(`💳 [GUEST SERVICE PURCHASE] Found reservation: ${reservationData.id}`);
+
+    // Find the service by addon ID (not service_key)
+    const guestServicesService = require('../services/guestServicesService');
+    const availableServices = await guestServicesService.getAvailableServicesForGuest(token);
+    const serviceToPurchase = availableServices.find(s => s.id === serviceId);
+
+    if (!serviceToPurchase) {
+      return res.status(404).json({ error: 'Service not found or not available for purchase' });
+    }
+
+    console.log(`💳 [GUEST SERVICE PURCHASE] Service found: ${serviceToPurchase.name} (${serviceToPurchase.service_type})`);
+
+    // Create Stripe checkout session
+    const checkoutSession = await guestServicesService.createServiceCheckout(
+      reservationData.id,
+      serviceToPurchase.service_type,
+      token,
+      req
+    );
+
+    console.log(`✅ [GUEST SERVICE PURCHASE] Checkout session created: ${checkoutSession.id}`);
+
+    res.json({
+      checkout_url: checkoutSession.checkoutUrl,
+      checkout_session_id: checkoutSession.sessionId,
+      service: {
+        id: serviceToPurchase.id,
+        name: serviceToPurchase.name,
+        price: serviceToPurchase.price,
+        currency: serviceToPurchase.currency
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating service checkout:', error);
+    res.status(500).json({ 
+      error: 'Failed to create checkout session',
+      details: error.message 
+    });
   }
 });
 

@@ -24,12 +24,15 @@ import {
   Unlock,
   FileText,
   ArrowLeft,
-  CreditCard
+  CreditCard,
+  UserCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import GuestMessagePanel from '../components/communication/GuestMessagePanel'
-import { PaymentProvider } from '../contexts/PaymentContext'
-import AccommodationTaxWidget from '../components/payment/AccommodationTaxWidget'
+import JourneyRoadmap from '../components/guest/JourneyRoadmap'
+import GuestProfile from '../components/guest/GuestProfile'
 
 export default function GuestApp() {
   const { token } = useParams()
@@ -38,10 +41,12 @@ export default function GuestApp() {
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
   const [checkinStatus, setCheckinStatus] = useState(null)
-  const [activeSection, setActiveSection] = useState('overview')
+  const [activeSection, setActiveSection] = useState('reservation')
   const [countdown, setCountdown] = useState('')
   const [accessCodeRevealed, setAccessCodeRevealed] = useState(false)
   const [paymentRefreshTrigger, setPaymentRefreshTrigger] = useState(0)
+  const [services, setServices] = useState([])
+  const [servicesLoading, setServicesLoading] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -78,10 +83,10 @@ export default function GuestApp() {
         // Clear the URL parameters
         navigate(location.pathname, { replace: true })
         
-        // Trigger a refresh of the page data to update payment status
-        // This will cause the payment widget to refresh automatically
+        // Trigger a refresh of BOTH the page data AND services data to update payment status
         if (token) {
-          loadGuestData()
+          await loadGuestData()
+          await loadServices() // This is crucial - refresh services after payment
           // Also trigger payment widget refresh
           setPaymentRefreshTrigger(prev => prev + 1)
         }
@@ -214,6 +219,9 @@ export default function GuestApp() {
       if (data.reservation?.access_read) {
         setAccessCodeRevealed(true)
       }
+
+      // Load services for this reservation
+      await loadServices()
       
     } catch (error) {
       console.error('Error loading guest data:', error)
@@ -221,6 +229,63 @@ export default function GuestApp() {
       navigate('/')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadServices = async () => {
+    try {
+      setServicesLoading(true)
+      const response = await fetch(`/api/guest/${token}/services`)
+      if (response.ok) {
+        const servicesData = await response.json()
+        setServices(servicesData)
+      }
+    } catch (error) {
+      console.error('Error loading services:', error)
+    } finally {
+      setServicesLoading(false)
+    }
+  }
+
+  const handleServicePurchase = async (serviceId) => {
+    try {
+      const response = await fetch(`/api/guest/${token}/services/${serviceId}/purchase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const { checkout_url } = await response.json()
+        // Redirect to Stripe checkout
+        window.location.href = checkout_url
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.message || 'Failed to initiate payment')
+      }
+    } catch (error) {
+      console.error('Error purchasing service:', error)
+      toast.error('Failed to initiate payment')
+    }
+  }
+
+  const getServiceIcon = (serviceType) => {
+    switch (serviceType?.toLowerCase()) {
+      case 'accommodation_tax':
+        return <CreditCard className="w-5 h-5" />
+      case 'early_checkin':
+        return <Clock className="w-5 h-5" />
+      case 'late_checkout':
+        return <Clock className="w-5 h-5" />
+      case 'extra_cleaning':
+        return <Home className="w-5 h-5" />
+      case 'breakfast':
+        return <Coffee className="w-5 h-5" />
+      case 'parking':
+        return <Car className="w-5 h-5" />
+      default:
+        return <ShoppingBag className="w-5 h-5" />
     }
   }
 
@@ -347,6 +412,32 @@ export default function GuestApp() {
     }
   }
 
+  const calculateEarlyTime = (originalTime, offsetMinutes) => {
+    if (!originalTime || !offsetMinutes) return originalTime
+    try {
+      const [hours, minutes] = originalTime.split(':').map(num => parseInt(num, 10))
+      const totalMinutes = (hours * 60) + minutes - offsetMinutes
+      const newHours = Math.floor(totalMinutes / 60)
+      const newMinutes = totalMinutes % 60
+      return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`
+    } catch (error) {
+      return originalTime
+    }
+  }
+
+  const calculateLateTime = (originalTime, offsetMinutes) => {
+    if (!originalTime || !offsetMinutes) return originalTime
+    try {
+      const [hours, minutes] = originalTime.split(':').map(num => parseInt(num, 10))
+      const totalMinutes = (hours * 60) + minutes + offsetMinutes
+      const newHours = Math.floor(totalMinutes / 60)
+      const newMinutes = totalMinutes % 60
+      return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`
+    } catch (error) {
+      return originalTime
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -395,6 +486,15 @@ export default function GuestApp() {
             )}
           </div>
         </div>
+
+        {/* Journey Roadmap */}
+        <JourneyRoadmap 
+          checkinCompleted={checkinStatus?.completed}
+          taxPaid={dashboardData?.accommodation_tax_paid}
+          canAccessStayInfo={canAccessRoomDetails()}
+          property={property}
+          reservation={reservation}
+        />
 
         {/* Check-in Action Card */}
         {!checkinStatus?.completed && (
@@ -556,139 +656,663 @@ export default function GuestApp() {
     )
   }
 
+  const canAccessStayInfo = () => {
+    // Check if check-in is completed
+    if (!checkinStatus?.completed) {
+      return false
+    }
+    
+    // Check if all mandatory services are paid
+    const mandatoryServices = services.filter(service => service.is_mandatory)
+    const allMandatoryServicesPaid = mandatoryServices.length === 0 || 
+      mandatoryServices.every(service => service.payment_status === 'paid')
+    
+    if (!allMandatoryServicesPaid) {
+      return false
+    }
+    
+    // Check if within access time window
+    return canAccessRoomDetails()
+  }
+
   const renderReservationSection = () => {
     const checkInDate = new Date(reservation.check_in_date)
     const checkOutDate = new Date(reservation.check_out_date)
     const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24))
 
     return (
-      <div className="space-y-8">
-        {/* Detailed Reservation Information */}
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4">
-            Reservation Details
-          </h3>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* Check-in Information */}
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <PlaneLanding className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Check-in Date</p>
-                  <p className="text-base sm:text-lg text-primary-700 break-words">
-                    {checkInDate.toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-              </div>
+      <div className="space-y-6">
+        {/* Welcome Banner */}
+        <div className="card">
+          <div className="text-center">
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
+              Hello, {reservation?.guest_name}!
+            </p>
+            <p className="text-sm sm:text-base text-primary-600 mb-4">
+              Thank you for choosing us for your stay
+            </p>
+            
+            {checkinStatus?.completed ? (
+              <span className="status-badge status-completed">
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
+                Check-in Complete
+              </span>
+            ) : (
+              <span className="status-badge status-pending">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-1 flex-shrink-0" />
+                Check-in Pending
+              </span>
+            )}
+          </div>
+        </div>
 
-              <div className="flex items-start gap-3">
-                <PlaneTakeoff className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Check-out Date</p>
-                  <p className="text-base sm:text-lg text-primary-700 break-words">
-                    {checkOutDate.toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-              </div>
+        {/* Journey Roadmap */}
+        <JourneyRoadmap 
+          checkinCompleted={checkinStatus?.completed}
+          services={services}
+          canAccessStayInfo={canAccessStayInfo()}
+          property={property}
+          reservation={reservation}
+        />
 
-              <div className="flex items-start gap-3">
-                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Guests</p>
-                  <p className="text-base sm:text-lg text-primary-700">
-                    {reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}
-                  </p>
-                </div>
+        {/* Check-in Action Card */}
+        {!checkinStatus?.completed && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 sm:p-6">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mr-3 mt-1 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold text-yellow-900 mb-2">
+                  Complete Your Check-in
+                </h3>
+                <p className="text-sm sm:text-base text-yellow-800 mb-4 break-words">
+                  Please complete your online check-in process to receive your room access details. You must complete check-in before your arrival to get the access code.
+                </p>
+                <button 
+                  onClick={() => navigate(`/checkin/${token}`)}
+                  className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 bg-yellow-600 text-white text-sm sm:text-base font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-yellow-500 w-full sm:w-auto justify-center"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2 flex-shrink-0" />
+                  Complete Check-in Now
+                </button>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Property Information */}
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <Building className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Property</p>
-                  <p className="text-base sm:text-lg text-primary-700 break-words">
-                    {property?.name || 'Property Name'}
-                  </p>
+        {/* PUBLIC INFO SECTION - Always Visible */}
+        <div className="card border-blue-200 bg-blue-50">
+          <div className="flex items-center mb-4">
+            <Info className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mr-2 flex-shrink-0" />
+            <h2 className="text-lg sm:text-xl font-semibold text-blue-900">Public Information</h2>
+          </div>
+
+          {/* Reservation Information */}
+          <div className="bg-white border border-blue-200 rounded-lg p-4 sm:p-6 mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">
+              Reservation Details
+            </h3>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Check-in Information */}
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <PlaneLanding className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Check-in Date</p>
+                    <p className="text-base sm:text-lg text-blue-700 break-words">
+                      {checkInDate.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Access available: {formatAccessTime(property.access_time)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <PlaneTakeoff className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Check-out Date</p>
+                    <p className="text-base sm:text-lg text-blue-700 break-words">
+                      {checkOutDate.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Departure: {formatAccessTime(property.departure_time) || '11:00 AM'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Guests</p>
+                    <p className="text-base sm:text-lg text-blue-700">
+                      {reservation.num_guests} {reservation.num_guests === 1 ? 'Guest' : 'Guests'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <Home className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Room</p>
-                  <p className="text-base sm:text-lg text-primary-700 break-words">
-                    {room?.room_name || 'Room'}
-                  </p>
+              {/* Property Information */}
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Building className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Property</p>
+                    <p className="text-base sm:text-lg text-blue-700 break-words">
+                      {property?.name || 'Property Name'}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-start gap-3">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Duration</p>
-                  <p className="text-base sm:text-lg text-primary-700">
-                    {nights} {nights === 1 ? 'Night' : 'Nights'}
-                  </p>
+                <div className="flex items-start gap-3">
+                  <Home className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Room Type</p>
+                    <p className="text-base sm:text-lg text-blue-700 break-words">
+                      {room?.room_name || 'Room'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Duration</p>
+                    <p className="text-base sm:text-lg text-blue-700">
+                      {nights} {nights === 1 ? 'Night' : 'Nights'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Additional Room Details - show if available */}
-          {(room?.bed_configuration || room?.room_size_sqm || room?.max_guests) && (
-            <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-primary-200">
-              <h4 className="text-sm sm:text-base font-semibold text-primary-900 mb-3">
-                Room Features
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {room?.bed_configuration && (
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-primary-900">Bed Configuration</p>
-                    <p className="text-xs sm:text-sm text-primary-700 break-words">{room.bed_configuration}</p>
+          {/* Transport Access */}
+          {property.transport_access && (
+            <div className="bg-white border border-blue-200 rounded-lg p-4 sm:p-6 mb-4">
+              <div className="flex items-center mb-3">
+                <Car className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" />
+                <h4 className="text-base font-semibold text-gray-900">Transport Access</h4>
+              </div>
+              <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line break-words">
+                {property.transport_access}
+              </p>
+            </div>
+          )}
+
+          {/* Property Details */}
+          {property.property_details && (
+            <div className="bg-white border border-blue-200 rounded-lg p-4 sm:p-6 mb-4">
+              <div className="flex items-center mb-3">
+                <Building className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" />
+                <h4 className="text-base font-semibold text-gray-900">Property Details</h4>
+              </div>
+              <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line break-words">
+                {property.property_details}
+              </p>
+            </div>
+          )}
+
+          {/* Self Check-in Instructions */}
+          {property.check_in_instructions && (
+            <div className="bg-white border border-blue-200 rounded-lg p-4 sm:p-6 mb-4">
+              <div className="flex items-center mb-3">
+                <Key className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" />
+                <h4 className="text-base font-semibold text-gray-900">Self Check-in Instructions</h4>
+              </div>
+              <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line break-words">
+                {property.check_in_instructions}
+              </p>
+            </div>
+          )}
+
+          {/* House Rules */}
+          {property.house_rules && (
+            <div className="bg-white border border-blue-200 rounded-lg p-4 sm:p-6">
+              <div className="flex items-center mb-3">
+                <FileText className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" />
+                <h4 className="text-base font-semibold text-gray-900">House Rules & Policy</h4>
+              </div>
+              <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line break-words">
+                {property.house_rules}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* STAY INFO SECTION - Conditionally Visible */}
+        <div className="card border-green-200 bg-green-50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <Unlock className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 mr-2 flex-shrink-0" />
+              <h2 className="text-lg sm:text-xl font-semibold text-green-900">Stay Information</h2>
+            </div>
+            {canAccessStayInfo() ? (
+              <span className="text-xs sm:text-sm text-green-50 bg-green-500 px-2 py-1 rounded-full flex-shrink-0">
+                Available Now
+              </span>
+            ) : (
+              <span className="text-xs sm:text-sm text-red-50 bg-red-500 px-2 py-1 rounded-full flex-shrink-0">
+                Access Restricted
+              </span>
+            )}
+          </div>
+
+          {canAccessStayInfo() ? (
+            <div className="space-y-4">
+              {/* Room Access Code */}
+              <div className="bg-white border border-green-200 rounded-lg p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-base font-semibold text-gray-900">Room Access</h4>
+                  <Key className="w-5 h-5 text-green-600" />
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Access Code */}
+                  <div className="bg-green-100 border border-green-300 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-green-800">Access Code</span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setAccessCodeRevealed(!accessCodeRevealed)}
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          {accessCodeRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {!checkinStatus?.access_read && !accessCodeRevealed ? (
+                      <div className="text-center py-2">
+                        <button
+                          onClick={handleRevealAccessCode}
+                          className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                        >
+                          Reveal Code
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xl sm:text-2xl font-mono font-bold text-green-900">
+                        {accessCodeRevealed ? room.access_code : '••••••'}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Room Unit Info */}
+                  <div className="space-y-3">
+                    {room.unit_number && (
+                      <div className="flex items-center">
+                        <Home className="w-4 h-4 text-green-600 mr-2" />
+                        <div>
+                          <p className="text-xs text-gray-600">Room Number</p>
+                          <p className="font-medium text-gray-900">{room.unit_number}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {room.floor_number && (
+                      <div className="flex items-center">
+                        <Building className="w-4 h-4 text-green-600 mr-2" />
+                        <div>
+                          <p className="text-xs text-gray-600">Floor</p>
+                          <p className="font-medium text-gray-900">Floor {room.floor_number}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Access Instructions */}
+                {room.access_instructions && (
+                  <div className="mt-4 pt-4 border-t border-green-200">
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">Access Instructions</h5>
+                    <p className="text-sm text-gray-700 whitespace-pre-line break-words">
+                      {room.access_instructions}
+                    </p>
                   </div>
                 )}
-                
-                {room?.room_size_sqm && (
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-primary-900">Room Size</p>
-                    <p className="text-xs sm:text-sm text-primary-700">{room.room_size_sqm} sq m</p>
+              </div>
+
+              {/* House Manual */}
+              {property.house_manual && (
+                <div className="bg-white border border-green-200 rounded-lg p-4 sm:p-6">
+                  <div className="flex items-center mb-3">
+                    <FileText className="w-5 h-5 text-green-600 mr-2 flex-shrink-0" />
+                    <h4 className="text-base font-semibold text-gray-900">House Manual</h4>
                   </div>
-                )}
-                
-                {room?.max_guests && (
+                  <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line break-words">
+                    {property.house_manual}
+                  </p>
+                </div>
+              )}
+
+              {/* WiFi Information */}
+              <div className="bg-white border border-green-200 rounded-lg p-4 sm:p-6">
+                <div className="flex items-center mb-3">
+                  <Wifi className="w-5 h-5 text-green-600 mr-2 flex-shrink-0" />
+                  <h4 className="text-base font-semibold text-gray-900">WiFi Information</h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs sm:text-sm font-medium text-primary-900">Maximum Guests</p>
-                    <p className="text-xs sm:text-sm text-primary-700">{room.max_guests} guests</p>
+                    <p className="text-sm text-gray-600">Network Name</p>
+                    <p className="font-mono text-sm sm:text-base font-medium break-all text-gray-900">
+                      {property.wifi_name}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Password</p>
+                    <p className="font-mono text-sm sm:text-base font-medium break-all text-gray-900">
+                      {property.wifi_password}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* During Stay Information */}
+              <div className="bg-white border border-green-200 rounded-lg p-4 sm:p-6">
+                <div className="flex items-center mb-3">
+                  <Info className="w-5 h-5 text-green-600 mr-2 flex-shrink-0" />
+                  <h4 className="text-base font-semibold text-gray-900">During Your Stay</h4>
+                </div>
+                
+                {/* Emergency Contact */}
+                {property.emergency_contact && (
+                  <div className="mb-4">
+                    <div className="flex items-center mb-2">
+                      <Phone className="w-4 h-4 text-green-600 mr-2" />
+                      <p className="text-sm font-medium text-gray-900">Emergency Contact</p>
+                    </div>
+                    <p className="text-sm text-gray-700 font-medium">{property.emergency_contact}</p>
                   </div>
                 )}
 
-                {room?.floor_number && (
+                {/* Property Amenities */}
+                {property.amenities && Object.keys(property.amenities).length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">Available Amenities</h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.entries(property.amenities).map(([amenity, available]) => (
+                        available && (
+                          <div key={amenity} className="flex items-center p-2 bg-green-100 rounded-lg">
+                            <CheckCircle className="w-3 h-3 text-green-500 mr-2 flex-shrink-0" />
+                            <span className="text-xs text-gray-700 capitalize truncate">
+                              {amenity.replace('_', ' ')}
+                            </span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Local Recommendations */}
+                {property.location_info && (
                   <div>
-                    <p className="text-xs sm:text-sm font-medium text-primary-900">Floor</p>
-                    <p className="text-xs sm:text-sm text-primary-700">Floor {room.floor_number}</p>
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">Local Recommendations</h5>
+                    {typeof property.location_info === 'object' ? (
+                      <div className="space-y-3">
+                        {Object.entries(property.location_info).map(([category, items]) => (
+                          <div key={category}>
+                            <div className="flex items-center mb-2">
+                              {getRecommendationIcon(category)}
+                              <h6 className="text-sm font-medium text-gray-800 ml-2 capitalize">
+                                {category.replace('_', ' ')}
+                              </h6>
+                            </div>
+                            
+                            {Array.isArray(items) ? (
+                              <div className="space-y-1">
+                                {items.slice(0, 3).map((item, index) => (
+                                  <div key={index} className="bg-green-100 rounded-lg p-2">
+                                    {typeof item === 'object' ? (
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-900 break-words">{item.name}</p>
+                                        {item.description && (
+                                          <p className="text-xs text-gray-600 mt-1 break-words">{item.description}</p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-gray-700 break-words">{item}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="bg-green-100 rounded-lg p-2">
+                                <p className="text-xs text-gray-700 break-words">{items}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-green-100 rounded-lg p-2">
+                        <p className="text-sm text-gray-700 break-words">{property.location_info}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
+          ) : (
+            /* Access Restricted Message */
+            <div className="bg-white border border-red-200 rounded-lg p-4 sm:p-6">
+              <div className="text-center">
+                <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+                <h4 className="text-base font-semibold text-red-900 mb-2">
+                  Stay Information Not Available
+                </h4>
+                <div className="text-sm text-red-700 space-y-1">
+                  {!checkinStatus?.completed && (
+                    <p>• Complete your check-in process</p>
+                  )}
+                  {services.filter(s => s.is_mandatory && s.payment_status !== 'paid').length > 0 && (
+                    <p>• Pay required services: {services.filter(s => s.is_mandatory && s.payment_status !== 'paid').map(s => s.name).join(', ')}</p>
+                  )}
+                  {!canAccessRoomDetails() && checkinStatus?.completed && (
+                    <p>• Wait until {formatAccessTime(property.access_time)} on {checkInDate.toLocaleDateString()}</p>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
+
+        {/* Addon Services Section */}
+        <div className="card border-purple-200 bg-purple-50">
+          <div className="flex items-center mb-4">
+            <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mr-2 flex-shrink-0" />
+            <h2 className="text-lg sm:text-xl font-semibold text-purple-900">Additional Services</h2>
+          </div>
+
+          {servicesLoading ? (
+            <div className="bg-white border border-purple-200 rounded-lg p-4 sm:p-6">
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner />
+                <span className="ml-2 text-sm text-gray-600">Loading services...</span>
+              </div>
+            </div>
+          ) : services.length > 0 ? (
+            <div className="space-y-4">
+              {services.map((service) => (
+                <div key={service.id} className="bg-white border border-purple-200 rounded-lg p-4 sm:p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3 flex-1">
+                      <div className="text-purple-600 mt-1">
+                        {getServiceIcon(service.service_type)}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <h4 className="text-base font-semibold text-gray-900">
+                            {service.name}
+                          </h4>
+                          {service.is_mandatory && (
+                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                              Required
+                            </span>
+                          )}
+                          {service.requires_admin_approval && !service.admin_enabled && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                              Pending Approval
+                            </span>
+                          )}
+                        </div>
+                        
+                        {service.description && (
+                          <p className="text-sm text-gray-600 mb-3 break-words">
+                            {service.description}
+                          </p>
+                        )}
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <span className="text-lg font-bold text-purple-900">
+                              €{service.price}
+                            </span>
+                            
+                            {service.payment_status === 'paid' && (
+                              <span className="flex items-center text-sm text-green-600">
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Paid
+                              </span>
+                            )}
+                            
+                            {service.payment_status === 'pending' && (
+                              <span className="flex items-center text-sm text-yellow-600">
+                                <Clock className="w-4 h-4 mr-1" />
+                                Processing
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Purchase Button */}
+                          {service.payment_status !== 'paid' && (
+                            <div className="flex-shrink-0">
+                              {service.requires_admin_approval && !service.admin_enabled ? (
+                                <button
+                                  disabled
+                                  className="px-4 py-2 bg-gray-300 text-gray-500 text-sm font-medium rounded-lg cursor-not-allowed"
+                                >
+                                  Awaiting Approval
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleServicePurchase(service.id)}
+                                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                >
+                                  {service.payment_status === 'pending' ? 'Complete Payment' : 'Pay Now'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Service Time Effects */}
+                        {service.service_type === 'early_checkin' && service.payment_status === 'paid' && (
+                          <div className="mt-3 p-2 bg-green-100 border border-green-200 rounded-lg">
+                            <p className="text-xs text-green-700">
+                              ✓ Early check-in enabled - Access available {service.access_time_offset ? 
+                                formatAccessTime(calculateEarlyTime(property.access_time, service.access_time_offset)) : 
+                                'earlier'}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {service.service_type === 'late_checkout' && service.payment_status === 'paid' && (
+                          <div className="mt-3 p-2 bg-green-100 border border-green-200 rounded-lg">
+                            <p className="text-xs text-green-700">
+                              ✓ Late checkout enabled - Departure extended {service.departure_time_offset ? 
+                                formatAccessTime(calculateLateTime(property.departure_time, service.departure_time_offset)) : 
+                                'later'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white border border-purple-200 rounded-lg p-4 sm:p-6">
+              <div className="text-center py-8">
+                <div className="text-purple-600 mb-2">
+                  <ShoppingBag className="w-8 h-8 mx-auto" />
+                </div>
+                <h4 className="text-base font-semibold text-purple-900 mb-2">
+                  No Additional Services Available
+                </h4>
+                <p className="text-sm text-purple-700">
+                  There are currently no additional services available for your reservation.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Access Time Countdown */}
+        {!canAccessStayInfo() && checkinStatus?.completed && property.access_time && (
+          <div className="card border-yellow-200 bg-yellow-50">
+            <div className="flex items-center mb-4">
+              <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mr-2 flex-shrink-0" />
+              <h3 className="text-base sm:text-lg font-semibold text-yellow-900">Access Countdown</h3>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Countdown Display */}
+              {countdown && typeof countdown === 'object' && !countdown.expired && (
+                <div className="bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 border border-yellow-300 rounded-lg p-4 sm:p-6 text-center">
+                  <div className="mb-3 sm:mb-4">
+                    <p className="text-xs sm:text-sm text-yellow-950 mb-2">Stay information available in:</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-center">
+                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.days || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Days</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.hours || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Hours</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.minutes || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Minutes</div>
+                    </div>
+                    <div className="bg-white border border-yellow-200 rounded-lg p-2 sm:p-3">
+                      <div className="text-lg sm:text-xl font-bold text-yellow-900">{countdown.seconds || 0}</div>
+                      <div className="text-xs text-yellow-700 font-medium">Seconds</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3 sm:p-4">
+                <p className="text-sm sm:text-base text-yellow-800">
+                  <strong>Stay information will be available at {formatAccessTime(property.access_time)} on {checkInDate.toLocaleDateString()}.</strong>
+                </p>
+                <p className="text-xs sm:text-sm text-yellow-700 mt-2">
+                  Room access code, house manual, and detailed stay information will automatically appear when the access time arrives.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
-  const renderPropertySection  = () => (
-    <div className="space-y-8 ">
+  const renderPropertySection = () => (
+    <div className="space-y-8">
       {/* Property Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Basic Property Info */}
@@ -862,33 +1486,31 @@ export default function GuestApp() {
             </div>
           </div>
 
-          {/* Check-in Status Info */}
-          {!checkinStatus?.completed && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mr-3 mt-1 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-semibold text-yellow-900 mb-1">
-                    Complete Check-in Required
-                  </h3>
-                  <p className="text-sm text-yellow-800">
-                    Please complete your check-in process before accessing payment services.
-                  </p>
-                </div>
+          {/* Migration Notice */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6">
+            <div className="text-center py-8">
+              <div className="text-blue-600 mb-2">
+                <CreditCard className="w-8 h-8 mx-auto" />
               </div>
+              <h4 className="text-base font-semibold text-blue-900 mb-2">
+                Service Payments Moved
+              </h4>
+              <p className="text-sm text-blue-700">
+                All service payments, including accommodation tax, have been moved to the "Additional Services" section in the Reservation tab for a better experience.
+              </p>
             </div>
-          )}
+          </div>
         </div>
+      </div>
+    )
+  }
 
-        {/* Payment Widget - Only show if check-in is completed */}
-        {checkinStatus?.completed && (
-          <PaymentProvider>
-            <AccommodationTaxWidget 
-              guestToken={token} 
-              refreshTrigger={paymentRefreshTrigger}
-            />
-          </PaymentProvider>
-        )}
+  const renderProfileSection = () => {
+    return (
+      <div className="space-y-6">
+        <GuestProfile 
+          guestToken={token}
+        />
       </div>
     )
   }
@@ -913,17 +1535,17 @@ export default function GuestApp() {
         return renderPaymentSection()
       case 'documents':
         return renderDocumentsSection()
+      case 'profile':
+        return renderProfileSection()
       default:
         return renderOverviewSection()
     }
   }
 
   const navigationItems = [
-    { id: 'overview', label: 'Room key', icon: Home },
-    { id: 'reservation', label: 'Reservation', icon: FileText },
-    { id: 'property', label: 'Property', icon: Building },
-    { id: 'payment', label: 'Payment', icon: CreditCard },
-    { id: 'documents', label: 'Contact', icon: MessageCircle }
+    { id: 'reservation', label: 'Reservation', icon: Home },
+    { id: 'documents', label: 'Contact', icon: MessageCircle },
+    { id: 'profile', label: 'Profile', icon: UserCircle }
   ]
 
   return (
@@ -967,7 +1589,7 @@ export default function GuestApp() {
         <div className="fixed left-1/2 -translate-x-1/2 bottom-0 z-10
                         w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
           <div className="bg-white border-t border-primary-200">
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {navigationItems.map((item) => {
                 const IconComponent = item.icon
                 const isActive = activeSection === item.id

@@ -309,12 +309,8 @@ class StripeService {
         console.log(`✅ Updated ${updatedPayment.length} payment intent(s) to succeeded for session: ${session.id}`);
       }
 
-      // Handle service-specific success logic
-      if (service_type === 'accommodation_tax') {
-        // For checkout sessions, we pass the session ID as the stripe reference
-        // since that's what we stored in our payment_intents table
-        await this.handleAccommodationTaxSuccess(reservation_id, session.id);
-      }
+      // Handle service-specific success logic using new service system
+      await this.handleServicePaymentSuccess(reservation_id, service_type, session.id);
 
       console.log(`✅ Checkout session completed for ${service_type}: ${session.id}`);
     } catch (error) {
@@ -360,10 +356,8 @@ class StripeService {
         })
         .eq('stripe_payment_intent_id', paymentIntent.id);
 
-      // Handle service-specific success logic
-      if (service_type === 'accommodation_tax') {
-        await this.handleAccommodationTaxSuccess(reservation_id, paymentIntent.id);
-      }
+      // Handle service-specific success logic using new service system
+      await this.handleServicePaymentSuccess(reservation_id, service_type, paymentIntent.id);
 
       console.log(`Payment successful for ${service_type}: ${paymentIntent.id}`);
     } catch (error) {
@@ -422,53 +416,49 @@ class StripeService {
   }
 
   /**
-   * Handle successful accommodation tax payment
+   * Handle successful service payment (new service system)
    */
-  async handleAccommodationTaxSuccess(reservationId, stripePaymentIntentId) {
+  async handleServicePaymentSuccess(reservationId, serviceType, stripePaymentIntentId) {
     try {
-      console.log(`Updating accommodation tax status for reservation: ${reservationId}, Stripe ID: ${stripePaymentIntentId}`);
+      console.log(`Updating service payment status for reservation: ${reservationId}, Service: ${serviceType}, Stripe ID: ${stripePaymentIntentId}`);
       
+      // Get accommodation tax service ID
+      const { data: taxService, error: serviceError } = await supabaseAdmin
+        .from('guest_services')
+        .select('id')
+        .eq('service_key', serviceType)
+        .single();
+
+      if (serviceError || !taxService) {
+        console.error(`Service ${serviceType} not found`);
+        return;
+      }
+
+      // Update the reservation addon status to paid
       const { data, error } = await supabaseAdmin
-        .from('accommodation_tax_invoices')
+        .from('reservation_addons')
         .update({
-          status: 'paid',
+          purchase_status: 'paid',
           stripe_payment_intent_id: stripePaymentIntentId,
-          paid_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          purchased_at: new Date().toISOString(),
+          amount_paid: null // Will be calculated from Stripe session
         })
         .eq('reservation_id', reservationId)
+        .eq('service_id', taxService.id)
         .select();
 
       if (error) {
-        console.error('Error updating accommodation tax status:', error);
+        console.error('Error updating service payment status:', error);
         throw error;
       }
 
       if (!data || data.length === 0) {
-        console.warn(`No accommodation tax invoice found for reservation: ${reservationId}`);
-        // Try to find by any existing stripe payment intent ID as fallback
-        const { data: fallbackData, error: fallbackError } = await supabaseAdmin
-          .from('accommodation_tax_invoices')
-          .update({
-            status: 'paid',
-            paid_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_payment_intent_id', stripePaymentIntentId)
-          .select();
-        
-        if (fallbackError) {
-          console.error('Fallback update also failed:', fallbackError);
-        } else if (fallbackData && fallbackData.length > 0) {
-          console.log(`✅ Successfully updated accommodation tax via fallback lookup for: ${stripePaymentIntentId}`);
-        } else {
-          console.warn(`No accommodation tax invoice found for either reservation ${reservationId} or Stripe ID ${stripePaymentIntentId}`);
-        }
+        console.warn(`No service addon found for reservation: ${reservationId}, service: ${serviceType}`);
       } else {
-        console.log(`✅ Successfully marked accommodation tax as paid for reservation: ${reservationId}`);
+        console.log(`✅ Successfully marked ${serviceType} as paid for reservation: ${reservationId}`);
       }
     } catch (error) {
-      console.error('Error handling accommodation tax success:', error);
+      console.error('Error handling service payment success:', error);
       throw error;
     }
   }

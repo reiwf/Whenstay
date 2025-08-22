@@ -697,6 +697,40 @@ $$;
 
 
 --
+-- Name: get_group_reservations(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_group_reservations(master_booking_id text) RETURNS TABLE(id uuid, beds24_booking_id character varying, booking_name character varying, room_unit_id uuid, unit_number character varying, room_type_name character varying, is_group_master boolean, check_in_date date, check_out_date date, status text, total_amount numeric)
+    LANGUAGE sql STABLE
+    AS $$
+    SELECT 
+        r.id,
+        r.beds24_booking_id,
+        r.booking_name,
+        r.room_unit_id,
+        ru.unit_number,
+        rt.name as room_type_name,
+        r.is_group_master,
+        r.check_in_date,
+        r.check_out_date,
+        r.status,
+        r.total_amount
+    FROM public.reservations r
+    LEFT JOIN public.room_units ru ON r.room_unit_id = ru.id
+    LEFT JOIN public.room_types rt ON r.room_type_id = rt.id
+    WHERE r.booking_group_master_id = master_booking_id
+    ORDER BY r.is_group_master DESC, ru.unit_number;
+$$;
+
+
+--
+-- Name: FUNCTION get_group_reservations(master_booking_id text); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_group_reservations(master_booking_id text) IS 'Returns all reservations that belong to a specific group booking';
+
+
+--
 -- Name: get_guest_dashboard_data(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -945,6 +979,54 @@ CREATE FUNCTION public.is_room_available(p_room_unit_id uuid, p_start_date date,
         AND public.daterange_overlaps(rs.start_date, rs.end_date, p_start_date, p_end_date)
         AND (p_exclude_reservation_id IS NULL OR r.id != p_exclude_reservation_id)
     );$$;
+
+
+--
+-- Name: maintain_group_booking_consistency(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.maintain_group_booking_consistency() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- If this is a group master and certain key fields change, update related reservations
+    IF NEW.is_group_master = true AND NEW.booking_group_master_id IS NOT NULL THEN
+        -- Update guest information for all related bookings if master guest info changes
+        IF OLD.booking_firstname IS DISTINCT FROM NEW.booking_firstname 
+           OR OLD.booking_lastname IS DISTINCT FROM NEW.booking_lastname
+           OR OLD.booking_email IS DISTINCT FROM NEW.booking_email 
+           OR OLD.booking_phone IS DISTINCT FROM NEW.booking_phone THEN
+            
+            UPDATE public.reservations 
+            SET 
+                booking_firstname = NEW.booking_firstname,
+                booking_lastname = NEW.booking_lastname,
+                booking_email = NEW.booking_email,
+                booking_phone = NEW.booking_phone,
+                updated_at = NOW()
+            WHERE booking_group_master_id = NEW.booking_group_master_id 
+            AND id != NEW.id
+            AND is_group_master = false;
+        END IF;
+        
+        -- Update check-in/check-out dates if they change on master
+        IF OLD.check_in_date IS DISTINCT FROM NEW.check_in_date 
+           OR OLD.check_out_date IS DISTINCT FROM NEW.check_out_date THEN
+            
+            UPDATE public.reservations 
+            SET 
+                check_in_date = NEW.check_in_date,
+                check_out_date = NEW.check_out_date,
+                updated_at = NOW()
+            WHERE booking_group_master_id = NEW.booking_group_master_id 
+            AND id != NEW.id
+            AND is_group_master = false;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
 
 
 --
@@ -1495,6 +1577,22 @@ CREATE FUNCTION public.refresh_room_type_total_units(_rt uuid) RETURNS void
     WHERE ru.room_type_id = rt.id AND coalesce(ru.is_active, true)
   )
   WHERE rt.id = _rt;
+$$;
+
+
+--
+-- Name: revoke_checkin_token(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.revoke_checkin_token() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.status = 'cancelled' THEN
+        NEW.check_in_token := NULL;
+    END IF;
+    RETURN NEW;
+END;
 $$;
 
 
@@ -2082,6 +2180,34 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: update_group_booking_status(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_group_booking_status(master_booking_id text, new_status text) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    updated_count integer;
+BEGIN
+    UPDATE public.reservations 
+    SET status = new_status, updated_at = NOW()
+    WHERE booking_group_master_id = master_booking_id;
+    
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    
+    RETURN updated_count;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION update_group_booking_status(master_booking_id text, new_status text); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.update_group_booking_status(master_booking_id text, new_status text) IS 'Updates status for all reservations in a group booking';
 
 
 --
@@ -3321,8 +3447,40 @@ CREATE TABLE public.reservations (
     lang text,
     access_read boolean DEFAULT false,
     status text,
-    booking_firstname text
+    booking_firstname text,
+    booking_group_master_id text,
+    is_group_master boolean DEFAULT false,
+    group_room_count integer DEFAULT 1,
+    booking_group_ids jsonb
 );
+
+
+--
+-- Name: COLUMN reservations.booking_group_master_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reservations.booking_group_master_id IS 'Beds24 master booking ID for group bookings - links all rooms in a group';
+
+
+--
+-- Name: COLUMN reservations.is_group_master; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reservations.is_group_master IS 'True for the primary/master reservation in a group booking';
+
+
+--
+-- Name: COLUMN reservations.group_room_count; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reservations.group_room_count IS 'Total number of rooms in the group booking';
+
+
+--
+-- Name: COLUMN reservations.booking_group_ids; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reservations.booking_group_ids IS 'Array of all booking IDs that belong to this group';
 
 
 --
@@ -3576,6 +3734,91 @@ COMMENT ON TABLE public.events IS 'Conferences, festivals, and local events affe
 
 
 --
+-- Name: room_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_types (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    property_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    description text,
+    max_guests integer DEFAULT 2 NOT NULL,
+    base_price numeric(10,2),
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    room_amenities jsonb,
+    bed_configuration character varying(255),
+    room_size_sqm integer,
+    has_balcony boolean DEFAULT false,
+    has_kitchen boolean DEFAULT false,
+    is_accessible boolean DEFAULT false,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    beds24_roomtype_id bigint,
+    min_price numeric(10,2),
+    max_price numeric(10,2),
+    total_units integer,
+    sort_order integer
+);
+
+
+--
+-- Name: room_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_units (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    room_type_id uuid NOT NULL,
+    unit_number character varying(50) NOT NULL,
+    floor_number integer,
+    access_code character varying(50),
+    access_instructions text,
+    wifi_name character varying(255),
+    wifi_password character varying(255),
+    unit_amenities jsonb,
+    maintenance_notes text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    beds24_unit_id bigint
+);
+
+
+--
+-- Name: group_booking_details; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.group_booking_details AS
+ SELECT r.booking_group_master_id,
+    count(*) AS total_rooms,
+    count(*) FILTER (WHERE (r.is_group_master = true)) AS master_count,
+    min(r.check_in_date) AS earliest_checkin,
+    max(r.check_out_date) AS latest_checkout,
+    string_agg(DISTINCT (r.booking_name)::text, ', '::text) AS guest_names,
+    string_agg(DISTINCT (r.booking_email)::text, ', '::text) AS guest_emails,
+    string_agg(DISTINCT (ru.unit_number)::text, ', '::text ORDER BY (ru.unit_number)::text) AS room_units,
+    string_agg(DISTINCT (rt.name)::text, ', '::text) AS room_types,
+    p.name AS property_name,
+    sum(r.total_amount) AS total_group_amount,
+    r.currency,
+    max(r.created_at) AS latest_created_at,
+    max(r.updated_at) AS latest_updated_at
+   FROM (((public.reservations r
+     LEFT JOIN public.room_units ru ON ((r.room_unit_id = ru.id)))
+     LEFT JOIN public.room_types rt ON ((r.room_type_id = rt.id)))
+     LEFT JOIN public.properties p ON ((r.property_id = p.id)))
+  WHERE (r.booking_group_master_id IS NOT NULL)
+  GROUP BY r.booking_group_master_id, p.name, r.currency;
+
+
+--
+-- Name: VIEW group_booking_details; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.group_booking_details IS 'Comprehensive view of group bookings with aggregated information across all rooms';
+
+
+--
 -- Name: guest_channel_consents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3610,6 +3853,22 @@ CREATE TABLE public.guest_payment_services (
 --
 
 COMMENT ON TABLE public.guest_payment_services IS 'Defines available payment services for guests (accommodation tax, damage deposit, etc.)';
+
+
+--
+-- Name: guest_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guest_sessions (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    guest_email character varying(255) NOT NULL,
+    token character varying(64) NOT NULL,
+    reservation_ids uuid[] NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
 
 
 --
@@ -4053,57 +4312,6 @@ CREATE TABLE public.property_images (
 --
 
 COMMENT ON TABLE public.property_images IS 'Images for properties and rooms';
-
-
---
--- Name: room_types; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.room_types (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    property_id uuid NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    max_guests integer DEFAULT 2 NOT NULL,
-    base_price numeric(10,2),
-    currency character varying(3) DEFAULT 'JPY'::character varying,
-    room_amenities jsonb,
-    bed_configuration character varying(255),
-    room_size_sqm integer,
-    has_balcony boolean DEFAULT false,
-    has_kitchen boolean DEFAULT false,
-    is_accessible boolean DEFAULT false,
-    is_active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    beds24_roomtype_id bigint,
-    min_price numeric(10,2),
-    max_price numeric(10,2),
-    total_units integer,
-    sort_order integer
-);
-
-
---
--- Name: room_units; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.room_units (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    room_type_id uuid NOT NULL,
-    unit_number character varying(50) NOT NULL,
-    floor_number integer,
-    access_code character varying(50),
-    access_instructions text,
-    wifi_name character varying(255),
-    wifi_password character varying(255),
-    unit_amenities jsonb,
-    maintenance_notes text,
-    is_active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    beds24_unit_id bigint
-);
 
 
 --
@@ -4988,6 +5196,22 @@ ALTER TABLE ONLY public.guest_payment_services
 
 ALTER TABLE ONLY public.guest_payment_services
     ADD CONSTRAINT guest_payment_services_service_key_key UNIQUE (service_key);
+
+
+--
+-- Name: guest_sessions guest_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_sessions
+    ADD CONSTRAINT guest_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guest_sessions guest_sessions_token_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_sessions
+    ADD CONSTRAINT guest_sessions_token_unique UNIQUE (token);
 
 
 --
@@ -6236,6 +6460,27 @@ CREATE INDEX idx_reservations_check_in_token ON public.reservations USING btree 
 
 
 --
+-- Name: idx_reservations_group_ids; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_group_ids ON public.reservations USING gin (booking_group_ids) WHERE (booking_group_ids IS NOT NULL);
+
+
+--
+-- Name: idx_reservations_group_master; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_group_master ON public.reservations USING btree (booking_group_master_id) WHERE (booking_group_master_id IS NOT NULL);
+
+
+--
+-- Name: idx_reservations_is_group_master; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservations_is_group_master ON public.reservations USING btree (is_group_master) WHERE (is_group_master = true);
+
+
+--
 -- Name: idx_reservations_property_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6607,6 +6852,20 @@ CREATE TRIGGER trg_cancel_cleaning_task_if_res_cancelled AFTER UPDATE OF status 
 
 
 --
+-- Name: reservations trg_maintain_group_booking_consistency; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_maintain_group_booking_consistency AFTER UPDATE ON public.reservations FOR EACH ROW WHEN (((new.is_group_master = true) AND (new.booking_group_master_id IS NOT NULL))) EXECUTE FUNCTION public.maintain_group_booking_consistency();
+
+
+--
+-- Name: TRIGGER trg_maintain_group_booking_consistency ON reservations; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TRIGGER trg_maintain_group_booking_consistency ON public.reservations IS 'Maintains consistency across group booking reservations when master reservation changes';
+
+
+--
 -- Name: message_deliveries trg_message_deliveries_status_ts; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6632,6 +6891,13 @@ CREATE TRIGGER trg_messages_updated BEFORE UPDATE ON public.messages FOR EACH RO
 --
 
 CREATE TRIGGER trg_reservation_segments_updated_at BEFORE UPDATE ON public.reservation_segments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: reservations trg_revoke_checkin_token; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_revoke_checkin_token BEFORE UPDATE ON public.reservations FOR EACH ROW WHEN ((old.status IS DISTINCT FROM new.status)) EXECUTE FUNCTION public.revoke_checkin_token();
 
 
 --

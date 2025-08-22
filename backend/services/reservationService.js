@@ -58,6 +58,16 @@ class ReservationService {
         throw new Error('Failed to create reservation');
       }
 
+      // Auto-attach accommodation tax for new reservations
+      try {
+        const guestServicesService = require('./guestServicesService');
+        await guestServicesService.attachAccommodationTax(data.id);
+        console.log(`Accommodation tax auto-attached to reservation ${data.id}`);
+      } catch (taxError) {
+        console.error('Error auto-attaching accommodation tax:', taxError);
+        // Don't fail reservation creation if tax attachment fails
+      }
+
       return data;
     } catch (error) {
       console.error('Database error creating reservation:', error);
@@ -1651,11 +1661,44 @@ class ReservationService {
         // Continue with reservation data only if guests can't be fetched
       }
 
+      // Get available and purchased services for this reservation using the new service system
+      const guestServicesService = require('./guestServicesService');
+      const availableServices = await guestServicesService.getAvailableServicesForGuest(checkinToken);
+
+      // Calculate effective access and departure times with service overrides
+      const effectiveTimes = await guestServicesService.calculateEffectiveTimes(reservationData.id);
+
+      // Auto-attach accommodation tax for active reservations
+      if (reservationData.status === 'confirmed' || reservationData.status === 'checked_in') {
+        try {
+          await guestServicesService.attachAccommodationTax(reservationData.id);
+          console.log(`Accommodation tax auto-attached for guest app access: ${reservationData.id}`);
+        } catch (taxError) {
+          console.error('Error auto-attaching accommodation tax:', taxError);
+          // Continue without error - will be handled in frontend
+        }
+      }
+
+      // Get accommodation tax details from services
+      const accommodationTaxService = availableServices.find(service => service.service_type === 'accommodation_tax');
+
       // Get primary guest (guest #1) for backward compatibility
       const primaryGuest = guestsData?.find(g => g.guest_number === 1) || null;
       
       // Check completion status
       const completionStatus = await this.validateAllGuestsComplete(reservationData.id);
+
+      // Check if all mandatory services are paid
+      const mandatoryServices = availableServices.filter(s => s.is_mandatory);
+      const allMandatoryServicesPaid = mandatoryServices.length === 0 || 
+        mandatoryServices.every(s => s.payment_status === 'paid' || s.payment_status === 'exempted');
+
+      // Determine if guest can access stay info (service-based tax gating logic)
+      const canAccessStayInfo = this.canAccessStayInfoWithServices(
+        completionStatus.isComplete,
+        mandatoryServices,
+        effectiveTimes
+      );
       
       // Structure the data for the frontend
       const dashboardData = {
@@ -1702,7 +1745,14 @@ class ReservationService {
           // Computed fields for backward compatibility
           guest_name: reservationData.booking_name,
           guest_email: reservationData.booking_email,
-          guest_phone: reservationData.booking_phone
+          guest_phone: reservationData.booking_phone,
+
+          // Journey roadmap and access control (using new service system)
+          can_access_stay_info: canAccessStayInfo,
+          effective_access_time: effectiveTimes?.accessTime,
+          effective_departure_time: effectiveTimes?.departureTime,
+          original_access_time: reservationData.access_time,
+          original_departure_time: reservationData.departure_time || '11:00:00'
         },
         
         // All guests information (for multi-guest check-in process)
@@ -1743,17 +1793,21 @@ class ReservationService {
           wifi_name: reservationData.property_wifi_name || reservationData.wifi_name,
           wifi_password: reservationData.property_wifi_password || reservationData.wifi_password,
           house_rules: reservationData.house_rules,
+          house_manual: reservationData.house_manual,
           check_in_instructions: reservationData.check_in_instructions,
           emergency_contact: reservationData.property_emergency_contact,
-          property_amenities: reservationData.property_amenities,
+          property_details: reservationData.property_details,
+          transport_access: reservationData.transport_access,
+          amenities: reservationData.property_amenities,
           location_info: reservationData.location_info,
-          access_time: reservationData.access_time // Important for time-based room access
+          access_time: reservationData.access_time, // Original property access time
+          departure_time: reservationData.departure_time || '11:00:00' // Original property departure time
         },
         
         room: {
           // Room Type information
           room_type_id: reservationData.room_type_id,
-          room_type_name: reservationData.room_type_name || 'Standard Room',
+          room_name: reservationData.room_type_name || 'Standard Room',
           room_type_description: reservationData.room_type_description,
           max_guests: reservationData.room_type_max_guests || reservationData.max_guests,
           base_price: reservationData.base_price,
@@ -1777,13 +1831,14 @@ class ReservationService {
           
           // Backward compatibility fields
           room_number: reservationData.unit_number || reservationData.room_number || 'TBD',
-          room_name: reservationData.room_type_name || 'Standard Room',
           amenities: reservationData.room_type_amenities || reservationData.unit_amenities || {}
         },
+
+        // Accommodation tax status for backward compatibility with journey roadmap
+        accommodation_tax_paid: allMandatoryServicesPaid,
         
         // Additional computed fields
         checkin_status: completionStatus.isComplete ? 'completed' : 'pending',
-        can_access_room: this.canAccessRoom(reservationData, completionStatus.isComplete),
         
         // Meta information
         last_updated: new Date().toISOString()
@@ -1829,6 +1884,210 @@ class ReservationService {
       return true;
     } catch (error) {
       console.error('Error determining room access:', error);
+      return false;
+    }
+  }
+
+  // Enhanced helper method to determine room access with services and tax gating
+  canAccessRoomWithServices(reservationData, allGuestsCompleted, effectiveTimes, accommodationTaxInvoice) {
+    try {
+      // First check basic room access requirements
+      if (!this.canAccessStayInfo(allGuestsCompleted, accommodationTaxInvoice, effectiveTimes)) {
+        return false;
+      }
+
+      // Check if today is the check-in date
+      const today = new Date().toDateString();
+      const checkinDate = new Date(reservationData.check_in_date).toDateString();
+      
+      if (today !== checkinDate) {
+        return false;
+      }
+
+      // Use effective access time (which may be overridden by services)
+      if (effectiveTimes?.accessTime) {
+        const currentTime = new Date().toTimeString().slice(0, 8); // "HH:MM:SS"
+        return currentTime >= effectiveTimes.accessTime;
+      }
+
+      // If no effective access time, fall back to original property access time
+      if (reservationData.access_time) {
+        const currentTime = new Date().toTimeString().slice(0, 8); // "HH:MM:SS"
+        return currentTime >= reservationData.access_time;
+      }
+
+      // If no access time is set, allow access after all requirements are met
+      return true;
+    } catch (error) {
+      console.error('Error determining room access with services:', error);
+      return false;
+    }
+  }
+
+  // Calculate journey roadmap progress for guest experience
+  calculateJourneyProgress(isCheckinCompleted, accommodationTaxInvoice, effectiveTimes, reservationStatus) {
+    try {
+      const steps = [
+        {
+          id: 'checkin',
+          title: 'Complete Check-in',
+          description: 'Submit your check-in information',
+          status: isCheckinCompleted ? 'completed' : 'current',
+          completed_at: isCheckinCompleted ? new Date().toISOString() : null,
+          is_required: true
+        },
+        {
+          id: 'tax_payment',
+          title: 'Pay Accommodation Tax',
+          description: 'Complete required accommodation tax payment',
+          status: this.calculateTaxStepStatus(accommodationTaxInvoice, isCheckinCompleted),
+          completed_at: accommodationTaxInvoice?.paid_at || null,
+          is_required: true,
+          amount: accommodationTaxInvoice?.total_amount || 0,
+          currency: accommodationTaxInvoice?.currency || 'JPY',
+          is_exempted: accommodationTaxInvoice?.status === 'exempted'
+        },
+        {
+          id: 'access_available',
+          title: 'Room Access Available',
+          description: `Access available from ${effectiveTimes?.accessTime || '14:00'}`,
+          status: this.calculateAccessStepStatus(isCheckinCompleted, accommodationTaxInvoice, effectiveTimes),
+          completed_at: null, // Access is time-based, not a one-time completion
+          is_required: false,
+          access_time: effectiveTimes?.accessTime,
+          is_time_based: true
+        }
+      ];
+
+      // Calculate overall progress
+      const completedSteps = steps.filter(step => step.status === 'completed').length;
+      const totalSteps = steps.length;
+      const progressPercentage = Math.round((completedSteps / totalSteps) * 100);
+
+      // Determine current step
+      const currentStep = steps.find(step => step.status === 'current') || steps[steps.length - 1];
+
+      return {
+        steps,
+        current_step: currentStep?.id || 'checkin',
+        completed_steps: completedSteps,
+        total_steps: totalSteps,
+        progress_percentage: progressPercentage,
+        is_complete: completedSteps === totalSteps,
+        can_access_room: this.canAccessRoomWithServices(
+          { check_in_date: new Date().toISOString(), access_time: effectiveTimes?.accessTime },
+          isCheckinCompleted,
+          effectiveTimes,
+          accommodationTaxInvoice
+        )
+      };
+    } catch (error) {
+      console.error('Error calculating journey progress:', error);
+      return {
+        steps: [],
+        current_step: 'checkin',
+        completed_steps: 0,
+        total_steps: 3,
+        progress_percentage: 0,
+        is_complete: false,
+        can_access_room: false
+      };
+    }
+  }
+
+  // Helper method to calculate tax payment step status
+  calculateTaxStepStatus(accommodationTaxInvoice, isCheckinCompleted) {
+    if (!accommodationTaxInvoice) {
+      return isCheckinCompleted ? 'current' : 'pending';
+    }
+
+    if (accommodationTaxInvoice.status === 'paid' || accommodationTaxInvoice.status === 'exempted') {
+      return 'completed';
+    }
+
+    if (accommodationTaxInvoice.status === 'pending' && isCheckinCompleted) {
+      return 'current';
+    }
+
+    return 'pending';
+  }
+
+  // Helper method to calculate access step status
+  calculateAccessStepStatus(isCheckinCompleted, accommodationTaxInvoice, effectiveTimes) {
+    // Check if previous steps are completed
+    const taxPaid = accommodationTaxInvoice?.status === 'paid' || accommodationTaxInvoice?.status === 'exempted';
+    const allRequirementsMet = isCheckinCompleted && taxPaid;
+
+    if (!allRequirementsMet) {
+      return 'pending';
+    }
+
+    // Check if current time is past access time
+    const currentTime = new Date().toTimeString().slice(0, 8);
+    const accessTime = effectiveTimes?.accessTime || '14:00:00';
+
+    if (currentTime >= accessTime) {
+      return 'completed';
+    }
+
+    return 'current'; // Requirements met, waiting for access time
+  }
+
+  // Determine if guest can access stay info content (service-based tax gating logic)
+  canAccessStayInfoWithServices(isCheckinCompleted, mandatoryServices, effectiveTimes) {
+    try {
+      // Check if check-in is completed
+      if (!isCheckinCompleted) {
+        return false;
+      }
+
+      // Check if all mandatory services are paid or exempted
+      if (mandatoryServices.length > 0) {
+        const allMandatoryServicesPaid = mandatoryServices.every(service => 
+          service.payment_status === 'paid' || service.payment_status === 'exempted'
+        );
+
+        if (!allMandatoryServicesPaid) {
+          return false;
+        }
+      }
+
+      // If all requirements are met, guest can access stay info
+      // Note: Time-based access is checked separately in canAccessRoomWithServices
+      return true;
+    } catch (error) {
+      console.error('Error determining stay info access with services:', error);
+      return false;
+    }
+  }
+
+  // Legacy method for backward compatibility
+  canAccessStayInfo(isCheckinCompleted, accommodationTaxInvoice, effectiveTimes) {
+    try {
+      // Check if check-in is completed
+      if (!isCheckinCompleted) {
+        return false;
+      }
+
+      // Check accommodation tax requirements (mandatory tax gating)
+      if (!accommodationTaxInvoice) {
+        // If no tax invoice exists yet, guest cannot access stay info
+        return false;
+      }
+
+      // Tax must be either paid or exempted
+      const taxRequirementMet = accommodationTaxInvoice.status === 'paid' || 
+                               accommodationTaxInvoice.status === 'exempted';
+
+      if (!taxRequirementMet) {
+        return false;
+      }
+
+      // If all requirements are met, guest can access stay info
+      // Note: Time-based access is checked separately in canAccessRoomWithServices
+      return true;
+    } catch (error) {
+      console.error('Error determining stay info access:', error);
       return false;
     }
   }
@@ -2247,6 +2506,174 @@ class ReservationService {
       console.error('Database error fetching cleaning task stats:', error);
       throw error;
     }
+  }
+
+  // GUEST PROFILE OPERATIONS
+
+  // Get all reservations for a guest by email
+  async getReservationsByGuestEmail(guestEmail) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reservations')
+        .select(`
+          *,
+          reservation_guests!inner(
+            guest_mail,
+            guest_firstname,
+            guest_lastname,
+            guest_contact,
+            is_primary_guest,
+            checkin_submitted_at,
+            admin_verified
+          ),
+          properties(name, address),
+          room_units(unit_number, room_types(name))
+        `)
+        .eq('reservation_guests.guest_mail', guestEmail)
+        .eq('reservation_guests.is_primary_guest', true)
+        .order('check_in_date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching reservations by guest email:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Database error fetching reservations by guest email:', error);
+      throw error;
+    }
+  }
+
+  // Get guest profile data with complete reservation history
+  async getGuestProfile(checkinToken) {
+    try {
+      console.log(`Getting guest profile for token: ${checkinToken}`);
+      
+      // 1. Get current reservation data
+      const currentReservation = await this.getGuestAppData(checkinToken);
+      if (!currentReservation) {
+        console.log('No current reservation found for token');
+        return null;
+      }
+
+      // 2. Get primary guest email from current reservation
+      let primaryGuestEmail = currentReservation.reservation.guest_mail;
+      if (!primaryGuestEmail) {
+        // Fallback to booking_email if no guest_mail
+        primaryGuestEmail = currentReservation.reservation.booking_email;
+      }
+
+      if (!primaryGuestEmail) {
+        console.log('No guest email found, cannot fetch profile');
+        return null;
+      }
+
+      console.log(`Finding all reservations for guest email: ${primaryGuestEmail}`);
+
+      // 3. Get all reservations for this guest
+      const allReservations = await this.getReservationsByGuestEmail(primaryGuestEmail);
+
+      console.log(`Found ${allReservations.length} total reservations for guest`);
+
+      // 4. Structure guest profile data to match frontend expectations
+      const profileData = {
+        guestInfo: {
+          email: primaryGuestEmail,
+          firstname: currentReservation.reservation.guest_firstname || currentReservation.reservation.booking_firstname,
+          lastname: currentReservation.reservation.guest_lastname || currentReservation.reservation.booking_lastname,
+          phone: currentReservation.reservation.guest_contact || currentReservation.reservation.booking_phone,
+          address: currentReservation.reservation.guest_address,
+          // Full name for display (frontend expects displayName not display_name)
+          displayName: this.formatGuestDisplayName(
+            currentReservation.reservation.guest_firstname || currentReservation.reservation.booking_firstname,
+            currentReservation.reservation.guest_lastname || currentReservation.reservation.booking_lastname
+          )
+        },
+        currentReservation: currentReservation.reservation.id ? {
+          id: currentReservation.reservation.id,
+          booking_name: currentReservation.reservation.booking_name,
+          check_in_date: currentReservation.reservation.check_in_date,
+          check_out_date: currentReservation.reservation.check_out_date,
+          properties: currentReservation.property,
+          room_units: {
+            room_types: {
+              name: currentReservation.room?.room_name || 'Standard Room'
+            }
+          }
+        } : null,
+        reservationHistory: allReservations.map(res => {
+          const checkInDate = new Date(res.check_in_date);
+          const checkOutDate = new Date(res.check_out_date);
+          const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
+          
+          return {
+            id: res.id,
+            beds24_booking_id: res.beds24_booking_id,
+            booking_name: res.booking_name,
+            check_in_date: res.check_in_date,
+            check_out_date: res.check_out_date,
+            // Structure property data to match frontend expectations
+            properties: {
+              name: res.properties?.name || 'Unknown Property'
+            },
+            // Structure room data to match frontend expectations
+            room_units: {
+              room_types: {
+                name: res.room_units?.[0]?.room_types?.name || 'Standard Room'
+              }
+            },
+            total_amount: res.total_amount,
+            currency: res.currency || 'JPY',
+            status: res.status,
+            nights: nights,
+            num_guests: res.num_guests || 1,
+            // Format dates for display
+            check_in_display: checkInDate.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }),
+            check_out_display: checkOutDate.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }),
+            // Guest information from reservation_guests
+            guest_firstname: res.reservation_guests?.[0]?.guest_firstname,
+            guest_lastname: res.reservation_guests?.[0]?.guest_lastname,
+            admin_verified: res.reservation_guests?.[0]?.admin_verified || false,
+            checkin_completed: !!res.reservation_guests?.[0]?.checkin_submitted_at
+          };
+        }),
+        statistics: {
+          totalReservations: allReservations.length,
+          completedStays: allReservations.filter(r => r.status === 'completed').length,
+          totalSpent: allReservations.reduce((sum, r) => sum + (r.total_amount || 0), 0),
+          currency: currentReservation.reservation.currency || 'JPY',
+          firstStay: allReservations.length > 0 ? allReservations[allReservations.length - 1].check_in_date : null,
+          averageStayLength: allReservations.length > 0 
+            ? Math.round(allReservations.reduce((sum, r) => {
+                const nights = Math.ceil((new Date(r.check_out_date) - new Date(r.check_in_date)) / (1000 * 60 * 60 * 24));
+                return sum + nights;
+              }, 0) / allReservations.length)
+            : 0
+        }
+      };
+
+      return profileData;
+    } catch (error) {
+      console.error('Error getting guest profile:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to format guest display name
+  formatGuestDisplayName(firstName, lastName) {
+    const parts = [];
+    if (firstName && firstName.trim()) parts.push(firstName.trim());
+    if (lastName && lastName.trim()) parts.push(lastName.trim());
+    return parts.length > 0 ? parts.join(' ') : 'Guest';
   }
 
   // GROUP BOOKING OPERATIONS
