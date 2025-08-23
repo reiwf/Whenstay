@@ -8,9 +8,12 @@ import {
   MessageSquare, 
   ChevronDown, 
   ChevronUp, 
-  AlertCircle 
+  AlertCircle,
+  Users 
 } from 'lucide-react'
 import { useEffect } from 'react'
+import Section from '../../ui/Section'
+import { ListGroup, ListRowLarge } from '../../ui/ListGroup'
 
 export default function BookingInfoSection({ 
   formData, 
@@ -86,18 +89,14 @@ export default function BookingInfoSection({
   }
 
   return (
-    <div className="space-y-6">
-          {/* Booking System Information */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <Hash className="w-4 h-4 mr-2" />
-              System Information
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Beds24 Booking ID *
-                </label>
+    <div className="space-y-4">
+      {/* System Information */}
+      <Section title="System Information" subtitle="Booking system details">
+        <ListGroup>
+          <ListRowLarge
+            left="Beds24 Booking ID *"
+            right={
+              <div className="w-full">
                 <input
                   type="text"
                   required
@@ -116,38 +115,35 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
+            }
+          />
+          <ListRowLarge
+            left="Booking Source"
+            right={
+              <select
+                value={formData.bookingSource}
+                onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Select source</option>
+                <option value="Airbnb">Airbnb</option>
+                <option value="Booking.com">Booking.com</option>
+                <option value="Expedia">Expedia</option>
+                <option value="Direct">Direct Booking</option>
+                <option value="Other">Other</option>
+              </select>
+            }
+          />
+        </ListGroup>
+      </Section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Source
-                </label>
-                <select
-                  value={formData.bookingSource}
-                  onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="">Select source</option>
-                  <option value="Airbnb">Airbnb</option>
-                  <option value="Booking.com">Booking.com</option>
-                  <option value="Expedia">Expedia</option>
-                  <option value="Direct">Direct Booking</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Primary Guest Information */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <User className="w-4 h-4 mr-2" />
-              Primary Guest (Booking Contact)
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking First Name *
-                </label>
+      {/* Primary Guest Information */}
+      <Section title="Primary Guest" subtitle="Booking contact information">
+        <ListGroup>
+          <ListRowLarge
+            left="Booking First Name *"
+            right={
+              <div className="w-full">
                 <input
                   type="text"
                   required
@@ -165,24 +161,24 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Last Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.bookingLastname}
-                  onChange={(e) => setFormData({ ...formData, bookingLastname: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="Smith"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Email
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Booking Last Name"
+            right={
+              <input
+                type="text"
+                value={formData.bookingLastname}
+                onChange={(e) => setFormData({ ...formData, bookingLastname: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Smith"
+              />
+            }
+          />
+          <ListRowLarge
+            left="Booking Email"
+            right={
+              <div className="w-full">
                 <input
                   type="email"
                   value={formData.bookingEmail}
@@ -199,33 +195,30 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
+            }
+          />
+          <ListRowLarge
+            left="Booking Phone"
+            right={
+              <input
+                type="tel"
+                value={formData.bookingPhone}
+                onChange={(e) => setFormData({ ...formData, bookingPhone: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="+1 (555) 123-4567"
+              />
+            }
+          />
+        </ListGroup>
+      </Section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.bookingPhone}
-                  onChange={(e) => setFormData({ ...formData, bookingPhone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="+1 (555) 123-4567"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Dates & Guests */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <Calendar className="w-4 h-4 mr-2" />
-              Stay Details
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check-in Date *
-                </label>
+      {/* Stay Details */}
+      <Section title="Stay Details" subtitle="Dates and guest information">
+        <ListGroup>
+          <ListRowLarge
+            left="Check-in Date *"
+            right={
+              <div className="w-full">
                 <input
                   type="date"
                   required
@@ -242,11 +235,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check-out Date *
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Check-out Date *"
+            right={
+              <div className="w-full">
                 <input
                   type="date"
                   required
@@ -263,20 +257,20 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nights
-                </label>
-                <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700">
-                  {calculateNights()} night{calculateNights() !== 1 ? 's' : ''}
-                </div>
+            }
+          />
+          <ListRowLarge
+            left="Nights"
+            right={
+              <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700">
+                {calculateNights()} night{calculateNights() !== 1 ? 's' : ''}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Guests *
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Total Guests *"
+            right={
+              <div className="w-full">
                 <input
                   type="number"
                   required
@@ -295,11 +289,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Adults *
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Adults *"
+            right={
+              <div className="w-full">
                 <input
                   type="number"
                   required
@@ -318,35 +313,31 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
+            }
+          />
+          <ListRowLarge
+            left="Children"
+            right={
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={formData.numChildren}
+                onChange={(e) => setFormData({ ...formData, numChildren: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            }
+          />
+        </ListGroup>
+      </Section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Children
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={formData.numChildren}
-                  onChange={(e) => setFormData({ ...formData, numChildren: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Room Assignment */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <MapPin className="w-4 h-4 mr-2" />
-              Room Assignment (V5 Structure)
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Property Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property *
-                </label>
+      {/* Room Assignment */}
+      <Section title="Room Assignment" subtitle="Property, room type, and unit selection">
+        <ListGroup>
+          <ListRowLarge
+            left="Property *"
+            right={
+              <div className="w-full">
                 <select
                   required
                   value={formData.propertyId}
@@ -369,12 +360,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              {/* Room Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Room Type *
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Room Type *"
+            right={
+              <div className="w-full">
                 <select
                   required
                   value={formData.roomTypeId}
@@ -398,12 +389,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              {/* Room Unit Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Room Unit *
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Room Unit *"
+            right={
+              <div className="w-full">
                 <select
                   required
                   value={formData.roomUnitId}
@@ -428,20 +419,79 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-            </div>
-          </div>
+            }
+          />
+        </ListGroup>
+      </Section>
 
-          {/* Financial Details */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <CreditCard className="w-4 h-4 mr-2" />
-              Financial Details
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Amount
-                </label>
+      {/* Group Booking & Currency */}
+      <Section title="Group Booking & Currency" subtitle="Group booking settings and currency">
+        <ListGroup>
+          <ListRowLarge
+            left="Currency"
+            right={
+              <select
+                value={formData.currency}
+                onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="JPY">JPY (¥)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="AUD">AUD (A$)</option>
+              </select>
+            }
+          />
+          <ListRowLarge
+            left="Group Master"
+            right={
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.isGroupMaster}
+                  onChange={(e) => setFormData({ ...formData, isGroupMaster: e.target.checked })}
+                  className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="text-sm text-gray-700">This is a group master booking</span>
+              </div>
+            }
+          />
+          <ListRowLarge
+            left="Group Master ID"
+            right={
+              <input
+                type="text"
+                value={formData.bookingGroupMasterId}
+                onChange={(e) => setFormData({ ...formData, bookingGroupMasterId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Group master booking ID"
+              />
+            }
+          />
+          <ListRowLarge
+            left="Group Room Count"
+            right={
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={formData.groupRoomCount}
+                onChange={(e) => setFormData({ ...formData, groupRoomCount: parseInt(e.target.value) || 1 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            }
+          />
+        </ListGroup>
+      </Section>
+
+      {/* Financial Details */}
+      <Section title="Financial Details" subtitle="Pricing and commission information">
+        <ListGroup>
+          <ListRowLarge
+            left="Total Amount"
+            right={
+              <div className="w-full">
                 <input
                   type="number"
                   step="0.01"
@@ -460,11 +510,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Price"
+            right={
+              <div className="w-full">
                 <input
                   type="number"
                   step="0.01"
@@ -483,11 +534,12 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Commission
-                </label>
+            }
+          />
+          <ListRowLarge
+            left="Commission"
+            right={
+              <div className="w-full">
                 <input
                   type="number"
                   step="0.01"
@@ -506,62 +558,56 @@ export default function BookingInfoSection({
                   </p>
                 )}
               </div>
-            </div>
-          </div>
+            }
+          />
+        </ListGroup>
+      </Section>
 
-          {/* Status and Comments */}
-          <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-800 mb-3 flex items-center">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Status & Notes
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  {statusOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Special Requests
-                </label>
-                <textarea
-                  value={formData.specialRequests}
-                  onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="Any special requests or notes..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Comments
-                </label>
-                <textarea
-                  value={formData.comments}
-                  onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="Internal comments..."
-                />
-              </div>
-            </div>
-          </div>
+      {/* Status & Notes */}
+      <Section title="Status & Notes" subtitle="Booking status and additional information">
+        <ListGroup>
+          <ListRowLarge
+            left="Status"
+            right={
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            }
+          />
+          <ListRowLarge
+            left="Special Requests"
+            right={
+              <textarea
+                value={formData.specialRequests}
+                onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Any special requests or notes..."
+              />
+            }
+          />
+          <ListRowLarge
+            left="Comments"
+            right={
+              <textarea
+                value={formData.comments}
+                onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Internal comments..."
+              />
+            }
+          />
+        </ListGroup>
+      </Section>
     </div>
   )
 }

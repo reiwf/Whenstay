@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
       query = query.eq('property_id', property_id);
     }
 
-    const { data, error } = await query.order('name');
+    const { data, error } = await query.order('sort_order', { ascending: true }).order('name');
 
     if (error) {
       throw error;

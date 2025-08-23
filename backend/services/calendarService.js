@@ -151,7 +151,7 @@ class CalendarService {
         units: Array.from(roomType.units.values())
           .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
       }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => (a.order || 0) - (b.order || 0)); // Sort by room_type_order from database
 
     return {
       roomTypes,

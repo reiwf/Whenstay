@@ -676,7 +676,14 @@ export default function TimelineGrid({
     
     console.log('Finding room from position:', yPosition, 'with constants:', activeConstants);
     
-    for (const roomType of roomHierarchy) {
+    // Sort room types by sort_order to match rendering order
+    const sortedRoomHierarchy = [...roomHierarchy].sort((a, b) => {
+      const sortOrderA = a.sort_order || 0;
+      const sortOrderB = b.sort_order || 0;
+      return sortOrderA - sortOrderB;
+    });
+    
+    for (const roomType of sortedRoomHierarchy) {
       // Add room type header height using stable constants
       // Use actual rendered header height for more accurate positioning
       const headerEl = document.querySelector(
@@ -713,11 +720,18 @@ export default function TimelineGrid({
   const findTargetRoomUnit = (currentRoomUnitId, rowsDelta) => {
     if (!rowsDelta || rowsDelta === 0) return currentRoomUnitId;
 
+    // Sort room types by sort_order to match rendering order
+    const sortedRoomHierarchy = [...roomHierarchy].sort((a, b) => {
+      const sortOrderA = a.sort_order || 0;
+      const sortOrderB = b.sort_order || 0;
+      return sortOrderA - sortOrderB;
+    });
+
     // Flatten all room units with their indices
     const allUnits = [];
     let currentIndex = -1;
     
-    roomHierarchy.forEach((roomType, typeIndex) => {
+    sortedRoomHierarchy.forEach((roomType, typeIndex) => {
       if (expandedRoomTypes.has(roomType.id)) {
         roomType.units?.forEach((unit, unitIndex) => {
           allUnits.push({
@@ -1075,28 +1089,35 @@ export default function TimelineGrid({
       onDragLeave={handleDragLeave}
     >
       {/* Room Types and Units */}
-      {roomHierarchy.map((roomType) => {
-        const isExpanded = expandedRoomTypes.has(roomType.id);
-        
-        return (
-          <div key={roomType.id}>
-            {/* Room Type Header */}
-            {renderRoomTypeHeader(roomType)}
-            
-            {/* Room Units (collapsed/expanded) */}
-            {isExpanded && roomType.units && roomType.units
-              .sort((a, b) => {
-                // Sort by unit number in ascending order
-                const numA = parseInt(a.number) || 0;
-                const numB = parseInt(b.number) || 0;
-                return numA - numB;
-              })
-              .map((roomUnit) => 
-                renderRoomUnitRow(roomUnit, roomType)
-              )}
-          </div>
-        );
-      })}
+      {roomHierarchy
+        .sort((a, b) => {
+          // Sort by sort_order in ascending order
+          const sortOrderA = a.sort_order || 0;
+          const sortOrderB = b.sort_order || 0;
+          return sortOrderA - sortOrderB;
+        })
+        .map((roomType) => {
+          const isExpanded = expandedRoomTypes.has(roomType.id);
+          
+          return (
+            <div key={roomType.id}>
+              {/* Room Type Header */}
+              {renderRoomTypeHeader(roomType)}
+              
+              {/* Room Units (collapsed/expanded) */}
+              {isExpanded && roomType.units && roomType.units
+                .sort((a, b) => {
+                  // Sort by unit number in ascending order
+                  const numA = parseInt(a.number) || 0;
+                  const numB = parseInt(b.number) || 0;
+                  return numA - numB;
+                })
+                .map((roomUnit) => 
+                  renderRoomUnitRow(roomUnit, roomType)
+                )}
+            </div>
+          );
+        })}
       
       {/* Global Vertical Grid Lines - spans entire timeline with responsive positioning */}
       <div 

@@ -1242,7 +1242,7 @@ const MarketSettingsPage = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Market Settings</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Market</h1>
             <p className="text-gray-600">Configure smart market demand calculations</p>
           </div>
           <Button onClick={loadData} disabled={loading}>

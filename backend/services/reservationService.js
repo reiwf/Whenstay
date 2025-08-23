@@ -221,6 +221,29 @@ class ReservationService {
         throw new Error('Failed to update reservation');
       }
 
+      // Update primary guest record if guest information is provided
+      if (this.hasGuestInformation(reservationData)) {
+        try {
+          await this.createOrUpdateGuest(reservationId, 1, {
+            firstName: reservationData.guestFirstname,
+            lastName: reservationData.guestLastname,
+            personalEmail: reservationData.guestMail,
+            contactNumber: reservationData.guestContact,
+            address: reservationData.guestAddress,
+            estimatedCheckinTime: reservationData.estimatedCheckinTime,
+            travelPurpose: reservationData.travelPurpose,
+            passportUrl: reservationData.passportUrl,
+            emergencyContactName: reservationData.emergencyContactName,
+            emergencyContactPhone: reservationData.emergencyContactPhone,
+            agreementAccepted: reservationData.agreementAccepted || false
+          });
+          console.log(`Primary guest updated for reservation ${reservationId}`);
+        } catch (guestError) {
+          console.error('Error updating primary guest:', guestError);
+          // Don't fail reservation update if guest update fails
+        }
+      }
+
       return data;
     } catch (error) {
       console.error('Database error updating reservation:', error);
@@ -289,6 +312,22 @@ class ReservationService {
   async updateReservationGuestInfo(reservationId, guestInfo) {
     console.warn('updateReservationGuestInfo is deprecated. Use createOrUpdateGuest instead.');
     return this.createOrUpdateGuest(reservationId, 1, guestInfo);
+  }
+
+  // Helper method to check if guest information is provided in reservation data
+  hasGuestInformation(reservationData) {
+    return !!(
+      reservationData.guestFirstname ||
+      reservationData.guestLastname ||
+      reservationData.guestMail ||
+      reservationData.guestContact ||
+      reservationData.guestAddress ||
+      reservationData.estimatedCheckinTime ||
+      reservationData.travelPurpose ||
+      reservationData.passportUrl ||
+      reservationData.emergencyContactName ||
+      reservationData.emergencyContactPhone
+    );
   }
 
   // Get all guests for a reservation

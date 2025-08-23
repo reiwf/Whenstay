@@ -660,3 +660,97 @@
 .slider.demand-bounds::-moz-range-thumb {
   background: #6366f1;
 }
+/* ────────────────────────────────────────────────────────────────
+   Smartphone UI tokens – DROP THIS AT THE END OF index.css
+   Safe to add alongside your existing classes.
+   ──────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Blended, glassy container (use instead of heavy cards) */
+  .ui-sheet {
+    @apply rounded-2xl bg-white/70 dark:bg-slate-900/60 backdrop-blur
+           supports-[backdrop-filter]:bg-white/60
+           ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm;
+  }
+
+  /* Section header (title + subtitle) */
+  .ui-section { @apply px-4 pb-2; }
+  .ui-section-title { @apply text-base sm:text-lg font-semibold text-slate-900; }
+  .ui-section-subtitle { @apply text-xs sm:text-sm text-slate-600 mt-0.5; }
+
+  /* Inset list group (blended “grouped settings” look) */
+  .ui-list { @apply ui-sheet p-2; }
+  .ui-list-item {
+    @apply flex items-center justify-between gap-3 px-3 py-2 rounded-xl
+           ring-1 ring-transparent hover:bg-white/60 transition;
+  }
+  .ui-list-divider { @apply h-px bg-slate-200/80 dark:bg-slate-700/60 mx-2; }
+
+  /* Hairline divider for section footers */
+  .ui-hairline { @apply border-t border-slate-200/70 dark:border-slate-700/60; }
+
+  /* Slim progress (e.g., Journey progress) */
+  .ui-progress { @apply h-1.5 rounded-full bg-slate-200/70 dark:bg-slate-800/60 overflow-hidden; }
+  .ui-progress-bar { @apply h-full bg-slate-900 dark:bg-slate-100; }
+
+  /* Unified field style (maps to your “smartphone” inputs) */
+  .field {
+    @apply w-full rounded-xl bg-white/90 ring-1 ring-slate-200
+           px-3 py-2 text-[15px] leading-5
+           focus:outline-none focus:ring-2 focus:ring-slate-900;
+  }
+  .field.disabled { @apply opacity-60 cursor-not-allowed bg-slate-100; }
+  .field.error   { @apply ring-rose-300 focus:ring-rose-500; }
+
+  /* Chat composer */
+  .composer { @apply ui-sheet px-3 py-2.5 flex items-end gap-2; }
+  .composer-input {
+    @apply flex-1 bg-transparent outline-none resize-none text-[15px] leading-5
+           placeholder-slate-400 max-h-32 min-h-[22px];
+  }
+
+  /* Dropzone (alt to .file-upload-area) */
+  .dropzone { @apply ui-sheet p-5 text-center cursor-pointer select-none; }
+  .dropzone--drag { @apply ring-2 ring-slate-400 bg-white/90; }
+  .dropzone--disabled { @apply opacity-60 cursor-not-allowed; }
+
+  /* KPI / countdown tile */
+  .kpi {
+    @apply rounded-2xl bg-white/80 dark:bg-slate-900/60 backdrop-blur
+           ring-1 ring-slate-200/60 dark:ring-slate-700/60 shadow-sm
+           px-3 py-2 text-center;
+  }
+
+  /* Soft notices */
+  .note-hint    { @apply rounded-xl bg-amber-50/80 ring-1 ring-amber-200 p-2.5 sm:p-3 text-amber-800 text-sm; }
+  .note-error   { @apply rounded-xl bg-rose-50/80  ring-1 ring-rose-200  p-2.5 sm:p-3 text-rose-800  text-sm; }
+  .note-success { @apply rounded-xl bg-emerald-50/80 ring-1 ring-emerald-200 p-2.5 sm:p-3 text-emerald-800 text-sm; }
+
+  /* Icon-only ghost button (nice for refresh / actions) */
+  .btn-icon-ghost {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-full
+           bg-white/90 ring-1 ring-slate-200 text-slate-700 hover:bg-white;
+  }
+
+  /* Primary rounded pill (maps to your style) */
+  .btn-pill-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full
+           bg-slate-900 text-white px-4 py-2
+           hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+}
+
+@layer utilities {
+  /* Safe area helpers (complements your .safe-top / .safe-bottom) */
+  .safe-pt { padding-top: max(theme(spacing.2), env(safe-area-inset-top)); }
+  .safe-pb { padding-bottom: max(theme(spacing.2), env(safe-area-inset-bottom)); }
+
+  /* Hide scrollbars in tiny textareas (composer) – keeps your existing rule too */
+  .textarea-no-scrollbar { scrollbar-width: none; }
+  .textarea-no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* Optional: micro pop animation hook (you already defined .animate-pop; this is a backup if needed) */
+@keyframes pop2 { 0% { transform: translateY(6px); opacity: 0 } 100% { transform: translateY(0); opacity: 1 } }
+.animate-pop2 { animation: pop2 .18s ease-out; }

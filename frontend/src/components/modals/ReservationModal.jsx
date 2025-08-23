@@ -42,6 +42,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     totalAmount: '',
     price: '',
     commission: '',
+    currency: 'JPY', // Added missing field
     status: 'pending',
     specialRequests: '',
     bookingSource: '',
@@ -59,6 +60,12 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
     propertyId: '',
     roomTypeId: '',
     roomUnitId: '',
+    
+    // Group booking fields - Added missing fields
+    bookingGroupMasterId: '',
+    isGroupMaster: false,
+    groupRoomCount: 1,
+    bookingGroupIds: [],
     
     // Guest personal information (from check-in process)
     guestFirstname: '',
@@ -120,6 +127,13 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         roomTypeId: reservation.room_type_id || '',
         roomUnitId: reservation.room_unit_id || '',
         
+        // Group booking fields - Added missing fields
+        bookingGroupMasterId: reservation.booking_group_master_id || '',
+        isGroupMaster: reservation.is_group_master || false,
+        groupRoomCount: reservation.group_room_count || 1,
+        bookingGroupIds: reservation.booking_group_ids || [],
+        currency: reservation.currency || 'JPY',
+        
         // Guest personal information (from check-in process)
         guestFirstname: reservation.guest_firstname || '',
         guestLastname: reservation.guest_lastname || '',
@@ -157,6 +171,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         totalAmount: '',
         price: '',
         commission: '',
+        currency: 'JPY',
         status: 'pending',
         specialRequests: '',
         bookingSource: '',
@@ -170,6 +185,10 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         propertyId: '',
         roomTypeId: '',
         roomUnitId: '',
+        bookingGroupMasterId: '',
+        isGroupMaster: false,
+        groupRoomCount: 1,
+        bookingGroupIds: [],
         guestFirstname: '',
         guestLastname: '',
         guestMail: '',
@@ -332,6 +351,13 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
         propertyId: formData.propertyId || null,
         roomTypeId: formData.roomTypeId || null,
         roomUnitId: formData.roomUnitId || null,
+        
+        // Group booking fields - Added missing fields
+        currency: formData.currency || 'JPY',
+        bookingGroupMasterId: formData.bookingGroupMasterId || null,
+        isGroupMaster: formData.isGroupMaster,
+        groupRoomCount: parseInt(formData.groupRoomCount) || 1,
+        bookingGroupIds: formData.bookingGroupIds || [],
         
         // Guest personal information
         guestFirstname: formData.guestFirstname || null,

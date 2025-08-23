@@ -38,3 +38,27 @@ export function PlainGroup({ children, className = '' }) {
     </div>
   )
 }
+
+export function ListRowLarge({ left, right, onClick, className = '' }) {
+  const Comp = onClick ? 'button' : 'div'
+  return (
+    <Comp
+      onClick={onClick}
+      className={[
+        'w-full text-left px-4 py-3 flex items-center gap-3',
+        onClick ? 'active:bg-slate-100/70 dark:active:bg-slate-800/50' : '',
+        className,
+      ].join(' ')}
+    >
+      {/* Label stays left */}
+      <div className="min-w-0 shrink-0 text-sm text-slate-800 dark:text-slate-100">
+        {left}
+      </div>
+
+      {/* Right column is flex and right-aligned */}
+      <div className="flex-1 flex justify-end">
+        <div className="w-full max-w-xl">{right}</div>
+      </div>
+    </Comp>
+  )
+}

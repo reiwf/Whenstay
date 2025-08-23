@@ -46,7 +46,7 @@ const Sidebar = ({
         { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
         { id: 'properties', label: 'Properties', icon: Building },
         { id: 'pricing', label: 'Pricing', icon: DollarSign },
-        { id: 'market-settings', label: 'Market Settings', icon: Settings },
+        { id: 'market-settings', label: 'Market', icon: Settings },
         { id: 'users', label: 'Users', icon: Users }
       )
     } else if (userRole === 'owner') {

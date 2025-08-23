@@ -116,14 +116,18 @@ class PropertyService {
           owner_id: propertyData.ownerId,
           description: propertyData.description,
           property_type: propertyData.propertyType || 'apartment',
+          is_active: propertyData.isActive !== undefined ? propertyData.isActive : true,
+          access_time: propertyData.accessTime,
+          departure_time: propertyData.departureTime,
+          entrance_code: propertyData.entranceCode,
+          property_email: propertyData.propertyEmail,
+          contact_number: propertyData.contactNumber,
           wifi_name: propertyData.wifiName,
           wifi_password: propertyData.wifiPassword,
           house_rules: propertyData.houseRules,
           check_in_instructions: propertyData.checkInInstructions,
-          emergency_contact: propertyData.emergencyContact,
           property_amenities: propertyData.propertyAmenities,
           location_info: propertyData.locationInfo,
-          access_time: propertyData.accessTime,
           default_cleaner_id: propertyData.defaultCleanerId,
           beds24_property_id: propertyData.beds24PropertyId
         })
@@ -151,19 +155,21 @@ class PropertyService {
       if (propertyData.address !== undefined) updateData.address = propertyData.address;
       if (propertyData.description !== undefined) updateData.description = propertyData.description;
       if (propertyData.propertyType !== undefined) updateData.property_type = propertyData.propertyType;
-      if (propertyData.totalRooms !== undefined) updateData.total_rooms = propertyData.totalRooms;
+      if (propertyData.isActive !== undefined) updateData.is_active = propertyData.isActive;
+      if (propertyData.accessTime !== undefined) updateData.access_time = propertyData.accessTime;
+      if (propertyData.departureTime !== undefined) updateData.departure_time = propertyData.departureTime;
+      if (propertyData.ownerId !== undefined) updateData.owner_id = propertyData.ownerId;
+      if (propertyData.defaultCleanerId !== undefined) updateData.default_cleaner_id = propertyData.defaultCleanerId;
+      if (propertyData.entranceCode !== undefined) updateData.entrance_code = propertyData.entranceCode;
+      if (propertyData.propertyEmail !== undefined) updateData.property_email = propertyData.propertyEmail;
+      if (propertyData.contactNumber !== undefined) updateData.contact_number = propertyData.contactNumber;
       if (propertyData.wifiName !== undefined) updateData.wifi_name = propertyData.wifiName;
       if (propertyData.wifiPassword !== undefined) updateData.wifi_password = propertyData.wifiPassword;
-      if (propertyData.houseRules !== undefined) updateData.house_rules = propertyData.houseRules;
       if (propertyData.checkInInstructions !== undefined) updateData.check_in_instructions = propertyData.checkInInstructions;
-      if (propertyData.emergencyContact !== undefined) updateData.emergency_contact = propertyData.emergencyContact;
+      if (propertyData.houseRules !== undefined) updateData.house_rules = propertyData.houseRules;
       if (propertyData.propertyAmenities !== undefined) updateData.property_amenities = propertyData.propertyAmenities;
       if (propertyData.locationInfo !== undefined) updateData.location_info = propertyData.locationInfo;
-      if (propertyData.accessTime !== undefined) updateData.access_time = propertyData.accessTime;
-      if (propertyData.defaultCleanerId !== undefined) updateData.default_cleaner_id = propertyData.defaultCleanerId;
-      
-      // Fix the field mapping for owner_id
-      if (propertyData.ownerId !== undefined) updateData.owner_id = propertyData.ownerId;
+      if (propertyData.beds24PropertyId !== undefined) updateData.beds24_property_id = propertyData.beds24PropertyId;
 
       const { data, error } = await supabaseAdmin
         .from('properties')

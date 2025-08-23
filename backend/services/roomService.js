@@ -183,7 +183,7 @@ class RoomService {
         .select('*')
         .eq('property_id', propertyId)
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
       if (error) {
         console.error('Error fetching room types:', error);
@@ -208,7 +208,7 @@ class RoomService {
         `)
         .eq('property_id', propertyId)
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
       if (error) {
         console.error('Error fetching room types with units:', error);
@@ -255,6 +255,8 @@ class RoomService {
           description: roomTypeData.description,
           max_guests: roomTypeData.maxGuests,
           base_price: roomTypeData.basePrice,
+          min_price: roomTypeData.minPrice,
+          max_price: roomTypeData.maxPrice,
           currency: roomTypeData.currency || 'JPY',
           room_amenities: roomTypeData.roomAmenities,
           bed_configuration: roomTypeData.bedConfiguration,
@@ -262,7 +264,9 @@ class RoomService {
           has_balcony: roomTypeData.hasBalcony || false,
           has_kitchen: roomTypeData.hasKitchen || false,
           is_accessible: roomTypeData.isAccessible || false,
-          beds24_roomtype_id: roomTypeData.beds24RoomTypeId
+          is_active: roomTypeData.isActive !== undefined ? roomTypeData.isActive : true,
+          sort_order: roomTypeData.sortOrder,
+          beds24_roomtype_id: roomTypeData.beds24RoomtypeId
         })
         .select()
         .single();
@@ -311,6 +315,14 @@ class RoomService {
       if (roomTypeData.has_kitchen !== undefined) updateData.has_kitchen = roomTypeData.has_kitchen;
       if (roomTypeData.isAccessible !== undefined) updateData.is_accessible = roomTypeData.isAccessible;
       if (roomTypeData.is_accessible !== undefined) updateData.is_accessible = roomTypeData.is_accessible;
+      
+      // Additional fields that were missing
+      if (roomTypeData.isActive !== undefined) updateData.is_active = roomTypeData.isActive;
+      if (roomTypeData.is_active !== undefined) updateData.is_active = roomTypeData.is_active;
+      if (roomTypeData.sortOrder !== undefined) updateData.sort_order = roomTypeData.sortOrder;
+      if (roomTypeData.sort_order !== undefined) updateData.sort_order = roomTypeData.sort_order;
+      if (roomTypeData.beds24RoomtypeId !== undefined) updateData.beds24_roomtype_id = roomTypeData.beds24RoomtypeId;
+      if (roomTypeData.beds24_roomtype_id !== undefined) updateData.beds24_roomtype_id = roomTypeData.beds24_roomtype_id;
 
       const { data, error } = await supabaseAdmin
         .from('room_types')
@@ -437,6 +449,7 @@ class RoomService {
           wifi_password: roomUnitData.wifiPassword,
           unit_amenities: roomUnitData.unitAmenities,
           maintenance_notes: roomUnitData.maintenanceNotes,
+          is_active: roomUnitData.isActive !== undefined ? roomUnitData.isActive : true,
           beds24_unit_id: roomUnitData.beds24UnitId
         })
         .select()
@@ -467,6 +480,8 @@ class RoomService {
       if (roomUnitData.wifiPassword !== undefined) updateData.wifi_password = roomUnitData.wifiPassword;
       if (roomUnitData.unitAmenities !== undefined) updateData.unit_amenities = roomUnitData.unitAmenities;
       if (roomUnitData.maintenanceNotes !== undefined) updateData.maintenance_notes = roomUnitData.maintenanceNotes;
+      if (roomUnitData.isActive !== undefined) updateData.is_active = roomUnitData.isActive;
+      if (roomUnitData.beds24UnitId !== undefined) updateData.beds24_unit_id = roomUnitData.beds24UnitId;
 
       const { data, error } = await supabaseAdmin
         .from('room_units')

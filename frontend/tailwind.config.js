@@ -186,7 +186,7 @@ export default {
 				'70%': { transform: 'translateX(-2px)' },
 				'80%': { transform: 'translateX(2px)' },
 				'90%': { transform: 'translateX(-1px)' }
-  			}
+  			},
   		},
   		screens: {
   			xs: '475px'
