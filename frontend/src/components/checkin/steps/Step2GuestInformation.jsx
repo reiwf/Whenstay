@@ -1,434 +1,318 @@
 import { useState } from 'react'
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Clock, 
-  Briefcase, 
+import {
+  User,
+  Mail,
+  Phone as PhoneIcon,
+  MapPin,
+  Briefcase,
   UserCheck,
   AlertCircle,
   CheckCircle,
   ChevronDown,
   ChevronUp,
-  Plus,
   Users
 } from 'lucide-react'
 import PhoneInput from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import flags from 'react-phone-number-input/flags'
 import './PhoneInput.css'
+
 import StepNavigation from '../shared/StepNavigation'
 import TimePicker from '@/components/ui/timepick'
 
-export default function Step2GuestInformation({ 
-  reservation, 
-  formData, 
-  onUpdateFormData, 
-  onNext, 
+// NEW – blended sections
+import Section from '@/components/ui/Section'
+import { ListGroup } from '@/components/ui/ListGroup'
+
+export default function Step2GuestInformation({
+  reservation,
+  formData,
+  onUpdateFormData,
+  onNext,
   onPrevious,
   checkinCompleted = false,
   isModificationMode = false,
   guestData = null
 }) {
   const [errors, setErrors] = useState({})
-  const [expandedGuests, setExpandedGuests] = useState(new Set([1])) // Guest 1 always expanded
-
-  // Initialize guests array based on reservation.numGuests
+  const [expandedGuests, setExpandedGuests] = useState(new Set([1]))
   const numGuests = reservation?.numGuests || 1
+
+  // Build guests from reservation + existing data + step1 fields
   const initializeGuests = () => {
     const guests = []
     for (let i = 1; i <= numGuests; i++) {
-      const existingGuest = guestData?.guests?.find(g => g.guestNumber === i)
-      const formDataGuest = formData?.guests?.find(g => g.guestNumber === i)
-      
+      const eg = guestData?.guests?.find(g => g.guestNumber === i)
+      const fg = formData?.guests?.find(g => g.guestNumber === i)
       guests.push({
         guestNumber: i,
-        firstName: existingGuest?.firstName || formDataGuest?.firstName || (i === 1 ? formData.firstName : '') || '',
-        lastName: existingGuest?.lastName || formDataGuest?.lastName || (i === 1 ? formData.lastName : '') || '',
-        personalEmail: existingGuest?.personalEmail || formDataGuest?.personalEmail || (i === 1 ? formData.personalEmail : '') || '',
-        contactNumber: existingGuest?.contactNumber || formDataGuest?.contactNumber || (i === 1 ? formData.contactNumber : '') || '',
-        address: existingGuest?.address || formDataGuest?.address || (i === 1 ? formData.address : '') || '',
-        estimatedCheckinTime: existingGuest?.estimatedCheckinTime || formDataGuest?.estimatedCheckinTime || (i === 1 ? formData.estimatedCheckinTime : '') || '',
-        travelPurpose: existingGuest?.travelPurpose || formDataGuest?.travelPurpose || (i === 1 ? formData.travelPurpose : '') || '',
-        emergencyContactName: existingGuest?.emergencyContactName || formDataGuest?.emergencyContactName || (i === 1 ? formData.emergencyContactName : '') || '',
-        emergencyContactPhone: existingGuest?.emergencyContactPhone || formDataGuest?.emergencyContactPhone || (i === 1 ? formData.emergencyContactPhone : '') || '',
-        isCompleted: existingGuest?.isCompleted || formDataGuest?.isCompleted || false,
+        firstName: eg?.firstName || fg?.firstName || (i === 1 ? formData.firstName : '') || '',
+        lastName: eg?.lastName || fg?.lastName || (i === 1 ? formData.lastName : '') || '',
+        personalEmail: eg?.personalEmail || fg?.personalEmail || (i === 1 ? formData.personalEmail : '') || '',
+        contactNumber: eg?.contactNumber || fg?.contactNumber || (i === 1 ? formData.contactNumber : '') || '',
+        address: eg?.address || fg?.address || (i === 1 ? formData.address : '') || '',
+        estimatedCheckinTime: eg?.estimatedCheckinTime || fg?.estimatedCheckinTime || (i === 1 ? formData.estimatedCheckinTime : '') || '',
+        travelPurpose: eg?.travelPurpose || fg?.travelPurpose || (i === 1 ? formData.travelPurpose : '') || '',
+        emergencyContactName: eg?.emergencyContactName || fg?.emergencyContactName || (i === 1 ? formData.emergencyContactName : '') || '',
+        emergencyContactPhone: eg?.emergencyContactPhone || fg?.emergencyContactPhone || (i === 1 ? formData.emergencyContactPhone : '') || '',
+        isCompleted: eg?.isCompleted || fg?.isCompleted || false,
         isPrimaryGuest: i === 1
       })
     }
     return guests
   }
-
   const [guests, setGuests] = useState(initializeGuests())
 
   const toggleGuestExpansion = (guestNumber) => {
     setExpandedGuests(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(guestNumber)) {
-        // Don't allow collapsing guest 1
-        if (guestNumber !== 1) {
-          newSet.delete(guestNumber)
-        }
+      const ns = new Set(prev)
+      if (ns.has(guestNumber)) {
+        if (guestNumber !== 1) ns.delete(guestNumber)
       } else {
-        newSet.add(guestNumber)
+        ns.add(guestNumber)
       }
-      return newSet
+      return ns
     })
   }
 
   const validateForm = () => {
-    const newErrors = {}
-
-    // Validate all guests - simplified validation for additional guests
-    guests.forEach((guest, index) => {
-      const guestKey = `guest${guest.guestNumber}`
-      
-      // All guests need first and last name
-      if (!guest.firstName?.trim()) {
-        newErrors[`${guestKey}.firstName`] = `First name is required for Guest ${guest.guestNumber}`
-      }
-
-      if (!guest.lastName?.trim()) {
-        newErrors[`${guestKey}.lastName`] = `Last name is required for Guest ${guest.guestNumber}`
-      }
-
-      // Only primary guest needs full information
-      if (guest.isPrimaryGuest) {
-        if (!guest.personalEmail?.trim()) {
-          newErrors[`${guestKey}.personalEmail`] = `Email address is required for primary guest`
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.personalEmail)) {
-          newErrors[`${guestKey}.personalEmail`] = `Please enter a valid email address for primary guest`
+    const next = {}
+    guests.forEach((g) => {
+      const key = `guest${g.guestNumber}`
+      if (!g.firstName?.trim()) next[`${key}.firstName`] = `First name is required for Guest ${g.guestNumber}`
+      if (!g.lastName?.trim())  next[`${key}.lastName`]  = `Last name is required for Guest ${g.guestNumber}`
+      if (g.isPrimaryGuest) {
+        if (!g.personalEmail?.trim()) {
+          next[`${key}.personalEmail`] = `Email address is required for primary guest`
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g.personalEmail)) {
+          next[`${key}.personalEmail`] = `Please enter a valid email address for primary guest`
         }
-
-        if (!guest.contactNumber?.trim()) {
-          newErrors[`${guestKey}.contactNumber`] = `Contact number is required for primary guest`
+        if (!g.contactNumber?.trim()) {
+          next[`${key}.contactNumber`] = `Contact number is required for primary guest`
         }
-
-        // Address validation (optional but if provided, should not be empty)
-        if (guest.address && !guest.address.trim()) {
-          newErrors[`${guestKey}.address`] = `Please provide a complete address or leave empty`
+        if (g.address && !g.address.trim()) {
+          next[`${key}.address`] = `Please provide a complete address or leave empty`
         }
       }
     })
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    setErrors(next)
+    return Object.keys(next).length === 0
   }
 
   const handleNext = () => {
-    if (validateForm()) {
-      // Update formData with all guests information for next steps
-      onUpdateFormData({ 
-        guests: guests,
-        // Keep backward compatibility with single guest fields (Guest #1)
-        firstName: guests[0]?.firstName,
-        lastName: guests[0]?.lastName,
-        personalEmail: guests[0]?.personalEmail,
-        contactNumber: guests[0]?.contactNumber,
-        address: guests[0]?.address,
-        estimatedCheckinTime: guests[0]?.estimatedCheckinTime,
-        travelPurpose: guests[0]?.travelPurpose,
-        emergencyContactName: guests[0]?.emergencyContactName,
-        emergencyContactPhone: guests[0]?.emergencyContactPhone
-      })
-      onNext()
-    }
+    if (!validateForm()) return
+    onUpdateFormData({
+      guests,
+      // Back-compat single-guest fields
+      firstName: guests[0]?.firstName,
+      lastName: guests[0]?.lastName,
+      personalEmail: guests[0]?.personalEmail,
+      contactNumber: guests[0]?.contactNumber,
+      address: guests[0]?.address,
+      estimatedCheckinTime: guests[0]?.estimatedCheckinTime,
+      travelPurpose: guests[0]?.travelPurpose,
+      emergencyContactName: guests[0]?.emergencyContactName,
+      emergencyContactPhone: guests[0]?.emergencyContactPhone
+    })
+    onNext()
   }
 
   const handleGuestInputChange = (guestNumber, field, value) => {
-    setGuests(prev => prev.map(guest => 
-      guest.guestNumber === guestNumber 
-        ? { ...guest, [field]: value }
-        : guest
-    ))
-    
-    // Clear error when user starts typing
-    const errorKey = `guest${guestNumber}.${field}`
-    if (errors[errorKey]) {
-      setErrors(prev => ({ ...prev, [errorKey]: '' }))
-    }
-
-    // For backward compatibility, update formData for guest #1
-    if (guestNumber === 1) {
-      onUpdateFormData({ [field]: value })
-    }
+    setGuests(prev => prev.map(g => (g.guestNumber === guestNumber ? { ...g, [field]: value } : g)))
+    const ek = `guest${guestNumber}.${field}`
+    if (errors[ek]) setErrors(prev => ({ ...prev, [ek]: '' }))
+    if (guestNumber === 1) onUpdateFormData({ [field]: value }) // back-compat
   }
 
-  // Legacy handler for backward compatibility
-  const handleInputChange = (field, value) => {
-    handleGuestInputChange(1, field, value)
-  }
+  const handleInputChange = (field, value) => handleGuestInputChange(1, field, value)
 
-  // Helper function to check if a guest has validation errors
-  const hasGuestErrors = (guestNumber) => {
-    const guestKey = `guest${guestNumber}`
-    return Object.keys(errors).some(errorKey => errorKey.startsWith(guestKey))
-  }
+  const hasGuestErrors = (guestNumber) =>
+    Object.keys(errors).some(k => k.startsWith(`guest${guestNumber}`))
+
+  const isReadOnly = checkinCompleted && !isModificationMode
+
+  const FieldLabel = ({ children }) => (
+    <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1.5">{children}</label>
+  )
+  const ErrorText = ({ children }) => (
+    <p className="mt-1 text-xs sm:text-sm text-rose-600 flex items-center">
+      <AlertCircle className="w-3 h-3 mr-1 shrink-0" /> {children}
+    </p>
+  )
+  const inputCls = (hasError, disabled) =>
+    [
+      'w-full rounded-xl bg-white/80 px-3 py-2.5 text-sm',
+      'ring-1 ring-slate-300 placeholder-slate-400',
+      'focus:outline-none focus:ring-2 focus:ring-slate-900',
+      hasError ? 'ring-rose-300' : '',
+      disabled ? 'opacity-60 cursor-not-allowed' : ''
+    ].join(' ')
 
   const renderGuestForm = (guest) => {
     const isExpanded = expandedGuests.has(guest.guestNumber)
-    const guestKey = `guest${guest.guestNumber}`
+    const key = `guest${guest.guestNumber}`
     const hasErrors = hasGuestErrors(guest.guestNumber)
-    
+
     return (
-      <div key={guest.guestNumber} className="border border-primary-200 rounded-lg overflow-hidden">
-        {/* Guest Header */}
-        <div 
-          className={`p-4 cursor-pointer transition-colors ${
-            guest.isPrimaryGuest 
-              ? 'bg-primary-100 border-b border-primary-200' 
-              : 'bg-gray-50 hover:bg-gray-100'
-          }`}
+      <div key={guest.guestNumber} className="rounded-2xl ring-1 ring-slate-200 bg-white/70 overflow-hidden">
+        {/* Header row */}
+        <button
+          type="button"
           onClick={() => !guest.isPrimaryGuest && toggleGuestExpansion(guest.guestNumber)}
+          className={`w-full px-3 sm:px-4 py-3 flex items-center justify-between
+                      ${guest.isPrimaryGuest ? 'cursor-default' : 'hover:bg-white/80'}`}
+          aria-expanded={guest.isPrimaryGuest ? true : isExpanded}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Users className="w-5 h-5 mr-3 text-primary-600" />
-              <div>
-                <h4 className="font-semibold text-primary-900">
-                  {guest.isPrimaryGuest ? 'Primary Guest' : `Additional Guest ${guest.guestNumber}`}
+          <div className="flex items-center gap-3 min-w-0">
+            <Users className="w-5 h-5 text-slate-600 shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-semibold text-slate-900 truncate">
+                  {guest.isPrimaryGuest ? 'Primary guest' : `Guest ${guest.guestNumber}`}
                 </h4>
-                <p className="text-sm text-primary-600">
-                  {guest.firstName && guest.lastName 
-                    ? `${guest.firstName} ${guest.lastName}` 
-                    : guest.isPrimaryGuest ? 'Main contact person' : 'Click to expand and fill information'
-                  }
-                </p>
+                {guest.isPrimaryGuest && (
+                  <span className="px-2 py-0.5 text-[11px] rounded-full bg-slate-900 text-white">
+                    Main contact
+                  </span>
+                )}
+                {guest.isCompleted && !hasErrors && (
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                )}
+                {hasErrors && <div className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />}
               </div>
-            </div>
-            <div className="flex items-center">
-              {hasErrors && (
-                <div className="relative mr-2">
-                  <AlertCircle className="w-5 h-5 text-red-500" />
-                  {/* Optional: Add a small pulse animation for better visibility */}
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                </div>
-              )}
-              {guest.isCompleted && !hasErrors && (
-                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              )}
-              {!guest.isPrimaryGuest && (
-                isExpanded ? 
-                  <ChevronUp className="w-5 h-5 text-primary-600" /> :
-                  <ChevronDown className="w-5 h-5 text-primary-600" />
-              )}
+              <p className="text-xs text-slate-600 truncate">
+                {guest.firstName && guest.lastName
+                  ? `${guest.firstName} ${guest.lastName}`
+                  : guest.isPrimaryGuest ? 'Please fill in your details' : 'Tap to fill details'}
+              </p>
             </div>
           </div>
-        </div>
+          {!guest.isPrimaryGuest && (
+            isExpanded
+              ? <ChevronUp className="w-5 h-5 text-slate-600" />
+              : <ChevronDown className="w-5 h-5 text-slate-600" />
+          )}
+        </button>
 
-        {/* Guest Form - Always expanded for primary guest */}
+        {/* Body */}
         {(isExpanded || guest.isPrimaryGuest) && (
-          <div className="p-4 sm:p-6 bg-white">
+          <div className="px-3 sm:px-4 pb-4 sm:pb-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* First Name */}
+              {/* First name */}
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                  First Name *
-                </label>
+                <FieldLabel>First Name *</FieldLabel>
                 <input
                   type="text"
-                  required
                   value={guest.firstName || ''}
                   onChange={(e) => handleGuestInputChange(guest.guestNumber, 'firstName', e.target.value)}
                   disabled={isReadOnly}
-                  className={`form-field ${isReadOnly ? 'disabled' : ''} ${
-                    errors[`${guestKey}.firstName`] ? 'error' : ''
-                  }`}
-                  style={{
-                    width: "100%",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    background: isReadOnly ? "#f5f5f5" : "white",
-                    cursor: isReadOnly ? "not-allowed" : "text"
-                  }}
+                  className={inputCls(!!errors[`${key}.firstName`], isReadOnly)}
                   placeholder="Enter first name"
                 />
-                {errors[`${guestKey}.firstName`] && (
-                  <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
-                    <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-                    {errors[`${guestKey}.firstName`]}
-                  </p>
-                )}
+                {errors[`${key}.firstName`] && <ErrorText>{errors[`${key}.firstName`]}</ErrorText>}
               </div>
 
-              {/* Last Name */}
+              {/* Last name */}
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                  Last Name *
-                </label>
+                <FieldLabel>Last Name *</FieldLabel>
                 <input
                   type="text"
-                  required
                   value={guest.lastName || ''}
                   onChange={(e) => handleGuestInputChange(guest.guestNumber, 'lastName', e.target.value)}
                   disabled={isReadOnly}
-                  className={`form-field ${isReadOnly ? 'disabled' : ''} ${
-                    errors[`${guestKey}.lastName`] ? 'error' : ''
-                  }`}
-                  style={{
-                    width: "100%",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    background: isReadOnly ? "#f5f5f5" : "white",
-                    cursor: isReadOnly ? "not-allowed" : "text"
-                  }}
+                  className={inputCls(!!errors[`${key}.lastName`], isReadOnly)}
                   placeholder="Enter last name"
                 />
-                {errors[`${guestKey}.lastName`] && (
-                  <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
-                    <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-                    {errors[`${guestKey}.lastName`]}
-                  </p>
-                )}
+                {errors[`${key}.lastName`] && <ErrorText>{errors[`${key}.lastName`]}</ErrorText>}
               </div>
 
-              {/* Additional fields only for primary guest */}
+              {/* Primary-only fields */}
               {guest.isPrimaryGuest && (
                 <>
-                  {/* Personal Email */}
+                  {/* Email */}
                   <div className="sm:col-span-2">
-                    <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                      Email Address *
-                    </label>
+                    <FieldLabel>Email Address *</FieldLabel>
                     <input
                       type="email"
-                      required
                       value={guest.personalEmail || ''}
                       onChange={(e) => handleGuestInputChange(guest.guestNumber, 'personalEmail', e.target.value)}
                       disabled={isReadOnly}
-                      className={`form-field ${isReadOnly ? 'disabled' : ''} ${
-                        errors[`${guestKey}.personalEmail`] ? 'error' : ''
-                      }`}
-                      style={{
-                        width: "100%",
-                        padding: "8px 16px",
-                        fontSize: "14px",
-                        background: isReadOnly ? "#f5f5f5" : "white",
-                        cursor: isReadOnly ? "not-allowed" : "text"
-                      }}
+                      className={inputCls(!!errors[`${key}.personalEmail`], isReadOnly)}
                       placeholder="personal@email.com"
                     />
-                    {errors[`${guestKey}.personalEmail`] && (
-                      <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
-                        <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-                        {errors[`${guestKey}.personalEmail`]}
-                      </p>
-                    )}
+                    {errors[`${key}.personalEmail`] && <ErrorText>{errors[`${key}.personalEmail`]}</ErrorText>}
                   </div>
 
-                  {/* Contact Number */}
+                  {/* Phone */}
                   <div className="sm:col-span-2">
-                    <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                      Contact Number *
-                    </label>
-                    <div className={`form-field ${isReadOnly ? 'disabled' : ''} ${
-                      errors[`${guestKey}.contactNumber`] ? 'error' : ''
-                    }`} style={{
-                      padding: 0,
-                      background: isReadOnly ? "#f5f5f5" : "white",
-                      cursor: isReadOnly ? "not-allowed" : "default"
-                    }}>
+                    <FieldLabel>Contact Number *</FieldLabel>
+
+                    <div
+                      className={[
+                        'h-10 rounded-xl bg-white/80 ring-1 ring-slate-300 px-3',
+                        'focus-within:ring-2 focus-within:ring-slate-900',
+                        errors[`${key}.contactNumber`] ? 'ring-rose-300' : '',
+                        isReadOnly ? 'opacity-60 cursor-not-allowed' : ''
+                      ].join(' ')}
+                      style={{ background: isReadOnly ? '#f5f5f5' : undefined }}
+                    >
                       <PhoneInput
+                        className="PhoneInput w-full min-w-0"  // <- fill shell, allow shrink
                         international
                         countryCallingCodeEditable={false}
                         defaultCountry="JP"
                         flags={flags}
                         value={guest.contactNumber || ''}
-                        onChange={(value) => handleGuestInputChange(guest.guestNumber, 'contactNumber', value || '')}
+                        onChange={(v) => handleGuestInputChange(guest.guestNumber,'contactNumber', v || '')}
                         disabled={isReadOnly}
                         placeholder="Enter phone number"
-                        style={{
-                          padding: "8px 16px",
-                          fontSize: "14px",
-                          background: "transparent",
-                          border: "none",
-                          height: "48px",
-                          outline: "none"
-                        }}
                       />
                     </div>
-                    {errors[`${guestKey}.contactNumber`] && (
-                      <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
-                        <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-                        {errors[`${guestKey}.contactNumber`]}
-                      </p>
+
+                    {errors[`${key}.contactNumber`] && (
+                      <ErrorText>{errors[`${key}.contactNumber`]}</ErrorText>
                     )}
                   </div>
 
-                  {/* Address (Optional) */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                      <MapPin className="w-3 h-3 sm:w-4 sm:h-4 inline mr-2" />
-                      Address (Optional)
-                    </label>
-                    <textarea
-                      value={guest.address || ''}
-                      onChange={(e) => handleGuestInputChange(guest.guestNumber, 'address', e.target.value)}
-                      disabled={isReadOnly}
-                      rows="2"
-                      className={`form-field ${isReadOnly ? 'disabled' : ''} ${
-                        errors[`${guestKey}.address`] ? 'error' : ''
-                      }`}
-                      style={{
-                        width: "100%",
-                        padding: "8px 16px",
-                        fontSize: "14px",
-                        background: isReadOnly ? "#f5f5f5" : "white",
-                        cursor: isReadOnly ? "not-allowed" : "text",
-                        resize: "vertical"
-                      }}
-                      placeholder="Your current address"
-                    />
-                    {errors[`${guestKey}.address`] && (
-                      <p className="mt-1 text-xs sm:text-sm text-red-600 flex items-center">
-                        <AlertCircle className="w-3 h-3 mr-1 flex-shrink-0" />
-                        {errors[`${guestKey}.address`]}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Estimated Check-in Time */}
+                  {/* ETA */}
                   <div>
-                    <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                      Estimated Check-in Time
-                    </label>
-                    <div className="w-full">
-                      <TimePicker
-                        value={guest.estimatedCheckinTime || null}
-                        onChange={(val) => handleGuestInputChange(guest.guestNumber, 'estimatedCheckinTime', val || '')}
-                        disabled={isReadOnly}
-                        format="24"
-                        step={60}
-                        placeholder="HH:mm"
-                        clearable
-                        overnightRange={{ start: "16:00", end: "03:00" }}
-                        error={!!errors[`${guestKey}.estimatedCheckinTime`]}
-                      />
+                    <FieldLabel className="pt-2">Estimated Check-in Time</FieldLabel>
+
+                    <div>
+                      {/* Input shell */}
+                      <div
+                        className={[
+                          'h-10 w-full rounded-xl bg-white/80 ring-1 ring-slate-300 px-3',
+                          'focus-within:ring-2 focus-within:ring-slate-900',
+                          errors[`${key}.estimatedCheckinTime`] ? 'ring-rose-300' : '',
+                          isReadOnly ? 'opacity-60 cursor-not-allowed' : ''
+                        ].join(' ')}
+                      >
+                        <TimePicker
+                          className="w-full"              // <- make picker fill the shell
+                          value={guest.estimatedCheckinTime || null}
+                          onChange={(val) => handleGuestInputChange(guest.guestNumber, 'estimatedCheckinTime', val || '')}
+                          disabled={isReadOnly}
+                          format="24"
+                          step={60}
+                          placeholder="HH:mm"
+                          clearable
+                          overnightRange={{ start: '16:00', end: '03:00' }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">What time do you expect to arrive?</p>
                     </div>
-                    <p className="mt-1 text-xs sm:text-sm text-primary-500">
-                      What time do you expect to arrive for check-in?
-                    </p>
                   </div>
-
-                  {/* Travel Purpose */}
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-primary-700 mb-2">
-                      <Briefcase className="w-3 h-3 sm:w-4 sm:h-4 inline mr-2" />
-                      Travel Purpose
-                    </label>
+                  {/* Purpose */}
+                  {/* <div>
+                    <FieldLabel>
+                      <Briefcase className="w-3.5 h-3.5 inline mr-1.5" /> Travel Purpose
+                    </FieldLabel>
                     <select
                       value={guest.travelPurpose || ''}
                       onChange={(e) => handleGuestInputChange(guest.guestNumber, 'travelPurpose', e.target.value)}
                       disabled={isReadOnly}
-                      className={`form-field ${isReadOnly ? 'disabled' : ''}`}
-                      style={{
-                        width: "100%",
-                        padding: "8px 16px",
-                        fontSize: "14px",
-                        background: isReadOnly ? "#f5f5f5" : "white",
-                        cursor: isReadOnly ? "not-allowed" : "pointer"
-                      }}
+                      className={inputCls(false, isReadOnly)}
                     >
                       <option value="">Select purpose</option>
                       <option value="Business">Business</option>
@@ -438,10 +322,8 @@ export default function Step2GuestInformation({
                       <option value="Education">Education</option>
                       <option value="Other">Other</option>
                     </select>
-                    <p className="mt-1 text-xs sm:text-sm text-primary-500">
-                      Purpose of your visit
-                    </p>
-                  </div>                  
+                    <p className="mt-1 text-xs text-slate-500">Purpose of your visit</p>
+                  </div> */}
                 </>
               )}
             </div>
@@ -451,107 +333,81 @@ export default function Step2GuestInformation({
     )
   }
 
-  // Determine if we should show read-only view
-  const isReadOnly = checkinCompleted && !isModificationMode
+  // Completed banner
+  const ReadOnlyBanner = () => (
+    <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <CheckCircle className="w-5 h-5 text-emerald-600" />
+        <h3 className="text-sm sm:text-base font-semibold text-slate-900">Information submitted</h3>
+      </div>
+      <p className="text-sm text-slate-700">
+        Your guest information has been successfully submitted and is currently under review.
+      </p>
+    </div>
+  )
 
   return (
-    <div>
-      <div className="text-center mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
-          Guest Information
-        </h2>
-        <p className="text-sm sm:text-base text-primary-600">
-          {isReadOnly 
-            ? "Your submitted guest information" 
-            : isModificationMode 
-              ? "Update your personal information for check-in"
-              : "Please provide your personal information for check-in"
-          }
-        </p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
+      <Section
+        title="Guest information"
+        subtitle={
+          isReadOnly
+            ? 'Your submitted guest information'
+            : isModificationMode
+            ? 'Update your personal information for check-in'
+            : 'Please provide your personal information for check-in'
+        }
+        className="pt-2"
+      />
+
+      {isReadOnly && <ReadOnlyBanner />}
+
+      {/* Multi-guest progress */}
+      {numGuests > 1 && (
+        <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-slate-600" />
+              <span className="text-sm font-medium text-slate-900">
+                Guest information for {numGuests} guests
+              </span>
+            </div>
+            <div className="text-sm text-slate-600">
+              {
+                guests.filter(g => g.isPrimaryGuest
+                  ? (g.firstName && g.lastName && g.personalEmail && g.contactNumber)
+                  : (g.firstName && g.lastName)
+                ).length
+              } of {numGuests} completed
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guest accordions */}
+      <div className="space-y-3">
+        {guests.map(renderGuestForm)}
       </div>
 
-      {/* Read-only confirmation when check-in is completed */}
-      {isReadOnly && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-6">
-          <div className="flex items-center mb-4">
-            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-3 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold text-primary-900">
-              Information Submitted
-            </h3>
-          </div>
-          <p className="text-sm sm:text-base text-primary-800">
-            Your guest information has been successfully submitted and is currently under review.
-          </p>
+      {/* Expand/collapse helpers */}
+      {numGuests > 1 && !isReadOnly && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => {
+              const allExpanded = guests.slice(1).every(g => expandedGuests.has(g.guestNumber))
+              setExpandedGuests(allExpanded ? new Set([1]) : new Set(guests.map(g => g.guestNumber)))
+            }}
+            className="text-sm text-slate-700 hover:text-slate-900 inline-flex items-center"
+          >
+            <Users className="w-4 h-4 mr-2" />
+            {guests.slice(1).every(g => expandedGuests.has(g.guestNumber))
+              ? 'Collapse additional guests'
+              : 'Expand all additional guests'}
+          </button>
         </div>
       )}
-
-      {/* Multi-guest progress indicator */}
-      {numGuests > 1 && (
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Users className="w-5 h-5 text-blue-600 mr-2" />
-              <span className="text-sm font-medium text-blue-900">
-                Guest Information for {numGuests} guests
-              </span>
-            </div>
-            <div className="text-sm text-blue-700">
-              {guests.filter(g => {
-                // Primary guest needs full info, additional guests only need first/last name
-                if (g.isPrimaryGuest) {
-                  return g.firstName && g.lastName && g.personalEmail && g.contactNumber
-                } else {
-                  return g.firstName && g.lastName
-                }
-              }).length} of {numGuests} completed
-            </div>
-          </div>
-        </div>
-      )}
-
-      <form className="space-y-4 sm:space-y-6">
-        {/* Multi-Guest Forms */}
-        <div className="space-y-4">
-          <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4 flex items-center">
-            <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
-            Who will stay with us?
-            {numGuests > 1 && (
-              <span className="ml-2 text-sm text-primary-600 font-normal">
-                ({numGuests} guests)
-              </span>
-            )}
-          </h3>
-          
-          {guests.map(renderGuestForm)}
-        </div>
-
-        {/* Expand all additional guests button */}
-        {numGuests > 1 && !isReadOnly && (
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => {
-                const allExpanded = guests.slice(1).every(g => expandedGuests.has(g.guestNumber))
-                if (allExpanded) {
-                  // Collapse all except guest 1
-                  setExpandedGuests(new Set([1]))
-                } else {
-                  // Expand all guests
-                  setExpandedGuests(new Set(guests.map(g => g.guestNumber)))
-                }
-              }}
-              className="text-sm text-primary-600 hover:text-primary-800 flex items-center mx-auto"
-            >
-              <Users className="w-4 h-4 mr-2" />
-              {guests.slice(1).every(g => expandedGuests.has(g.guestNumber)) 
-                ? 'Collapse additional guests' 
-                : 'Expand all additional guests'
-              }
-            </button>
-          </div>
-        )}
-
-      </form>
 
       <StepNavigation
         currentStep={2}

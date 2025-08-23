@@ -1,11 +1,11 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import LoadingSpinner from '../../LoadingSpinner'
 
-export default function StepNavigation({ 
-  currentStep, 
-  totalSteps, 
-  onNext, 
-  onPrevious, 
+export default function StepNavigation({
+  currentStep,
+  totalSteps,
+  onNext,
+  onPrevious,
   isNextDisabled = false,
   isLoading = false,
   nextButtonText = 'Next',
@@ -16,40 +16,43 @@ export default function StepNavigation({
   const isLastStep = currentStep === totalSteps
 
   return (
-    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 sm:gap-0 pt-4 sm:pt-6 border-t border-primary-200">
-      {/* Previous Button */}
+    <div className="pt-4 sm:pt-6 border-t border-slate-200/70 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      {/* Previous */}
       {showPrevious && !isFirstStep ? (
         <button
           type="button"
           onClick={onPrevious}
           disabled={isLoading}
-          className="flex items-center justify-center px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-md hover:bg-primary-50 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 w-full sm:w-auto order-2 sm:order-1"
+          className="order-2 sm:order-1 w-full sm:w-auto inline-flex items-center justify-center
+                     px-4 py-2 text-sm font-medium text-slate-800 bg-white
+                     ring-1 ring-slate-300 rounded-xl hover:bg-slate-50
+                     focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Previous
         </button>
-      ) : (
-        <div className="hidden sm:block"></div>
-      )}
+      ) : <span className="hidden sm:block" />}
 
-      {/* Next/Submit Button */}
+      {/* Next */}
       {showNext && (
         <button
           type="button"
           onClick={onNext}
           disabled={isNextDisabled || isLoading}
-          className="flex items-center justify-center px-4 sm:px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto order-1 sm:order-2"
+          className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center
+                     px-5 sm:px-6 py-2 text-sm font-medium text-white
+                     rounded-xl bg-slate-900 hover:opacity-90
+                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900
+                     disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <>
               <LoadingSpinner size="small" />
-              <span className="ml-2">Processing...</span>
+              <span className="ml-2">Processing…</span>
             </>
           ) : (
             <>
-              <span className="text-center">
-                {isLastStep ? 'Complete Check-in' : nextButtonText}
-              </span>
+              <span>{isLastStep ? 'Complete Check-in' : nextButtonText}</span>
               {!isLastStep && <ChevronRight className="w-4 h-4 ml-1" />}
             </>
           )}

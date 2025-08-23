@@ -654,7 +654,7 @@ router.get('/:id/services/purchased', adminAuth, async (req, res) => {
           check_in_date: reservation.check_in_date,
           check_out_date: reservation.check_out_date,
           original_access_time: reservation.access_time,
-          original_departure_time: reservation.departure_time || '11:00:00'
+          original_departure_time: reservation.departure_time || '10:00:00'
         },
         purchased_services: purchasedServices,
         summary: {
@@ -665,7 +665,7 @@ router.get('/:id/services/purchased', adminAuth, async (req, res) => {
           effective_departure_time: effectiveTimes.departureTime,
           time_modifications: {
             access_time_changed: effectiveTimes.accessTime !== reservation.access_time,
-            departure_time_changed: effectiveTimes.departureTime !== (reservation.departure_time || '11:00:00')
+            departure_time_changed: effectiveTimes.departureTime !== (reservation.departure_time || '10:00:00')
           }
         }
       }

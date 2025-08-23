@@ -1,135 +1,52 @@
-/* Custom styles for react-phone-number-input to match the existing form-field design */
-
-/* Override the default PhoneInput styles to match form-field behavior */
-.PhoneInput {
-  display: flex;
-  align-items: center;
-  padding: 0rem 0.5rem;
-  width: 100%;
-  border: 1px solid #dedbca; /* primary-200 */
-  border-radius: 0.5rem;
-  background: white;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 48px;
-  font-size: 0.875rem;
-  color: #54493a; /* primary-900 */
+/* Root = the “pill” contents (inside the shell) */
+.PhoneInput{
+  display:flex;
+  align-items:center;                /* vertical center like TimePicker */
+  gap:8px;
+  height:40px;                       /* h-11 */
+  padding:0;                         /* shell has px-3 */
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  min-width:0;                       /* prevent overflow with long numbers */
 }
 
-.PhoneInput:focus-within {
-  border-color: #a3936c; /* primary-500 */
-  box-shadow: 0 0 0 3px rgba(163, 147, 108, 0.2); /* primary-500 with opacity */
-}
+/* Kill any legacy focus styles – shell handles ring */
+.PhoneInput:focus-within{ box-shadow:none; }
+.PhoneInput:hover:not(:focus-within){ box-shadow:none; }
 
-.PhoneInput:hover:not(:focus-within) {
-  border-color: #d2cdb6; /* primary-300 */
+/* Country area */
+.PhoneInputCountry{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:40px;
 }
+.PhoneInputCountryIcon{ width:20px; height:14px; border-radius:2px; box-shadow:none; }
+.PhoneInputCountrySelect{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+.PhoneInputCountrySelectArrow{ opacity:.5; margin-left:.25rem; width:.5rem; height:.5rem; }
 
-/* Country selector styling */
-.PhoneInputCountry {
-  display: flex;
-  align-items: center;
-  flex: none;
-  background: transparent;
-  border: none;
-  padding: 0.75rem 0.5rem;
-  margin: 0;
-  cursor: pointer;
-  border-radius: 0;
+/* The text field – mirror TimePicker: h-10 + leading-none + tiny padding */
+.PhoneInputInput{
+  flex:1;
+  min-width:0;                       /* allow shrinking in flex row */
+  border:none !important;
+  box-shadow: none !important;
+  outline:none !important;
+  background:transparent !important;
+  height:40px;                       /* h-10 inside a 44px row */
+  line-height:1;                     /* leading-none */
+  padding:2px 0;                     /* py-0.5 */
+  font-size:15px;
 }
+.PhoneInputInput::placeholder{ color: #94a3b8; } /* slate-400 */
 
-.PhoneInputCountryIcon {
-  width: 1.25rem;
-  margin-right: 0.5rem;
-}
+/* Disabled look aligns with shell */
+.PhoneInput[disabled] .PhoneInputInput{ color:#94a3b8; }
 
-/* Fallback for when flag icons don't load */
-.PhoneInputCountryIcon:empty::before {
-  content: "🌍";
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.PhoneInputCountrySelect {
-  background: transparent;
-  border: none !important;
-  font-size: inherit;
-  color: inherit;
-  outline: none;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  min-width: 40px;
-}
-
-.PhoneInputCountrySelectArrow {
-  opacity: 0.5;
-  margin-left: 0.25rem;
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-/* Ensure flag URLs are properly handled */
-.PhoneInputCountryIcon[style*="background-image"] {
-  background-size: cover !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-}
-
-/* Phone number input field */
-.PhoneInputInput {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: inherit;
-  color: inherit;
-  outline: none;
-  margin: 0;
-  border-radius: 0;
-}
-
-.PhoneInputInput::placeholder {
-  color: #b3a884; /* primary-400 */
-}
-
-/* Error state */
-.phone-input-error.PhoneInput {
-  border-color: #ef4444; /* red-500 */
-}
-
-.phone-input-error.PhoneInput:focus-within {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
-}
-
-/* Remove any conflicting default styles */
-.PhoneInput .PhoneInputCountry,
-.PhoneInput .PhoneInputInput {
-  box-shadow: none;
-  border-radius: 0;
-}
-
-/* Ensure proper alignment */
-.PhoneInputCountry svg {
-  display: block;
-}
-
-/* Style the country dropdown when it appears */
-.PhoneInputCountrySelect option {
-  color: #54493a; /* primary-900 */
-  background: white;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .PhoneInput {
-    min-height: 44px;
-  }
-  
-  .PhoneInputCountry {
-    padding: 0.5rem 0.25rem;
-  }
-  
-  .PhoneInputInput {
-    padding: 0.5rem 0.75rem;
-  }
+/* Mobile keeps 44px touch target */
+@media (max-width:768px){
+  .PhoneInput{ height:40px; }
+  .PhoneInputCountry{ height:40px; }
+  .PhoneInputInput{ height:40px; }
 }

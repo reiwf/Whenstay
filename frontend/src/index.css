@@ -398,12 +398,32 @@
     transform: scale(1);
   }
 }
-/* Modern countdown micro-animation + numeric alignment */
-@keyframes pop {
-  from { transform: translateY(4px); opacity: .6; filter: blur(.3px); }
-  to   { transform: translateY(0);   opacity: 1;  filter: blur(0); }
+
+/* Remove any residual borders/outlines from Tailwind forms or browser defaults */
+.composer textarea {
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
-.animate-pop { animation: pop .22s ease-out; }
+
+/* Hide scrollbars inside the growing textarea */
+.textarea-no-scrollbar { scrollbar-width: none; }
+.textarea-no-scrollbar::-webkit-scrollbar { display: none; }
+
+
+/* Reuse the pop micro-animation you added earlier if you want it on send button etc. */
+@keyframes pop { from { transform: translateY(4px); opacity:.6; filter: blur(.3px) } to { transform: translateY(0); opacity:1; filter: blur(0) } }
+.animate-pop { animation: pop .22s ease-out }
+
+
+/* Hairline feel on high-DPI displays */
+@supports (font-variation-settings: normal) {
+  .hairline { border-top: 0.5px solid color-mix(in oklab, #000 10%, transparent); }
+}
+/* Remove old card visuals app-wide (optional) */
+.card { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+
 
 
 /* Progress bar */
@@ -490,70 +510,6 @@
   body {
     @apply bg-background text-foreground;
   }
-}
-
-/* Base reusable form field style */
-.form-field {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  border: 1px solid #dedbca; /* primary-200 */
-  border-radius: 0.5rem;
-  background: white;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 48px;
-  font-size: 0.875rem;
-  color: #54493a; /* primary-900 */
-}
-
-.form-field:focus-within {
-  border-color: #a3936c; /* primary-500 */
-  box-shadow: 0 0 0 3px rgba(163, 147, 108, 0.2); /* soft brown glow */
-}
-
-.form-field input,
-.form-field select,
-.form-field textarea {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 0.75rem 1rem;
-  font-size: inherit;
-  color: inherit;
-  outline: none;
-}
-
-.form-field input::placeholder,
-.form-field textarea::placeholder {
-  color: #b3a884; /* primary-400 */
-}
-
-.form-field:hover:not(:focus-within) {
-  border-color: #d2cdb6; /* primary-300 */
-}
-
-/* Error state */
-.form-field.error {
-  border-color: #ef4444; /* red-500 */
-}
-
-.form-field.error:focus-within {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
-}
-
-/* Disabled */
-.form-field.disabled {
-  background-color: #efeee5; /* primary-100 */
-  border-color: #dedbca;
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.form-field.disabled input,
-.form-field.disabled select,
-.form-field.disabled textarea {
-  color: #b3a884; /* primary-400 */
-  cursor: not-allowed;
 }
 
 .tp-pop:focus,

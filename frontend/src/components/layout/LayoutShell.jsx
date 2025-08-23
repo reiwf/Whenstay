@@ -19,7 +19,7 @@ export default function LayoutShell({
     max: 'mx-auto w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]',
     header: 'sticky top-0 z-[60]',
     hero: `relative overflow-hidden ${isCompact ? 'rounded-b-2xl' : 'rounded-b-3xl'} text-white shadow`,
-    grad: 'absolute inset-0 bg-gradient-to-br from-indigo-600 to-sky-500 pointer-events-none',
+    grad: 'absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-500 pointer-events-none',
     pad: `relative ${isCompact ? 'px-4 pt-3 pb-3' : 'px-5 pt-5 pb-6'} safe-pt`,
     idRow: `text-[10px] ${isCompact ? 'opacity-70' : 'opacity-80'}`,
     name: `${isCompact ? 'text-lg' : 'text-2xl'} font-semibold`,
@@ -96,7 +96,7 @@ export default function LayoutShell({
             <div className={cls.grad} />
             <div className={cls.pad}>
               {/* make ID inline + smaller in compact mode */}
-              <div className={cls.idRow}>Booking ID: {token}</div>
+              <div className={cls.idRow}>Label ID: {token}</div>
               <h1 className={cls.name}>Hi, {guestName} 👋</h1>
               <div className={cls.chipsRow}>
                 <StatusChip ok={checkinCompleted} okText="Check-in completed" waitText="Check-in required" />
@@ -105,9 +105,9 @@ export default function LayoutShell({
             </div>
           </div>
 
-          <div className="relative z-[60]">
+          {/* <div className="relative z-[60]">
             <SegmentedTabs items={navigationItems} active={activeSection} onSelect={setActiveSection} />
-          </div>
+          </div> */}
         </header>
 
         <main className={cls.main}>{children}</main>

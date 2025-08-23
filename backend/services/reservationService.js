@@ -1752,7 +1752,7 @@ class ReservationService {
           effective_access_time: effectiveTimes?.accessTime,
           effective_departure_time: effectiveTimes?.departureTime,
           original_access_time: reservationData.access_time,
-          original_departure_time: reservationData.departure_time || '11:00:00'
+          original_departure_time: reservationData.departure_time
         },
         
         // All guests information (for multi-guest check-in process)
@@ -1801,7 +1801,7 @@ class ReservationService {
           amenities: reservationData.property_amenities,
           location_info: reservationData.location_info,
           access_time: reservationData.access_time, // Original property access time
-          departure_time: reservationData.departure_time || '11:00:00' // Original property departure time
+          departure_time: reservationData.departure_time || '10:00:00' // Original property departure time
         },
         
         room: {

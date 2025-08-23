@@ -9,63 +9,56 @@ export default function StepProgress({ currentStep, totalSteps = 4 }) {
   ]
 
   return (
-    <div className="w-full py-4">
-      <div className="flex items-center justify-between relative">
+    <div className="w-full">
+      <div className="relative flex items-center justify-between">
+        {steps.map((step, idx) => {
+          const state =
+            step.number < currentStep ? 'done'
+            : step.number === currentStep ? 'current'
+            : 'todo'
 
-        {steps.map((step, index) => (
-          <div key={step.number} className="flex-1 flex flex-col items-center relative">
-            {/* Connector Line */}
-            {index < steps.length - 1 && (
-              <div className="absolute top-5 left-1/2 w-full h-1 bg-primary-200 -z-10">
-                <div
-                  className="h-1 bg-primary-600 transition-all duration-500"
-                  style={{
-                    width:
-                      step.number < currentStep
-                        ? '100%'
-                        : step.number === currentStep
-                        ? '50%'
-                        : '0%'
-                  }}
-                />
-              </div>
-            )}
+          const circleCls = {
+            done:    'bg-emerald-600 text-white',
+            current: 'bg-slate-900 text-white',
+            todo:    'bg-white text-slate-600 ring-1 ring-slate-300'
+          }[state]
 
-            {/* Step Circle */}
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium
-              ${
-                step.number < currentStep
-                  ? 'bg-primary-600 text-white'
-                  : step.number === currentStep
-                  ? 'bg-primary-700 text-white'
-                  : 'bg-primary-200 text-primary-600'
-              }`}
-            >
-              {step.number < currentStep ? (
-                <CheckCircle className="w-5 h-5" />
-              ) : (
-                step.number
+          return (
+            <div key={step.number} className="flex-1 flex flex-col items-center relative">
+              {/* segment rail behind each pair */}
+              {idx < steps.length - 1 && (
+                <div className="absolute top-5 left-1/2 w-full -z-10">
+                  <div className="h-px w-full bg-slate-200/80">
+                    <div
+                      className={`h-px bg-slate-900 transition-all duration-500`}
+                      style={{
+                        width:
+                          step.number < currentStep ? '100%'
+                          : step.number === currentStep ? '50%'
+                          : '0%'
+                      }}
+                    />
+                  </div>
+                </div>
               )}
+
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium shadow-sm ${circleCls}`}>
+                {state === 'done' ? <CheckCircle className="w-5 h-5" /> : step.number}
+              </div>
+
+              <p className={`mt-2 text-xs sm:text-sm font-medium text-center whitespace-nowrap ${
+                step.number <= currentStep ? 'text-slate-900' : 'text-slate-500'
+              }`}>
+                {step.title}
+              </p>
             </div>
-
-            {/* Step Label */}
-            <p
-              className={`mt-2 text-xs sm:text-sm font-medium text-center whitespace-nowrap
-              ${step.number <= currentStep ? 'text-primary-900' : 'text-primary-500'}`}
-            >
-              {step.title}
-            </p>
-          </div>
-        ))}
-
+          )
+        })}
       </div>
 
-      {/* Mobile Step Indicator */}
-      <div className="sm:hidden mt-4 text-center">
-        <p className="text-sm text-gray-600">
-          Step {currentStep} of {totalSteps}: {steps[currentStep - 1]?.title}
-        </p>
+      {/* Mobile caption */}
+      <div className="sm:hidden mt-3 text-center text-sm text-slate-600">
+        Step {currentStep} of {totalSteps}: {steps[currentStep - 1]?.title}
       </div>
     </div>
   )

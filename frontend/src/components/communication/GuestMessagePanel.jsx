@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, RefreshCw } from 'lucide-react';
+import Section from '../ui/Section'
+import { ListGroup } from '../ui/ListGroup'
 import GuestMessageBubble from './GuestMessageBubble';
 import useGuestCommunication from '../../hooks/useGuestCommunication';
 import LoadingSpinner from '../LoadingSpinner';
@@ -67,137 +69,132 @@ export default function GuestMessagePanel({ token, guestName }) {
     refresh();
   };
 
-  if (loading && !thread && messages.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center bg-primary-50">
-        <div className="text-center">
-          <LoadingSpinner size="large" />
-          <p className="text-primary-600 mt-4">Checking for existing conversations...</p>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="h-full flex flex-col bg-primary-50">
-      {/* Header */}
-      <div className="bg-white border-b border-primary-200 px-4 py-3 shadow-sm">
+ return (
+    <div className="h-full flex flex-col">
+      {/* Header (blended) */}
+      <Section title="Support chat" subtitle="Get help from our team">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-              <MessageCircle className="w-4 h-4 text-primary-600" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-primary-900">Support Chat</h2>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-primary-600">Get help from our team</p>
-                <div className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-500' : 
-                  connectionStatus === 'CONNECTING' ? 'bg-yellow-400' : 'bg-gray-400'
-                }`} title={`Connection: ${connectionStatus}`}></div>
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={[
+                'inline-block w-2 h-2 rounded-full',
+                connectionStatus === 'SUBSCRIBED'
+                  ? 'bg-emerald-500'
+                  : connectionStatus === 'CONNECTING'
+                  ? 'bg-yellow-400'
+                  : 'bg-slate-400',
+              ].join(' ')}
+              title={`Connection: ${connectionStatus}`}
+            />
+            <span className="text-xs text-slate-600">{connectionStatus}</span>
           </div>
-          
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="p-2 text-primary-600 hover:bg-primary-100 rounded-full transition-colors"
+            className="p-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50"
+            aria-label="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
-      </div>
+      </Section>
 
-      {/* Messages Area */}
-      <div ref={messageListRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-2 space-y-1 ">
-        {loading && messages.length === 0 && (
-          <div className="text-center py-8">
-            <LoadingSpinner />
-            <p className="text-primary-600 mt-2 text-sm">Loading messages...</p>
-          </div>
-        )}
-
-        {!loading && messages.length === 0 && (
-          <div className="text-center py-8 space-y-4">
-            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto">
-              <MessageCircle className="w-8 h-8 text-primary-400" />
+      {/* Messages (inset sheet) */}
+      <div ref={messageListRef} className="flex-1 overflow-y-auto px-4 pt-1 pb-3">
+        <div
+          className="rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur
+                    supports-[backdrop-filter]:bg-white/60 ring-1 ring-slate-200/70 dark:ring-slate-700/60
+                    p-3 min-h-[180px]"
+        >
+          {loading && messages.length === 0 ? (
+            <div className="text-center py-8">
+              <LoadingSpinner />
+              <p className="text-slate-600 mt-2 text-sm">Loading messages...</p>
             </div>
-            <div>
-              <h3 className="text-lg font-medium text-primary-900 mb-2">
-                {!thread ? 'Start a Conversation' : 'Welcome to Support Chat!'}
+          ) : null}
+
+          {!loading && messages.length === 0 ? (
+            <div className="text-center py-8 space-y-2">
+              <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                <MessageCircle className="w-7 h-7 text-slate-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {!thread ? 'Start a conversation' : 'Welcome to support chat'}
               </h3>
-              <p className="text-primary-600 text-sm max-w-sm mx-auto">
-                {!thread 
-                  ? 'Send your first message below to start chatting with our support team. We\'ll get back to you quickly!' 
-                  : 'Need help during your stay? Send us a message and our support team will get back to you quickly.'
-                }
+              <p className="text-xs text-slate-600 max-w-sm mx-auto">
+                {!thread
+                  ? "Send your first message below and we'll reply shortly."
+                  : 'Need help during your stay? Send us a message.'}
               </p>
             </div>
-          </div>
-        )}
+          ) : null}
 
-        {messages.map((message, index) => {
-          // Helper function to format timestamp as HH:MM
-          const formatTimeKey = (timestamp) => {
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: false 
-            });
-          };
+          {messages.map((message, index) => {
+            const formatTimeKey = (timestamp) => {
+              const date = new Date(timestamp)
+              return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+            }
+            const showTimestamp =
+              index === 0 || formatTimeKey(message.created_at) !== formatTimeKey(messages[index - 1].created_at)
 
-          // Determine if we should show timestamp for this message
-          const showTimestamp = index === 0 || 
-            formatTimeKey(message.created_at) !== formatTimeKey(messages[index - 1].created_at);
+            return (
+              <GuestMessageBubble
+                key={message.id}
+                message={message}
+                showTimestamp={showTimestamp}
+                onMarkAsRead={markMessageAsRead}
+              />
+            )
+          })}
 
-          return (
-            <GuestMessageBubble
-              key={message.id}
-              message={message}
-              showTimestamp={showTimestamp}
-              onMarkAsRead={markMessageAsRead}
-            />
-          );
-        })}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Message Composer */}
-      <div className="bg-white border-t border-primary-200 p-4 shadow-sm rounded-lg">
-        <div className="flex items-end space-x-3">
-          <div className="flex-1">
-            <textarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
-              className="w-full resize-none border border-primary-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-transparent max-h-32 transition-colors"
-              rows="1"
-              disabled={sending}
-            />
-            <div className="flex justify-between items-center mt-2 text-xs text-primary-500">
-              <span>Press Enter to send, Shift+Enter for new line</span>
-              <span className={draft.length > 800 ? 'text-red-500' : ''}>{draft.length}/1000</span>
-            </div>
-          </div>
-          
-          <button
-            onClick={handleSend}
-            disabled={!draft.trim() || sending || draft.length > 1000}
-            className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {sending ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-          </button>
+          <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Composer (modern pill) */}
+        {/* Composer (modern pill) */}
+<div className="px-4 pb-3 safe-pb">
+  <div
+    className="composer group rounded-2xl bg-white/90 dark:bg-slate-900/60 backdrop-blur
+               ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm px-3 py-2.5
+               flex items-end gap-2 focus-within:ring-2 focus-within:ring-slate-300"
+  >
+    <textarea
+      ref={textareaRef}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+      }}
+      placeholder="Type your message…"
+      className="flex-1 bg-transparent appearance-none border-0 ring-0 outline-none
+                 focus:border-transparent focus:ring-0 focus:outline-none focus-visible:outline-none
+                 resize-none text-[15px] leading-5 placeholder-slate-400 max-h-32 min-h-[22px]
+                 textarea-no-scrollbar"
+      rows={1}
+      disabled={sending}
+    />
+
+    <button
+      onClick={handleSend}
+      disabled={!draft.trim() || sending || draft.length > 1000}
+      className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-white
+                 hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900
+                 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      aria-label="Send"
+      type="button"
+    >
+      {sending ? (
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+      ) : (
+        <Send className="w-4 h-4" />
+      )}
+    </button>
+  </div>
+</div>
+
+
     </div>
   );
 }

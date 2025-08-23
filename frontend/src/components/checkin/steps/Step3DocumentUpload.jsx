@@ -1,12 +1,22 @@
 import { useState } from 'react'
-import { Upload, FileText, CheckCircle, AlertCircle, Users, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Users,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
 import FileUpload from '../../FileUpload'
 import StepNavigation from '../shared/StepNavigation'
 
-export default function Step3DocumentUpload({ 
-  formData, 
-  onUpdateFormData, 
-  onNext, 
+// blended UI
+import Section from '@/components/ui/Section'
+
+export default function Step3DocumentUpload({
+  formData,
+  onUpdateFormData,
+  onNext,
   onPrevious,
   checkinCompleted = false,
   isModificationMode = false,
@@ -14,26 +24,27 @@ export default function Step3DocumentUpload({
   reservation = null
 }) {
   const [uploadErrors, setUploadErrors] = useState({})
-  const [expandedGuests, setExpandedGuests] = useState(new Set([1])) // Guest 1 always expanded
+  const [expandedGuests, setExpandedGuests] = useState(new Set([1]))
 
-  // Initialize guests array with document upload info
   const numGuests = reservation?.numGuests || formData?.guests?.length || 1
+  const isReadOnly = checkinCompleted && !isModificationMode
+
   const initializeGuestDocuments = () => {
     const guests = []
     for (let i = 1; i <= numGuests; i++) {
-      const existingGuest = guestData?.guests?.find(g => g.guestNumber === i)
-      const formDataGuest = formData?.guests?.find(g => g.guestNumber === i)
-      const formDataDocument = formData?.guestDocuments?.find(d => d.guestNumber === i)
-      
+      const eg = guestData?.guests?.find(g => g.guestNumber === i)
+      const fg = formData?.guests?.find(g => g.guestNumber === i)
+      const fd = formData?.guestDocuments?.find(d => d.guestNumber === i)
+
       guests.push({
         guestNumber: i,
-        firstName: existingGuest?.firstName || formDataGuest?.firstName || '',
-        lastName: existingGuest?.lastName || formDataGuest?.lastName || '',
-        passportUrl: existingGuest?.passportUrl || formDataDocument?.passportUrl || (i === 1 ? formData.passportUrl : null),
-        passportFile: formDataDocument?.passportFile || (i === 1 ? formData.passportFile : null),
-        passportFilePath: formDataDocument?.passportFilePath || (i === 1 ? formData.passportFilePath : null),
+        firstName: eg?.firstName || fg?.firstName || '',
+        lastName: eg?.lastName || fg?.lastName || '',
+        passportUrl: eg?.passportUrl || fd?.passportUrl || (i === 1 ? formData.passportUrl : null),
+        passportFile: fd?.passportFile || (i === 1 ? formData.passportFile : null),
+        passportFilePath: fd?.passportFilePath || (i === 1 ? formData.passportFilePath : null),
         isPrimaryGuest: i === 1,
-        hasDocument: !!(existingGuest?.passportUrl || formDataDocument?.passportUrl || formDataDocument?.hasDocument || (i === 1 && formData.passportUrl))
+        hasDocument: !!(eg?.passportUrl || fd?.passportUrl || fd?.hasDocument || (i === 1 && formData.passportUrl))
       })
     }
     return guests
@@ -43,42 +54,26 @@ export default function Step3DocumentUpload({
 
   const toggleGuestExpansion = (guestNumber) => {
     setExpandedGuests(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(guestNumber)) {
-        // Don't allow collapsing guest 1
-        if (guestNumber !== 1) {
-          newSet.delete(guestNumber)
-        }
+      const ns = new Set(prev)
+      if (ns.has(guestNumber)) {
+        if (guestNumber !== 1) ns.delete(guestNumber)
       } else {
-        newSet.add(guestNumber)
+        ns.add(guestNumber)
       }
-      return newSet
+      return ns
     })
   }
 
   const handleFileUpload = (guestNumber, file, url, filePath) => {
-    setGuestDocuments(prev => prev.map(guest => 
-      guest.guestNumber === guestNumber 
-        ? { 
-            ...guest, 
-            passportFile: file,
-            passportUrl: url,
-            passportFilePath: filePath,
-            hasDocument: true
-          }
-        : guest
+    setGuestDocuments(prev => prev.map(g =>
+      g.guestNumber === guestNumber
+        ? { ...g, passportFile: file, passportUrl: url, passportFilePath: filePath, hasDocument: true }
+        : g
     ))
-    
-    // For backward compatibility, update formData for guest #1
+
     if (guestNumber === 1) {
-      onUpdateFormData({ 
-        passportFile: file,
-        passportUrl: url,
-        passportFilePath: filePath
-      })
+      onUpdateFormData({ passportFile: file, passportUrl: url, passportFilePath: filePath })
     }
-    
-    // Clear error for this guest
     setUploadErrors(prev => ({ ...prev, [`guest${guestNumber}`]: '' }))
   }
 
@@ -87,247 +82,196 @@ export default function Step3DocumentUpload({
   }
 
   const handleDeleteExisting = async (guestNumber) => {
-    setGuestDocuments(prev => prev.map(guest => 
-      guest.guestNumber === guestNumber 
-        ? { 
-            ...guest, 
-            passportFile: null,
-            passportUrl: null,
-            passportFilePath: null,
-            hasDocument: false
-          }
-        : guest
+    setGuestDocuments(prev => prev.map(g =>
+      g.guestNumber === guestNumber
+        ? { ...g, passportFile: null, passportUrl: null, passportFilePath: null, hasDocument: false }
+        : g
     ))
-    
-    // For backward compatibility, update formData for guest #1
     if (guestNumber === 1) {
-      onUpdateFormData({ 
-        passportFile: null,
-        passportUrl: null,
-        passportFilePath: null
-      })
+      onUpdateFormData({ passportFile: null, passportUrl: null, passportFilePath: null })
     }
-    
-    // Clear error for this guest
     setUploadErrors(prev => ({ ...prev, [`guest${guestNumber}`]: '' }))
   }
 
   const handleNext = () => {
-    const newErrors = {}
-    
-    // Validate that all guests have documents uploaded
-    guestDocuments.forEach(guest => {
-      if (!guest.hasDocument && !guest.passportUrl && !guest.passportFile) {
-        newErrors[`guest${guest.guestNumber}`] = `Please upload an ID document for ${guest.firstName && guest.lastName ? `${guest.firstName} ${guest.lastName}` : `Guest ${guest.guestNumber}`}`
+    const errs = {}
+    guestDocuments.forEach(g => {
+      if (!g.hasDocument && !g.passportUrl && !g.passportFile) {
+        const label = g.firstName && g.lastName ? `${g.firstName} ${g.lastName}` : `Guest ${g.guestNumber}`
+        errs[`guest${g.guestNumber}`] = `Please upload an ID document for ${label}`
       }
     })
+    setUploadErrors(errs)
+    if (Object.keys(errs).length > 0) return
 
-    setUploadErrors(newErrors)
-    
-    if (Object.keys(newErrors).length === 0) {
-      // Update formData with all guest documents for submission
-      onUpdateFormData({ 
-        guestDocuments: guestDocuments,
-        // Keep backward compatibility
-        passportFile: guestDocuments[0]?.passportFile,
-        passportUrl: guestDocuments[0]?.passportUrl,
-        passportFilePath: guestDocuments[0]?.passportFilePath
-      })
-      onNext()
-    }
+    onUpdateFormData({
+      guestDocuments,
+      // back-compat
+      passportFile: guestDocuments[0]?.passportFile,
+      passportUrl: guestDocuments[0]?.passportUrl,
+      passportFilePath: guestDocuments[0]?.passportFilePath
+    })
+    onNext()
   }
 
   const allDocumentsUploaded = guestDocuments.every(g => g.hasDocument || g.passportUrl || g.passportFile)
 
-  const renderGuestDocumentUpload = (guest) => {
+  const ErrorBox = ({ children }) => (
+    <div className="mt-3 rounded-xl bg-rose-50/80 ring-1 ring-rose-200 p-2.5 sm:p-3 text-rose-800 text-sm flex items-start">
+      <AlertCircle className="w-4 h-4 mr-2 mt-0.5 shrink-0 text-rose-500" />
+      <div className="break-words">{children}</div>
+    </div>
+  )
+
+  const GuestRow = (guest) => {
     const isExpanded = expandedGuests.has(guest.guestNumber)
     const errorKey = `guest${guest.guestNumber}`
-    
+
     return (
-      <div key={guest.guestNumber} className="border border-primary-200 rounded-lg overflow-hidden">
-        {/* Guest Header */}
-        <div 
-          className={`p-4 cursor-pointer transition-colors ${
-            guest.isPrimaryGuest 
-              ? 'bg-primary-100 border-b border-primary-200' 
-              : 'bg-gray-50 hover:bg-gray-100'
-          }`}
+      <div className="rounded-2xl ring-1 ring-slate-200 bg-white/70 overflow-hidden" key={guest.guestNumber}>
+        {/* Header */}
+        <button
+          type="button"
           onClick={() => !guest.isPrimaryGuest && toggleGuestExpansion(guest.guestNumber)}
+          className={`w-full px-3 sm:px-4 py-3 flex items-center justify-between ${guest.isPrimaryGuest ? 'cursor-default' : 'hover:bg-white/80'}`}
+          aria-expanded={guest.isPrimaryGuest ? true : isExpanded}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Users className="w-5 h-5 mr-3 text-primary-600" />
-              <div>
-                <h4 className="font-semibold text-primary-900">
-                  {guest.isPrimaryGuest ? 'Primary Guest' : `Additional Guest ${guest.guestNumber}`}
+          <div className="flex items-center gap-3 min-w-0">
+            <Users className="w-5 h-5 text-slate-600 shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-semibold text-slate-900 truncate">
+                  {guest.isPrimaryGuest ? 'Primary guest' : `Guest ${guest.guestNumber}`}
                 </h4>
-                <p className="text-sm text-primary-600">
-                  {guest.firstName && guest.lastName 
-                    ? `${guest.firstName} ${guest.lastName}` 
-                    : `Guest ${guest.guestNumber}`
-                  }
-                </p>
+                {guest.hasDocument && <CheckCircle className="w-4 h-4 text-emerald-600" />}
               </div>
-            </div>
-            <div className="flex items-center">
-              {guest.hasDocument && (
-                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              )}
-              {!guest.isPrimaryGuest && (
-                isExpanded ? 
-                  <ChevronUp className="w-5 h-5 text-primary-600" /> :
-                  <ChevronDown className="w-5 h-5 text-primary-600" />
-              )}
+              <p className="text-xs text-slate-600 truncate">
+                {guest.firstName && guest.lastName
+                  ? `${guest.firstName} ${guest.lastName}`
+                  : `Guest ${guest.guestNumber}`}
+              </p>
             </div>
           </div>
-        </div>
+          {!guest.isPrimaryGuest && (
+            isExpanded ? <ChevronUp className="w-5 h-5 text-slate-600" /> : <ChevronDown className="w-5 h-5 text-slate-600" />
+          )}
+        </button>
 
-        {/* Document Upload Section - Always expanded for primary guest */}
+        {/* Body */}
         {(isExpanded || guest.isPrimaryGuest) && (
-          <div className="p-4 sm:p-6 bg-white">
-            <FileUpload
-              onFileUpload={(file, url, filePath) => handleFileUpload(guest.guestNumber, file, url, filePath)}
-              onError={(error) => handleUploadError(guest.guestNumber, error)}
-              onDeleteExisting={() => handleDeleteExisting(guest.guestNumber)}
-              initialImageUrl={guest.passportUrl}
-              accept="image/*"
-              maxSize={10 * 1024 * 1024} // 10MB
-              className="w-full"
-              showFileName={true}
-              disabled={isReadOnly}
-            />
-            
-            {/* Upload Error for this guest */}
-            {uploadErrors[errorKey] && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-                <div className="flex items-start">
-                  <AlertCircle className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-red-800 break-words">{uploadErrors[errorKey]}</p>
-                </div>
-              </div>
-            )}
+          <div className="px-3 sm:px-4 pb-4 sm:pb-5">
+            <div className="rounded-xl bg-white/80 ring-1 ring-slate-200 p-3 sm:p-4">
+              <FileUpload
+                onFileUpload={(file, url, filePath) => handleFileUpload(guest.guestNumber, file, url, filePath)}
+                onError={(error) => handleUploadError(guest.guestNumber, error)}
+                onDeleteExisting={() => handleDeleteExisting(guest.guestNumber)}
+                initialImageUrl={guest.passportUrl}
+                initialFilePath={guest.passportFilePath}
+                accept="image/*"
+                maxSize={10 * 1024 * 1024}
+                className="w-full"
+                showFileName
+                disabled={isReadOnly}
+              />
+              <p className="mt-2 text-[11px] text-slate-500">
+                Accepted: JPG, PNG. Max 10MB. Make sure the name and photo are clearly visible.
+              </p>
+            </div>
+
+            {uploadErrors[errorKey] && <ErrorBox>{uploadErrors[errorKey]}</ErrorBox>}
           </div>
         )}
       </div>
     )
   }
-  
-  // Determine if we should show read-only view
-  const isReadOnly = checkinCompleted && !isModificationMode
 
   return (
-    <div>
-      <div className="text-center mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-primary-900 mb-2">
-          Document Upload
-        </h2>
-        <p className="text-sm sm:text-base text-primary-600">
-          {isReadOnly 
-            ? "Your submitted identification documents" 
-            : isModificationMode 
-              ? "Update identification documents"
-              : `Please upload ID documents for ${numGuests > 1 ? 'all guests' : 'check-in'}`
-          }
-        </p>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
+      <Section
+        title="Document upload"
+        subtitle={
+          isReadOnly
+            ? 'Your submitted identification documents'
+            : isModificationMode
+            ? 'Update identification documents'
+            : `Please upload ID documents for ${numGuests > 1 ? 'all guests' : 'check-in'}`
+        }
+        className="pt-2"
+      />
 
-      {/* Read-only confirmation when check-in is completed */}
+      {/* Read-only banner */}
       {isReadOnly && (
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-6">
-          <div className="flex items-center mb-4">
-            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600 mr-3 flex-shrink-0" />
-            <h3 className="text-base sm:text-lg font-semibold text-primary-900">
-              Documents Submitted
-            </h3>
+        <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900">Documents submitted</h3>
           </div>
-          <p className="text-sm sm:text-base text-primary-800">
-            All identification documents have been successfully uploaded and are currently under review.
+          <p className="text-sm text-slate-700">
+            All identification documents have been uploaded and are currently under review.
           </p>
         </div>
       )}
 
-      {/* Multi-guest progress indicator */}
+      {/* Multi-guest progress */}
       {numGuests > 1 && (
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <FileText className="w-5 h-5 text-blue-600 mr-2" />
-              <span className="text-sm font-medium text-blue-900">
-                Document Upload for {numGuests} guests
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-slate-600" />
+              <span className="text-sm font-medium text-slate-900">
+                Document upload for {numGuests} guests
               </span>
             </div>
-            <div className="text-sm text-blue-700">
+            <div className="text-sm text-slate-600">
               {guestDocuments.filter(g => g.hasDocument || g.passportUrl || g.passportFile).length} of {numGuests} uploaded
             </div>
           </div>
         </div>
       )}
 
-      {/* Upload Instructions */}
-      <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 sm:p-6 mb-6 sm:mb-8">
-        <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4">
-          Document Requirements
-        </h3>
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <ul className="text-sm sm:text-base text-primary-700 space-y-2">
-              <li>• Passport (preferred)</li>
-              <li>• Driver's License</li>
-              <li>• Government-issued ID</li>
-            </ul>
-          </div>          
-        </div>
+      {/* Requirements (soft sheet) */}
+      <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
+        <div className="text-sm sm:text-base font-semibold text-slate-900 mb-2">Document requirements</div>
+        <ul className="text-sm text-slate-700 space-y-1">
+          <li>• Passport (preferred)</li>
+          <li>• Driver’s license</li>
+          <li>• Government-issued ID</li>
+        </ul>
       </div>
 
-      {/* Multi-Guest Document Upload Forms */}
-      <div className="space-y-4 mb-6">
-        <h3 className="text-base sm:text-lg font-semibold text-primary-900 mb-4 flex items-center">
-          <FileText className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
-          Upload Documents
-          {numGuests > 1 && (
-            <span className="ml-2 text-sm text-primary-600 font-normal">
-              ({numGuests} guests)
-            </span>
-          )}
-        </h3>
-        
-        {guestDocuments.map(renderGuestDocumentUpload)}
+      {/* Guest accordions */}
+      <div className="space-y-3">
+        {guestDocuments.map(GuestRow)}
       </div>
 
-      {/* Expand all additional guests button */}
+      {/* Expand/collapse helpers */}
       {numGuests > 1 && !isReadOnly && (
-        <div className="text-center mb-6">
+        <div className="text-center">
           <button
             type="button"
             onClick={() => {
               const allExpanded = guestDocuments.slice(1).every(g => expandedGuests.has(g.guestNumber))
-              if (allExpanded) {
-                // Collapse all except guest 1
-                setExpandedGuests(new Set([1]))
-              } else {
-                // Expand all guests
-                setExpandedGuests(new Set(guestDocuments.map(g => g.guestNumber)))
-              }
+              setExpandedGuests(allExpanded ? new Set([1]) : new Set(guestDocuments.map(g => g.guestNumber)))
             }}
-            className="text-sm text-primary-600 hover:text-primary-800 flex items-center mx-auto"
+            className="text-sm text-slate-700 hover:text-slate-900 inline-flex items-center"
           >
             <Users className="w-4 h-4 mr-2" />
-            {guestDocuments.slice(1).every(g => expandedGuests.has(g.guestNumber)) 
-              ? 'Collapse additional guests' 
-              : 'Expand all additional guests'
-            }
+            {guestDocuments.slice(1).every(g => expandedGuests.has(g.guestNumber))
+              ? 'Collapse additional guests'
+              : 'Expand all additional guests'}
           </button>
         </div>
       )}
 
-      {/* Security Notice */}
-      <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 sm:p-4 mb-6 sm:mb-8">
+      {/* Security note */}
+      <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
         <div className="flex items-start">
-          <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary-500 mr-3 mt-0.5 flex-shrink-0" />
+          <FileText className="w-4 h-4 text-slate-600 mr-2 mt-0.5" />
           <div>
-            <h4 className="text-sm font-semibold text-primary-900 mb-2">Why do we need these documents?</h4>
-            <ul className="text-primary-600 text-xs sm:text-sm space-y-1">
-              <li>• Identity verification and security purposes</li>
+            <div className="text-sm font-semibold text-slate-900 mb-1">Why we need these</div>
+            <ul className="text-xs sm:text-sm text-slate-600 space-y-1">
+              <li>• Identity verification and security</li>
               <li>• Compliance with local registration laws</li>
               <li>• Property access and safety requirements</li>
             </ul>
