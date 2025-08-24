@@ -1,0 +1,18 @@
+{
+  "dashboard": "Dashboard",
+  "communication": "Communication",
+  "calendar": "Calendar",
+  "reservationManagement": "Reservation",
+  "cleaningManagement": "Cleaning",
+  "properties": "Properties",
+  "myProperties": "My Properties",
+  "pricing": "Pricing",
+  "marketSettings": "Market",
+  "users": "Users",
+  "myTasks": "My Tasks",
+  "overview": "Reservation",
+  "propertyInfo": "Property Info",
+  "localGuide": "Local Guide",
+  "chat": "Documents",
+  "staylabel": "Staylabel"
+}

@@ -1,11 +1,14 @@
 import { CheckCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export default function StepProgress({ currentStep, totalSteps = 4 }) {
+  const { t } = useTranslation('guest')
+  
   const steps = [
-    { number: 1, title: 'Reservation' },
-    { number: 2, title: 'Guest Info' },
-    { number: 3, title: 'Documents' },
-    { number: 4, title: 'Agreement' }
+    { number: 1, title: t('stepProgress.steps.reservation') },
+    { number: 2, title: t('stepProgress.steps.guestInfo') },
+    { number: 3, title: t('stepProgress.steps.documents') },
+    { number: 4, title: t('stepProgress.steps.agreement') }
   ]
 
   return (
@@ -58,7 +61,11 @@ export default function StepProgress({ currentStep, totalSteps = 4 }) {
 
       {/* Mobile caption */}
       <div className="sm:hidden mt-3 text-center text-sm text-slate-600">
-        Step {currentStep} of {totalSteps}: {steps[currentStep - 1]?.title}
+        {t('stepProgress.stepOf', { 
+          current: currentStep, 
+          total: totalSteps, 
+          title: steps[currentStep - 1]?.title 
+        })}
       </div>
     </div>
   )

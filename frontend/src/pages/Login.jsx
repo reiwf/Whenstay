@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
+import { initAdminLanguage } from '../i18n/config'
 
 const Login = () => {
   const [email, setEmail] = useState('')
@@ -12,6 +14,12 @@ const Login = () => {
   const { login, isLoggedIn, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation('auth')
+  
+  // Initialize admin language on component mount
+  useEffect(() => {
+    initAdminLanguage()
+  }, [])
   
   // Redirect if already logged in
   useEffect(() => {
@@ -29,14 +37,14 @@ const Login = () => {
     try {
       // Validate inputs
       if (!email || !password) {
-        setError('Please enter both email and password')
+        setError(t('errors.required'))
         return
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(email)) {
-        setError('Please enter a valid email address')
+        setError(t('errors.invalidEmail'))
         return
       }
 
@@ -133,10 +141,10 @@ const Login = () => {
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
               <h2 className="text-2xl sm:text-3xl font-bold text-primary-900 mb-2">
-                Sign In
+                {t('title')}
               </h2>
               <p className="text-primary-600">
-                Access your dashboard and manage your properties
+                {t('subtitle')}
               </p>
             </div>
             
@@ -144,7 +152,7 @@ const Login = () => {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-primary-700 mb-2">
-                    Email Address
+                    {t('emailLabel')}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -159,7 +167,7 @@ const Login = () => {
                       autoComplete="email"
                       required
                       className="block w-full pl-10 pr-3 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
-                      placeholder="Enter your email"
+                      placeholder={t('emailPlaceholder')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={isLoading}
@@ -169,7 +177,7 @@ const Login = () => {
 
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-primary-700 mb-2">
-                    Password
+                    {t('passwordLabel')}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -184,7 +192,7 @@ const Login = () => {
                       autoComplete="current-password"
                       required
                       className="block w-full pl-10 pr-12 py-3 border border-primary-300 rounded-lg placeholder-primary-500 text-primary-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent transition-colors sm:text-sm"
-                      placeholder="Enter your password"
+                      placeholder={t('passwordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={isLoading}
@@ -235,14 +243,14 @@ const Login = () => {
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Signing in...
+                    {t('signingIn')}
                   </>
                 ) : (
                   <>
                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                     </svg>
-                    Sign In
+                    {t('signInButton')}
                   </>
                 )}
               </button>

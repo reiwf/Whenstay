@@ -10,37 +10,23 @@ const { supabaseAdmin } = require('../config/supabase');
 async function getGroupBookingInfo(reservationId) {
   try {
     const groupInfo = await reservationService.isGroupBooking(reservationId);
-    console.log('Initial group check result:', groupInfo);
-    
+
     if (!groupInfo || !groupInfo.isGroupBooking) {
-      console.log('✗ Not a group booking (no booking_group_master_id)');
       return { isGroupBooking: false };
     }
     
-    const masterBookingId = groupInfo.masterBookingId;
-    console.log('Getting group reservations for master ID:', masterBookingId);
-    
+    const masterBookingId = groupInfo.masterBookingId;   
     const groupReservations = await reservationService.getGroupBookingReservations(masterBookingId);
     const groupSummary = await reservationService.getGroupBookingSummary(masterBookingId);
     
     // Strict validation: Only return group booking info if there are actually multiple rooms
     const totalRooms = groupReservations ? groupReservations.length : 0;
     const isActuallyGroupBooking = totalRooms > 1;
-    
-    console.log('Group booking validation:', { 
-      reservationId, 
-      masterBookingId,
-      totalRooms, 
-      isActuallyGroupBooking,
-      groupInfo 
-    });
-    
+        
     if (!isActuallyGroupBooking) {
-      console.log('✗ Single reservation detected (totalRooms <= 1), not returning group booking info');
       return { isGroupBooking: false };
     }
     
-    console.log('✓ Confirmed group booking with', totalRooms, 'rooms');
     return {
       isGroupBooking: true,
       groupReservations,

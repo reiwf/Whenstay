@@ -3,7 +3,11 @@
 // Pretty renderer for "Accommodation Tax" TEXT descriptions.
 // Parses common patterns and falls back to a readable paragraph.
 
+import { useTranslation } from 'react-i18next'
+
 function TaxDescription({ desc }) {
+  const { t } = useTranslation('guest')
+  
   if (!desc) return null
 
   // Normalize punctuation/spaces
@@ -26,7 +30,7 @@ function TaxDescription({ desc }) {
 
   const simplify = (r) => {
     let s = r
-      .replace(/</g, 'Under ')
+      .replace(/</g, t('taxDescription.under'))
       .replace(/>=|≥/g, '≥ ')
       .replace(/<=|≤/g, '≤ ')
       .replace(/~/g, ' – ')
@@ -48,7 +52,7 @@ function TaxDescription({ desc }) {
   return (
     <div className="mt-2">
       <p className="text-xs text-slate-600 mb-2">
-        Tax rates by amount
+        {t('taxDescription.taxRatesByAmount')}
       </p>
       <div className="rounded-xl bg-white/80 dark:bg-slate-900/60 backdrop-blur
                       ring-1 ring-slate-200/70 dark:ring-slate-700/60 divide-y
@@ -60,7 +64,7 @@ function TaxDescription({ desc }) {
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-slate-500 mt-2">Per person per night in Japanese Yen</p>
+      <p className="text-[11px] text-slate-500 mt-2">{t('taxDescription.perPersonPerNight')}</p>
     </div>
   )
 }

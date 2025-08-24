@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Section from '../ui/Section'
 import { ListGroup } from '../ui/ListGroup'
 import GuestMessageBubble from './GuestMessageBubble';
@@ -7,6 +8,7 @@ import useGuestCommunication from '../../hooks/useGuestCommunication';
 import LoadingSpinner from '../LoadingSpinner';
 
 export default function GuestMessagePanel({ token, guestName }) {
+  const { t } = useTranslation('guest');
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -73,7 +75,7 @@ export default function GuestMessagePanel({ token, guestName }) {
  return (
     <div className="h-full flex flex-col">
       {/* Header (blended) */}
-      <Section title="Support chat" subtitle="Get help from our team">
+      <Section title={t('supportChat.title')} subtitle={t('supportChat.subtitle')}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span
@@ -85,7 +87,7 @@ export default function GuestMessagePanel({ token, guestName }) {
                   ? 'bg-yellow-400'
                   : 'bg-slate-400',
               ].join(' ')}
-              title={`Connection: ${connectionStatus}`}
+              title={t('supportChat.connectionStatus', { status: connectionStatus })}
             />
             <span className="text-xs text-slate-600">{connectionStatus}</span>
           </div>
@@ -93,7 +95,7 @@ export default function GuestMessagePanel({ token, guestName }) {
             onClick={handleRefresh}
             disabled={loading}
             className="p-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50"
-            aria-label="Refresh"
+            aria-label={t('supportChat.refresh')}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -110,7 +112,7 @@ export default function GuestMessagePanel({ token, guestName }) {
           {loading && messages.length === 0 ? (
             <div className="text-center py-8">
               <LoadingSpinner />
-              <p className="text-slate-600 mt-2 text-sm">Loading messages...</p>
+              <p className="text-slate-600 mt-2 text-sm">{t('supportChat.loadingMessages')}</p>
             </div>
           ) : null}
 
@@ -120,12 +122,12 @@ export default function GuestMessagePanel({ token, guestName }) {
                 <MessageCircle className="w-7 h-7 text-slate-400" />
               </div>
               <h3 className="text-sm font-semibold text-slate-900">
-                {!thread ? 'Start a conversation' : 'Welcome to support chat'}
+                {!thread ? t('supportChat.emptyState.noThread.title') : t('supportChat.emptyState.hasThread.title')}
               </h3>
               <p className="text-xs text-slate-600 max-w-sm mx-auto">
                 {!thread
-                  ? "Send your first message below and we'll reply shortly."
-                  : 'Need help during your stay? Send us a message.'}
+                  ? t('supportChat.emptyState.noThread.description')
+                  : t('supportChat.emptyState.hasThread.description')}
               </p>
             </div>
           ) : null}
@@ -152,49 +154,46 @@ export default function GuestMessagePanel({ token, guestName }) {
         </div>
       </div>
 
-      {/* Composer (modern pill) */}
         {/* Composer (modern pill) */}
-<div className="px-4 pb-3 safe-pb">
-  <div
-    className="composer group rounded-2xl bg-white/90 dark:bg-slate-900/60 backdrop-blur
-               ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm px-3 py-2.5
-               flex items-end gap-2 focus-within:ring-2 focus-within:ring-slate-300"
-  >
-    <textarea
-      ref={textareaRef}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-      }}
-      placeholder="Type your message…"
-      className="flex-1 bg-transparent appearance-none border-0 ring-0 outline-none
-                 focus:border-transparent focus:ring-0 focus:outline-none focus-visible:outline-none
-                 resize-none text-[15px] leading-5 placeholder-slate-400 max-h-32 min-h-[22px]
-                 textarea-no-scrollbar"
-      rows={1}
-      disabled={sending}
-    />
+        <div className="px-4 pb-3 safe-pb">
+          <div
+            className="composer group rounded-2xl bg-white/90 dark:bg-slate-900/60 backdrop-blur
+                      ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm px-3 py-2.5
+                      flex items-end gap-2 focus-within:ring-2 focus-within:ring-slate-300"
+          >
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+              }}
+              placeholder={t('supportChat.composer.placeholder')}
+              className="flex-1 bg-transparent appearance-none border-0 ring-0 outline-none
+                        focus:border-transparent focus:ring-0 focus:outline-none focus-visible:outline-none
+                        resize-none text-[15px] leading-5 placeholder-slate-400 max-h-32 min-h-[22px]
+                        textarea-no-scrollbar"
+              rows={1}
+              disabled={sending}
+            />
 
-    <button
-      onClick={handleSend}
-      disabled={!draft.trim() || sending || draft.length > 1000}
-      className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-white
-                 hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900
-                 disabled:opacity-50 disabled:cursor-not-allowed transition"
-      aria-label="Send"
-      type="button"
-    >
-      {sending ? (
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-      ) : (
-        <Send className="w-4 h-4" />
-      )}
-    </button>
-  </div>
-</div>
-
-
+            <button
+              onClick={handleSend}
+              disabled={!draft.trim() || sending || draft.length > 1000}
+              className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-white
+                        hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900
+                        disabled:opacity-50 disabled:cursor-not-allowed transition"
+              aria-label={t('supportChat.composer.sendButton')}
+              type="button"
+            >
+              {sending ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
     </div>
   );
 }

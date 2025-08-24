@@ -1,0 +1,19 @@
+{
+  "title": "ダッシュボード",
+  "overview": "概要",
+  "quickStats": "クイック統計",
+  "totalReservations": "予約総数",
+  "activeGuests": "アクティブゲスト",
+  "checkinsToday": "本日のチェックイン",
+  "checkoutsToday": "本日のチェックアウト",
+  "occupancyRate": "稼働率",
+  "averageRate": "平均料金",
+  "revenue": "収益",
+  "recentActivity": "最近のアクティビティ",
+  "upcomingArrivals": "今後の到着",
+  "upcomingDepartures": "今後の出発",
+  "pendingTasks": "保留中のタスク",
+  "alerts": "アラート",
+  "quickActions": "クイックアクション",
+  "viewAll": "すべて表示"
+}

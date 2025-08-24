@@ -36,16 +36,12 @@ router.get('/:token/profile', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
-    console.log(`👤 [GUEST PROFILE] Getting guest profile for token: ${token}`);
-
     // Get guest profile data with complete reservation history
     const profileData = await reservationService.getGuestProfile(token);
 
     if (!profileData) {
       return res.status(404).json({ error: 'Guest profile not found or invalid token' });
     }
-
-    console.log(`✅ [GUEST PROFILE] Found profile for guest with ${profileData.reservationHistory.length} reservations`);
 
     res.json(profileData);
   } catch (error) {
@@ -86,7 +82,6 @@ router.get('/:token/thread', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
-    console.log(`🎯 [GUEST THREAD] Getting thread for token: ${token}`);
 
     // Get reservation data to validate token and get reservation info
     const dashboardData = await reservationService.getGuestAppData(token);
@@ -95,14 +90,12 @@ router.get('/:token/thread', async (req, res) => {
     }
 
     const reservationId = dashboardData.reservation.id;
-    console.log(`🎯 [GUEST THREAD] Found reservation: ${reservationId}`);
 
     // ENHANCED: Use group-aware thread lookup to find existing unified threads
     const communicationService = require('../services/communicationService');
     
     // Check if this is part of a group booking
     const groupInfo = await communicationService.getGroupBookingInfo(reservationId);
-    console.log(`🎯 [GUEST THREAD] Group booking info:`, groupInfo);
 
     let thread = null;
 
@@ -137,10 +130,9 @@ router.get('/:token/thread', async (req, res) => {
         console.log(`✅ [GUEST THREAD] Found existing group thread: ${groupThread.id} for master reservation: ${masterReservationId}`);
         thread = groupThread;
       } else {
-        console.log(`❌ [GUEST THREAD] No existing group thread found for master reservation: ${masterReservationId}`);
       }
     } else {
-      console.log(`🎯 [GUEST THREAD] Individual booking detected. Looking for individual thread for reservation: ${reservationId}`);
+
       
       // For individual bookings, look for thread using this reservation ID
       const { data: individualThread, error: individualThreadError } = await supabase
@@ -168,15 +160,12 @@ router.get('/:token/thread', async (req, res) => {
         console.log(`✅ [GUEST THREAD] Found existing individual thread: ${individualThread.id} for reservation: ${reservationId}`);
         thread = individualThread;
       } else {
-        console.log(`❌ [GUEST THREAD] No existing individual thread found for reservation: ${reservationId}`);
       }
     }
 
     // CHANGED: No longer auto-create threads - return null if none exists
     if (thread) {
-      console.log(`🎯 [GUEST THREAD] Returning existing thread: ${thread.id} (status: ${thread.status})`);
     } else {
-      console.log(`🎯 [GUEST THREAD] No existing thread found, returning null (thread will be created on first message)`);
     }
 
     res.json({ thread });
@@ -481,13 +470,9 @@ router.get('/:token/services', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
-    console.log(`🛍️ [GUEST SERVICES] Getting services for token: ${token}`);
-
     // Get available services for this guest
     const guestServicesService = require('../services/guestServicesService');
     const services = await guestServicesService.getAvailableServicesForGuest(token);
-
-    console.log(`✅ [GUEST SERVICES] Found ${services.length} services for guest`);
 
     res.json(services);
 

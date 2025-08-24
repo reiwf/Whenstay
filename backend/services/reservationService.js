@@ -99,7 +99,6 @@ class ReservationService {
   // Get reservation by check-in token
   async getReservationByToken(checkinToken) {
     try {
-      console.log('Searching for reservation with token:', checkinToken, typeof checkinToken);
       
       // Try exact string match first
       let { data, error } = await supabaseAdmin
@@ -133,7 +132,6 @@ class ReservationService {
         }
       }
 
-      console.log('Found reservation:', data?.id, data?.booking_name);
       return data;
     } catch (error) {
       console.error('Database error fetching reservation by token:', error);
@@ -1839,7 +1837,8 @@ class ReservationService {
           transport_access: reservationData.transport_access,
           amenities: reservationData.property_amenities,
           location_info: reservationData.location_info,
-          access_time: reservationData.access_time, // Original property access time
+          luggage_info: reservationData.luggage_info,
+          access_time: reservationData.access_time, 
           departure_time: reservationData.departure_time || '10:00:00' // Original property departure time
         },
         

@@ -14,22 +14,58 @@ export function ListGroup({ children, inset = true, className = '' }) {
   )
 }
 
-export function ListRow({ left, right, onClick, className = '' }) {
-  const Comp = onClick ? 'button' : 'div'
-  return (
-    <Comp
-      onClick={onClick}
-      className={[
-        'w-full text-left px-4 py-3 flex items-center justify-between gap-3',
-        onClick ? 'active:bg-slate-100/70 dark:active:bg-slate-800/50' : '',
-        className,
-      ].join(' ')}
-    >
-      <div className="min-w-0 text-sm text-slate-800 dark:text-slate-100">{left}</div>
-      <div className="shrink-0 text-sm text-slate-600 dark:text-slate-300">{right}</div>
-    </Comp>
-  )
-}
+// ListRow.jsx
+  export function ListRow({
+    left,
+    right,
+    onClick,
+    className = '',
+    rightTitle,          // tooltip (defaults to string value)
+    rightLines = 1,      // 1 = single-line ellipsis, >1 = line clamp
+    rightAlign = 'right',
+    rightClass = '',
+  }) {
+    const Comp = onClick ? 'button' : 'div'
+    const clamp =
+      rightLines <= 1 ? 'truncate' : `line-clamp-${Math.min(Math.max(rightLines, 2), 6)}`
+
+    return (
+      <Comp
+        type={onClick ? 'button' : undefined}
+        onClick={onClick}
+        className={[
+          'w-full text-left px-4 py-3 flex items-center gap-3',
+          onClick ? 'active:bg-slate-100/70 dark:active:bg-slate-800/50' : '',
+          className,
+        ].join(' ')}
+      >
+        {/* label/icon stays fixed width */}
+        <div className="shrink-0 text-sm text-slate-800 dark:text-slate-100">
+          {left}
+        </div>
+
+        {/* value flexes + can shrink */}
+        <div
+          className={[
+            'flex-1 min-w-0',
+            rightAlign === 'right' ? 'text-right' : 'text-left',
+          ].join(' ')}
+        >
+          <span
+            className={[
+              'block text-sm text-slate-900 dark:text-slate-100',
+              clamp,
+              rightClass,
+            ].join(' ')}
+            title={rightTitle ?? (typeof right === 'string' ? right : undefined)}
+          >
+            {right}
+          </span>
+        </div>
+      </Comp>
+    )
+  }
+
 
 export function PlainGroup({ children, className = '' }) {
   return (

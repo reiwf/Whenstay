@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   FileText,
   CheckCircle,
@@ -23,6 +24,7 @@ export default function Step3DocumentUpload({
   guestData = null,
   reservation = null
 }) {
+  const { t } = useTranslation('guest')
   const [uploadErrors, setUploadErrors] = useState({})
   const [expandedGuests, setExpandedGuests] = useState(new Set([1]))
 
@@ -97,8 +99,8 @@ export default function Step3DocumentUpload({
     const errs = {}
     guestDocuments.forEach(g => {
       if (!g.hasDocument && !g.passportUrl && !g.passportFile) {
-        const label = g.firstName && g.lastName ? `${g.firstName} ${g.lastName}` : `Guest ${g.guestNumber}`
-        errs[`guest${g.guestNumber}`] = `Please upload an ID document for ${label}`
+        const label = g.firstName && g.lastName ? `${g.firstName} ${g.lastName}` : t('step3.guestNumber', { number: g.guestNumber })
+        errs[`guest${g.guestNumber}`] = t('step3.errors.uploadRequired', { name: label })
       }
     })
     setUploadErrors(errs)
@@ -141,14 +143,14 @@ export default function Step3DocumentUpload({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold text-slate-900 truncate">
-                  {guest.isPrimaryGuest ? 'Primary guest' : `Guest ${guest.guestNumber}`}
+                  {guest.isPrimaryGuest ? t('step3.primaryGuest') : t('step3.guestNumber', { number: guest.guestNumber })}
                 </h4>
                 {guest.hasDocument && <CheckCircle className="w-4 h-4 text-emerald-600" />}
               </div>
               <p className="text-xs text-slate-600 truncate">
                 {guest.firstName && guest.lastName
                   ? `${guest.firstName} ${guest.lastName}`
-                  : `Guest ${guest.guestNumber}`}
+                  : t('step3.guestNumber', { number: guest.guestNumber })}
               </p>
             </div>
           </div>
@@ -174,7 +176,7 @@ export default function Step3DocumentUpload({
                 disabled={isReadOnly}
               />
               <p className="mt-2 text-[11px] text-slate-500">
-                Accepted: JPG, PNG. Max 10MB. Make sure the name and photo are clearly visible.
+                {t('step3.acceptedFormats')}
               </p>
             </div>
 
@@ -189,13 +191,13 @@ export default function Step3DocumentUpload({
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <Section
-        title="Document upload"
+        title={t('step3.title')}
         subtitle={
           isReadOnly
-            ? 'Your submitted identification documents'
+            ? t('step3.subtitleReadOnly')
             : isModificationMode
-            ? 'Update identification documents'
-            : `Please upload ID documents for ${numGuests > 1 ? 'all guests' : 'check-in'}`
+            ? t('step3.subtitleModification')
+            : t('step3.subtitle', { guestType: numGuests > 1 ? t('step3.subtitleMultiple') : t('step3.subtitleSingle') })
         }
         className="pt-2"
       />
@@ -205,10 +207,10 @@ export default function Step3DocumentUpload({
         <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-1">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-sm sm:text-base font-semibold text-slate-900">Documents submitted</h3>
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900">{t('step3.documentsSubmitted')}</h3>
           </div>
           <p className="text-sm text-slate-700">
-            All identification documents have been uploaded and are currently under review.
+            {t('step3.documentsSubmittedDesc')}
           </p>
         </div>
       )}
@@ -220,11 +222,14 @@ export default function Step3DocumentUpload({
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-slate-600" />
               <span className="text-sm font-medium text-slate-900">
-                Document upload for {numGuests} guests
+                {t('step3.documentUploadFor', { count: numGuests })}
               </span>
             </div>
             <div className="text-sm text-slate-600">
-              {guestDocuments.filter(g => g.hasDocument || g.passportUrl || g.passportFile).length} of {numGuests} uploaded
+              {t('step3.uploaded', { 
+                count: guestDocuments.filter(g => g.hasDocument || g.passportUrl || g.passportFile).length, 
+                total: numGuests 
+              })}
             </div>
           </div>
         </div>
@@ -232,11 +237,11 @@ export default function Step3DocumentUpload({
 
       {/* Requirements (soft sheet) */}
       <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
-        <div className="text-sm sm:text-base font-semibold text-slate-900 mb-2">Document requirements</div>
+        <div className="text-sm sm:text-base font-semibold text-slate-900 mb-2">{t('step3.documentRequirements')}</div>
         <ul className="text-sm text-slate-700 space-y-1">
-          <li>• Passport (preferred)</li>
-          <li>• Driver’s license</li>
-          <li>• Government-issued ID</li>
+          <li>{t('step3.passport')}</li>
+          <li>{t('step3.driversLicense')}</li>
+          <li>{t('step3.governmentId')}</li>
         </ul>
       </div>
 
@@ -258,8 +263,8 @@ export default function Step3DocumentUpload({
           >
             <Users className="w-4 h-4 mr-2" />
             {guestDocuments.slice(1).every(g => expandedGuests.has(g.guestNumber))
-              ? 'Collapse additional guests'
-              : 'Expand all additional guests'}
+              ? t('step3.collapseAdditionalGuests')
+              : t('step3.expandAllAdditionalGuests')}
           </button>
         </div>
       )}
@@ -269,11 +274,11 @@ export default function Step3DocumentUpload({
         <div className="flex items-start">
           <FileText className="w-4 h-4 text-slate-600 mr-2 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-slate-900 mb-1">Why we need these</div>
+            <div className="text-sm font-semibold text-slate-900 mb-1">{t('step3.whyWeNeedThese')}</div>
             <ul className="text-xs sm:text-sm text-slate-600 space-y-1">
-              <li>• Identity verification and security</li>
-              <li>• Compliance with local registration laws</li>
-              <li>• Property access and safety requirements</li>
+              <li>{t('step3.securityReasons.identity')}</li>
+              <li>{t('step3.securityReasons.compliance')}</li>
+              <li>{t('step3.securityReasons.safety')}</li>
             </ul>
           </div>
         </div>
@@ -284,7 +289,7 @@ export default function Step3DocumentUpload({
         totalSteps={4}
         onNext={handleNext}
         onPrevious={onPrevious}
-        nextButtonText="Continue"
+        nextButtonText={t('step3.continue')}
         isNextDisabled={!allDocumentsUploaded}
       />
     </div>

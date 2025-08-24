@@ -1,0 +1,19 @@
+{
+  "title": "Dashboard",
+  "overview": "Overview",
+  "quickStats": "Quick Stats",
+  "totalReservations": "Total Reservations",
+  "activeGuests": "Active Guests",
+  "checkinsToday": "Check-ins Today",
+  "checkoutsToday": "Check-outs Today",
+  "occupancyRate": "Occupancy Rate",
+  "averageRate": "Average Rate",
+  "revenue": "Revenue",
+  "recentActivity": "Recent Activity",
+  "upcomingArrivals": "Upcoming Arrivals",
+  "upcomingDepartures": "Upcoming Departures",
+  "pendingTasks": "Pending Tasks",
+  "alerts": "Alerts",
+  "quickActions": "Quick Actions",
+  "viewAll": "View All"
+}

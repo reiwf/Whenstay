@@ -16,6 +16,7 @@ import PhoneInput from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import flags from 'react-phone-number-input/flags'
 import './PhoneInput.css'
+import { useTranslation } from 'react-i18next'
 
 import StepNavigation from '../shared/StepNavigation'
 import TimePicker from '@/components/ui/timepick'
@@ -34,6 +35,7 @@ export default function Step2GuestInformation({
   isModificationMode = false,
   guestData = null
 }) {
+  const { t } = useTranslation('guest')
   const [errors, setErrors] = useState({})
   const [expandedGuests, setExpandedGuests] = useState(new Set([1]))
   const numGuests = reservation?.numGuests || 1
@@ -79,19 +81,19 @@ export default function Step2GuestInformation({
     const next = {}
     guests.forEach((g) => {
       const key = `guest${g.guestNumber}`
-      if (!g.firstName?.trim()) next[`${key}.firstName`] = `First name is required for Guest ${g.guestNumber}`
-      if (!g.lastName?.trim())  next[`${key}.lastName`]  = `Last name is required for Guest ${g.guestNumber}`
+      if (!g.firstName?.trim()) next[`${key}.firstName`] = t('step2.errors.firstNameRequired', { number: g.guestNumber })
+      if (!g.lastName?.trim())  next[`${key}.lastName`]  = t('step2.errors.lastNameRequired', { number: g.guestNumber })
       if (g.isPrimaryGuest) {
         if (!g.personalEmail?.trim()) {
-          next[`${key}.personalEmail`] = `Email address is required for primary guest`
+          next[`${key}.personalEmail`] = t('step2.errors.emailRequired')
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g.personalEmail)) {
-          next[`${key}.personalEmail`] = `Please enter a valid email address for primary guest`
+          next[`${key}.personalEmail`] = t('step2.errors.emailInvalid')
         }
         if (!g.contactNumber?.trim()) {
-          next[`${key}.contactNumber`] = `Contact number is required for primary guest`
+          next[`${key}.contactNumber`] = t('step2.errors.contactRequired')
         }
         if (g.address && !g.address.trim()) {
-          next[`${key}.address`] = `Please provide a complete address or leave empty`
+          next[`${key}.address`] = t('step2.errors.addressInvalid')
         }
       }
     })
@@ -168,11 +170,11 @@ export default function Step2GuestInformation({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-semibold text-slate-900 truncate">
-                  {guest.isPrimaryGuest ? 'Primary guest' : `Guest ${guest.guestNumber}`}
+                  {guest.isPrimaryGuest ? t('step2.primaryGuest') : t('step2.guestNumber', { number: guest.guestNumber })}
                 </h4>
                 {guest.isPrimaryGuest && (
                   <span className="px-2 py-0.5 text-[11px] rounded-full bg-slate-900 text-white">
-                    Main contact
+                    {t('step2.mainContact')}
                   </span>
                 )}
                 {guest.isCompleted && !hasErrors && (
@@ -183,7 +185,7 @@ export default function Step2GuestInformation({
               <p className="text-xs text-slate-600 truncate">
                 {guest.firstName && guest.lastName
                   ? `${guest.firstName} ${guest.lastName}`
-                  : guest.isPrimaryGuest ? 'Please fill in your details' : 'Tap to fill details'}
+                  : guest.isPrimaryGuest ? t('step2.pleaseFillDetails') : t('step2.tapToFillDetails')}
               </p>
             </div>
           </div>
@@ -200,28 +202,28 @@ export default function Step2GuestInformation({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* First name */}
               <div>
-                <FieldLabel>First Name *</FieldLabel>
+                <FieldLabel>{t('step2.firstName')} {t('step2.required')}</FieldLabel>
                 <input
                   type="text"
                   value={guest.firstName || ''}
                   onChange={(e) => handleGuestInputChange(guest.guestNumber, 'firstName', e.target.value)}
                   disabled={isReadOnly}
                   className={inputCls(!!errors[`${key}.firstName`], isReadOnly)}
-                  placeholder="Enter first name"
+                  placeholder={t('step2.enterFirstName')}
                 />
                 {errors[`${key}.firstName`] && <ErrorText>{errors[`${key}.firstName`]}</ErrorText>}
               </div>
 
               {/* Last name */}
               <div>
-                <FieldLabel>Last Name *</FieldLabel>
+                <FieldLabel>{t('step2.lastName')} {t('step2.required')}</FieldLabel>
                 <input
                   type="text"
                   value={guest.lastName || ''}
                   onChange={(e) => handleGuestInputChange(guest.guestNumber, 'lastName', e.target.value)}
                   disabled={isReadOnly}
                   className={inputCls(!!errors[`${key}.lastName`], isReadOnly)}
-                  placeholder="Enter last name"
+                  placeholder={t('step2.enterLastName')}
                 />
                 {errors[`${key}.lastName`] && <ErrorText>{errors[`${key}.lastName`]}</ErrorText>}
               </div>
@@ -231,7 +233,7 @@ export default function Step2GuestInformation({
                 <>
                   {/* Email */}
                   <div className="sm:col-span-2">
-                    <FieldLabel>Email Address *</FieldLabel>
+                    <FieldLabel>{t('step2.emailAddress')} {t('step2.required')}</FieldLabel>
                     <input
                       type="email"
                       value={guest.personalEmail || ''}
@@ -245,7 +247,7 @@ export default function Step2GuestInformation({
 
                   {/* Phone */}
                   <div className="sm:col-span-2">
-                    <FieldLabel>Contact Number *</FieldLabel>
+                    <FieldLabel>{t('step2.contactNumber')} {t('step2.required')}</FieldLabel>
 
                     <div
                       className={[
@@ -265,7 +267,7 @@ export default function Step2GuestInformation({
                         value={guest.contactNumber || ''}
                         onChange={(v) => handleGuestInputChange(guest.guestNumber,'contactNumber', v || '')}
                         disabled={isReadOnly}
-                        placeholder="Enter phone number"
+                        placeholder={t('step2.enterPhoneNumber')}
                       />
                     </div>
 
@@ -276,7 +278,7 @@ export default function Step2GuestInformation({
 
                   {/* ETA */}
                   <div>
-                    <FieldLabel className="pt-2">Estimated Check-in Time</FieldLabel>
+                    <FieldLabel className="pt-2">{t('step2.estimatedCheckInTime')}</FieldLabel>
 
                     <div>
                       {/* Input shell */}
@@ -300,7 +302,7 @@ export default function Step2GuestInformation({
                           overnightRange={{ start: '16:00', end: '03:00' }}
                         />
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">What time do you expect to arrive?</p>
+                      <p className="mt-1 text-xs text-slate-500">{t('step2.whatTimeArrive')}</p>
                     </div>
                   </div>
                   {/* Purpose */}
@@ -338,10 +340,10 @@ export default function Step2GuestInformation({
     <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
       <div className="flex items-center gap-2 mb-1">
         <CheckCircle className="w-5 h-5 text-emerald-600" />
-        <h3 className="text-sm sm:text-base font-semibold text-slate-900">Information submitted</h3>
+        <h3 className="text-sm sm:text-base font-semibold text-slate-900">{t('step2.informationSubmitted')}</h3>
       </div>
       <p className="text-sm text-slate-700">
-        Your guest information has been successfully submitted and is currently under review.
+        {t('step2.informationSubmittedDesc')}
       </p>
     </div>
   )
@@ -350,13 +352,13 @@ export default function Step2GuestInformation({
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <Section
-        title="Guest information"
+        title={t('step2.title')}
         subtitle={
           isReadOnly
-            ? 'Your submitted guest information'
+            ? t('step2.subtitleReadOnly')
             : isModificationMode
-            ? 'Update your personal information for check-in'
-            : 'Please provide your personal information for check-in'
+            ? t('step2.subtitleModification')
+            : t('step2.subtitle')
         }
         className="pt-2"
       />
@@ -370,16 +372,17 @@ export default function Step2GuestInformation({
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-slate-600" />
               <span className="text-sm font-medium text-slate-900">
-                Guest information for {numGuests} guests
+                {t('step2.guestInformationFor', { count: numGuests })}
               </span>
             </div>
             <div className="text-sm text-slate-600">
-              {
-                guests.filter(g => g.isPrimaryGuest
+              {t('step2.completed', {
+                count: guests.filter(g => g.isPrimaryGuest
                   ? (g.firstName && g.lastName && g.personalEmail && g.contactNumber)
                   : (g.firstName && g.lastName)
-                ).length
-              } of {numGuests} completed
+                ).length,
+                total: numGuests
+              })}
             </div>
           </div>
         </div>
@@ -403,8 +406,8 @@ export default function Step2GuestInformation({
           >
             <Users className="w-4 h-4 mr-2" />
             {guests.slice(1).every(g => expandedGuests.has(g.guestNumber))
-              ? 'Collapse additional guests'
-              : 'Expand all additional guests'}
+              ? t('step2.collapseAdditionalGuests')
+              : t('step2.expandAllAdditionalGuests')}
           </button>
         </div>
       )}
@@ -414,7 +417,7 @@ export default function Step2GuestInformation({
         totalSteps={4}
         onNext={handleNext}
         onPrevious={onPrevious}
-        nextButtonText="Continue"
+        nextButtonText={t('step2.continue')}
       />
     </div>
   )

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 import SidebarItem from './SidebarItem'
 import ProfileDropdown from '../ProfileDropdown'
 import { useGlobalCommunication } from '../../hooks/useGlobalCommunication'
@@ -32,6 +33,7 @@ const Sidebar = ({
   const navigate = useNavigate()
   const location = useLocation()
   const { unreadCount } = useGlobalCommunication()
+  const { t } = useTranslation('navigation')
 
   // Navigation items based on user role
   const getNavigationItems = () => {
@@ -39,30 +41,30 @@ const Sidebar = ({
 
     if (userRole === 'admin') {
       items.push(
-        { id: 'dashboard', label: 'Dashboard', icon: Home },
-        { id: 'communication', label: 'Communication', icon: MessageCircle },        
-        { id: 'calendar', label: 'Calendar', icon: Calendar },
-        { id: 'reservation-management', label: 'Reservation', icon: CheckCircle },
-        { id: 'cleaning-management', label: 'Cleaning', icon: Sparkles },
-        { id: 'properties', label: 'Properties', icon: Building },
-        { id: 'pricing', label: 'Pricing', icon: DollarSign },
-        { id: 'market-settings', label: 'Market', icon: Settings },
-        { id: 'users', label: 'Users', icon: Users }
+        { id: 'dashboard', label: t('dashboard'), icon: Home },
+        { id: 'communication', label: t('communication'), icon: MessageCircle },        
+        { id: 'calendar', label: t('calendar'), icon: Calendar },
+        { id: 'reservation-management', label: t('reservationManagement'), icon: CheckCircle },
+        { id: 'cleaning-management', label: t('cleaningManagement'), icon: Sparkles },
+        { id: 'properties', label: t('properties'), icon: Building },
+        { id: 'pricing', label: t('pricing'), icon: DollarSign },
+        { id: 'market-settings', label: t('marketSettings'), icon: Settings },
+        { id: 'users', label: t('users'), icon: Users }
       )
     } else if (userRole === 'owner') {
       items.push(
-        { id: 'properties', label: 'My Properties', icon: Building },
+        { id: 'properties', label: t('myProperties'), icon: Building },
       )
     } else if (userRole === 'cleaner') {
       items.push(
-        { id: 'cleaning', label: 'My Tasks', icon: Sparkles }
+        { id: 'cleaning', label: t('myTasks'), icon: Sparkles }
       )
     } else if (userRole === 'guest') {
       items.push(
-        { id: 'overview', label: 'Reservation', icon: Home },
-        { id: 'property', label: 'Property Info', icon: Building },
-        { id: 'local', label: 'Local Guide', icon: MapPin },
-        { id: 'documents', label: 'Documents', icon: FileText }
+        { id: 'overview', label: t('overview'), icon: Home },
+        { id: 'property', label: t('propertyInfo'), icon: Building },
+        { id: 'local', label: t('localGuide'), icon: MapPin },
+        { id: 'documents', label: t('documents'), icon: FileText }
       )
     }
 
@@ -126,7 +128,7 @@ const Sidebar = ({
               <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
                 <span className="text-white font-bold text-sm">S</span>
               </div>
-              <h1 className="text-lg font-bold text-primary-900">Staylabel</h1>
+              <h1 className="text-lg font-bold text-primary-900">{t('staylabel')}</h1>
             </>
           )}
           {collapsed && !mobile && (

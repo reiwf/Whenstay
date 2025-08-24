@@ -13,8 +13,7 @@ import {
 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import StepNavigation from '../shared/StepNavigation'
-
-// NEW
+import { useTranslation } from 'react-i18next'
 import Section from '../../ui/Section'
 import { ListGroup } from '../../ui/ListGroup'
 
@@ -34,14 +33,15 @@ export default function Step1ReservationOverview({
   onToggleGroupCheckInMode,
 }) {
   const { token } = useParams()
+  const { t , i18n } = useTranslation('guest')
+  
   if (!reservation) {
     return (
       <div className="text-center py-10 text-slate-500">
-        Loading reservation details…
+        {t('step1.loadingReservation')}
       </div>
     )
   }
-
   const checkInDate = new Date(reservation.checkInDate)
   const checkOutDate = new Date(reservation.checkOutDate)
   const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24))
@@ -51,13 +51,13 @@ export default function Step1ReservationOverview({
     <div className="space-y-4 sm:space-y-6">
       {/* Header (blended) */}
       <Section
-        title={`Welcome, ${reservation.guestName}!`}
+        title={t('step1.title', { name: reservation.guestName })}
         subtitle={
           checkinCompleted && !isModificationMode
-            ? 'Your check-in has been completed'
+            ? t('step1.subtitleCompleted')
             : isModificationMode
-            ? 'You are modifying your check-in information'
-            : "Let's complete your online register"
+            ? t('step1.subtitleModification')
+            : t('step1.subtitle')
         }
         className="pt-3"
       />
@@ -76,26 +76,26 @@ export default function Step1ReservationOverview({
                        rounded-full ring-1 ring-slate-300 bg-white hover:bg-slate-50"
           >
             <Edit className="w-3.5 h-3.5 mr-1" />
-            Edit
+            {t('common.edit')}
           </button>
 
           <div className="flex items-start pr-16">
             <CheckCircle className="w-5 h-5 text-emerald-600 mr-2 mt-0.5" />
             <div className="text-sm text-slate-800">
-              <div className="font-medium text-slate-900 mb-1">Check-in Complete</div>
+              <div className="font-medium text-slate-900 mb-1">{t('step1.checkInComplete')}</div>
               <div className="space-y-1">
                 <div>
-                  <span className="text-slate-500">Guest:</span>{' '}
+                  <span className="text-slate-500">{t('step1.guest')}:</span>{' '}
                   {guestData?.firstName} {guestData?.lastName}
                 </div>
                 {guestData?.personalEmail && (
                   <div>
-                    <span className="text-slate-500">Contact:</span> {guestData.personalEmail}
+                    <span className="text-slate-500">{t('step1.contact')}:</span> {guestData.personalEmail}
                   </div>
                 )}
                 {submissionDate && (
                   <div>
-                    <span className="text-slate-500">Submitted:</span>{' '}
+                    <span className="text-slate-500">{t('step1.submitted')}:</span>{' '}
                     {submissionDate.toLocaleDateString('en-US', {
                       weekday: 'short',
                       year: 'numeric',
@@ -107,9 +107,9 @@ export default function Step1ReservationOverview({
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-500">{t('step1.status')}:</span>
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-900 text-white">
-                    {guestData?.adminVerified ? 'Verified by Admin' : 'Pending Review'}
+                    {guestData?.adminVerified ? t('step1.verifiedByAdmin') : t('step1.pendingReview')}
                   </span>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export default function Step1ReservationOverview({
                          hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900"
             >
               <LayoutPanelLeft className="w-4 h-4 mr-2" />
-              Guest App
+              {t('step1.guestApp')}
             </button>
           </div>
         </div>
@@ -136,8 +136,8 @@ export default function Step1ReservationOverview({
             <div className="flex items-start">
               <AlertTriangle className="w-5 h-5 text-amber-600 mr-2 mt-0.5" />
               <div className="text-sm text-amber-900">
-                <div className="font-semibold">Modification mode</div>
-                Any changes you make will overwrite your previously submitted data.
+                <div className="font-semibold">{t('step1.modificationMode')}</div>
+                {t('step1.modificationModeDesc')}
               </div>
             </div>
             <button
@@ -145,7 +145,7 @@ export default function Step1ReservationOverview({
               className="shrink-0 inline-flex items-center px-3 py-2 rounded-xl bg-slate-900 text-white text-sm
                          hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900"
             >
-              Cancel modification
+              {t('step1.cancelModification')}
             </button>
           </div>
         </div>
@@ -157,19 +157,18 @@ export default function Step1ReservationOverview({
           <div className="flex items-start mb-3">
             <Crown className="w-5 h-5 text-amber-600 mr-2 mt-0.5" />
             <div>
-              <div className="font-semibold text-amber-900">Group booking detected</div>
+              <div className="font-semibold text-amber-900">{t('step1.groupBookingDetected')}</div>
               <p className="text-sm text-amber-800">
-                This reservation is part of a group. You can check in individually or use unified
-                group check-in.
+                {t('step1.groupBookingDesc')}
               </p>
             </div>
           </div>
 
           {groupBooking && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <Stat label="Total Rooms" value={groupBooking.summary?.totalRooms || groupBooking.rooms?.length || 0} />
+              <Stat label={t('step1.totalRooms')} value={groupBooking.summary?.totalRooms || groupBooking.rooms?.length || 0} />
               <Stat
-                label="Total Guests"
+                label={t('step1.totalGuests')}
                 value={
                   groupBooking.groupCheckInStatus?.totalGuests ||
                   groupBooking.summary?.totalGuests ||
@@ -177,8 +176,8 @@ export default function Step1ReservationOverview({
                   0
                 }
               />
-              <Stat label="Completed Rooms" value={groupBooking.groupCheckInStatus?.completedRooms || 0} ok />
-              <Stat label="Completed Guests" value={groupBooking.groupCheckInStatus?.completedGuests || 0} ok />
+              <Stat label={t('step1.completedRooms')} value={groupBooking.groupCheckInStatus?.completedRooms || 0} ok />
+              <Stat label={t('step1.completedGuests')} value={groupBooking.groupCheckInStatus?.completedGuests || 0} ok />
             </div>
           )}
 
@@ -194,8 +193,8 @@ export default function Step1ReservationOverview({
                         Room {room.roomNumber} — {room.roomType}
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        {room.numGuests} {room.numGuests === 1 ? 'guest' : 'guests'}
-                        {room.isMaster && <span className="ml-1 text-amber-600">(Master)</span>}
+                        {room.numGuests} {room.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}
+                        {room.isMaster && <span className="ml-1 text-amber-600">{t('step1.masterRoom')}</span>}
                       </div>
                     </div>
                   </div>
@@ -225,12 +224,12 @@ export default function Step1ReservationOverview({
                 {groupCheckInMode ? (
                   <>
                     <Users className="w-4 h-4 mr-2" />
-                    Single room mode
+                    {t('step1.singleRoomMode')}
                   </>
                 ) : (
                   <>
                     <Crown className="w-4 h-4 mr-2" />
-                    Unified group check-in
+                    {t('step1.unifiedGroupCheckIn')}
                   </>
                 )}
               </button>
@@ -240,46 +239,46 @@ export default function Step1ReservationOverview({
       )}
 
       {/* Reservation details (inset list) */}
-      <Section title="Your reservation" className="pt-1">
+      <Section title={t('step1.yourReservation')} className="pt-1">
         <ListGroup>
           <li className="px-3 py-3 flex items-start gap-3">
             <Calendar className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Check-in</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.checkIn')}</div>
               <div className="text-sm text-slate-600">
-                {checkInDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                {checkInDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
             </div>
           </li>
           <li className="px-3 py-3 flex items-start gap-3">
             <Clock className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Check-out</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.checkOut')}</div>
               <div className="text-sm text-slate-600">
-                {checkOutDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                {checkInDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
             </div>
           </li>
           <li className="px-3 py-3 flex items-start gap-3">
             <Users className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Guests</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.guests')}</div>
               <div className="text-sm text-slate-600">
-                {reservation.numGuests} {reservation.numGuests === 1 ? 'Guest' : 'Guests'}
+                {reservation.numGuests} {reservation.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}
               </div>
             </div>
           </li>
           <li className="px-3 py-3 flex items-start gap-3">
             <Home className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Property</div>
-              <div className="text-sm text-slate-600 break-words">{reservation.propertyName || 'Property'}</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.property')}</div>
+              <div className="text-sm text-slate-600 break-words">{reservation.propertyName || t('step1.property')}</div>
             </div>
           </li>
           <li className="px-3 py-3 flex items-start gap-3">
             <MapPin className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Room</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.room')}</div>
               <div className="text-sm text-slate-600 break-words">
                 {reservation.roomTypeName || reservation.roomTypes}
               </div>
@@ -288,9 +287,9 @@ export default function Step1ReservationOverview({
           <li className="px-3 py-3 flex items-start gap-3">
             <Clock className="w-4 h-4 text-slate-600 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">Duration</div>
+              <div className="text-sm font-medium text-slate-900">{t('step1.duration')}</div>
               <div className="text-sm text-slate-600">
-                {nights} {nights === 1 ? 'Night' : 'Nights'}
+                {nights} {nights === 1 ? t('step1.night') : t('step1.nights')}
               </div>
             </div>
           </li>
@@ -303,7 +302,7 @@ export default function Step1ReservationOverview({
           reservation.hasKitchen ||
           reservation.maxGuests) && (
           <div className="mt-3">
-            <div className="text-sm font-semibold text-slate-900 mb-2">Room features</div>
+            <div className="text-sm font-semibold text-slate-900 mb-2">{t('step1.roomFeatures')}</div>
             <div className="rounded-xl ring-1 ring-slate-200/70 bg-white/70 p-3 space-y-2">
               {reservation.roomTypeDescription && (
                 <p className="text-sm text-slate-700">{reservation.roomTypeDescription}</p>
@@ -321,14 +320,14 @@ export default function Step1ReservationOverview({
                 )}
                 {reservation.maxGuests && (
                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-800">
-                    up to {reservation.maxGuests}
+                    {t('step1.upTo', { count: reservation.maxGuests })}
                   </span>
                 )}
                 {reservation.hasBalcony && (
-                  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">Balcony</span>
+                  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">{t('step1.balcony')}</span>
                 )}
                 {reservation.hasKitchen && (
-                  <span className="px-2 py-1 rounded-full bg-green-100 text-green-800">Kitchen</span>
+                  <span className="px-2 py-1 rounded-full bg-green-100 text-green-800">{t('step1.kitchen')}</span>
                 )}
               </div>
             </div>
@@ -342,10 +341,10 @@ export default function Step1ReservationOverview({
         onNext={onNext}
         nextButtonText={
           checkinCompleted && !isModificationMode
-            ? 'View Details'
+            ? t('step1.viewDetails')
             : isModificationMode
-            ? 'Continue Modification'
-            : 'Start Check-in'
+            ? t('step1.continueModification')
+            : t('step1.startCheckIn')
         }
         showPrevious={false}
         disabled={checkinCompleted && !isModificationMode}

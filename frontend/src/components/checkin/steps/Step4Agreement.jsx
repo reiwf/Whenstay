@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileText, CheckCircle, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import StepNavigation from '../shared/StepNavigation'
 import { GUEST_AGREEMENT_TEMPLATE } from '../templates/GuestAgreementTemplate'
 import Section from '@/components/ui/Section'
@@ -13,6 +14,7 @@ export default function Step4Agreement({
   checkinCompleted = false,
   isModificationMode = false
 }) {
+  const { t } = useTranslation('guest')
   const [hasReadAgreement, setHasReadAgreement] = useState(false)
   const [agreementAccepted, setAgreementAccepted] = useState(formData.agreementAccepted || false)
   const [error, setError] = useState('')
@@ -21,11 +23,11 @@ export default function Step4Agreement({
 
   const handleSubmit = () => {
     if (!agreementAccepted) {
-      setError('Please accept the guest agreement to complete your check-in')
+      setError(t('step4.errors.mustAccept'))
       return
     }
     if (!hasReadAgreement) {
-      setError('Please scroll through and read the entire agreement before accepting')
+      setError(t('step4.errors.mustRead'))
       return
     }
     setError('')
@@ -83,13 +85,13 @@ export default function Step4Agreement({
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <Section
-        title="Guest agreement"
+        title={t('step4.title')}
         subtitle={
           isReadOnly
-            ? 'Your accepted guest agreement'
+            ? t('step4.subtitleReadOnly')
             : isModificationMode
-            ? 'Review and update your agreement acceptance'
-            : 'Please review and accept our terms and conditions'
+            ? t('step4.subtitleModification')
+            : t('step4.subtitle')
         }
         className="pt-2"
       />
@@ -99,10 +101,10 @@ export default function Step4Agreement({
         <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 ring-1 ring-slate-200 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-1">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-sm sm:text-base font-semibold text-slate-900">Agreement accepted</h3>
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900">{t('step4.agreementAccepted')}</h3>
           </div>
           <p className="text-sm text-slate-700">
-            You have successfully reviewed and accepted our guest agreement. Your check-in is complete!
+            {t('step4.agreementAcceptedDesc')}
           </p>
         </div>
       )}
@@ -112,8 +114,8 @@ export default function Step4Agreement({
         <div className="px-3 sm:px-4 py-3 bg-white/60 ring-0 flex items-center">
           <FileText className="w-5 h-5 text-slate-700 mr-2" />
           <div>
-            <div className="text-sm sm:text-base font-semibold text-slate-900">Terms and conditions</div>
-            <div className="text-xs text-slate-600">Please scroll through the entire document before accepting</div>
+            <div className="text-sm sm:text-base font-semibold text-slate-900">{t('step4.termsAndConditions')}</div>
+            <div className="text-xs text-slate-600">{t('step4.scrollInstructions')}</div>
           </div>
         </div>
 
@@ -128,7 +130,7 @@ export default function Step4Agreement({
 
         {!hasReadAgreement && (
           <div className="px-3 sm:px-4 py-3 bg-white/60">
-            <Hint>Please scroll to the bottom of the agreement to continue.</Hint>
+            <Hint>{t('step4.scrollToBottom')}</Hint>
           </div>
         )}
       </div>
@@ -149,13 +151,11 @@ export default function Step4Agreement({
           />
           <div className="text-xs sm:text-sm text-slate-700">
             <span className="font-medium">
-              I acknowledge that I have read, understood, and agree to comply with all terms and conditions outlined in
-              this guest agreement.
+              {t('step4.agreementText')}
             </span>
             <br />
             <span className="text-slate-600">
-              By checking this box, I confirm that I am at least 18 years of age and have the authority to enter into
-              this agreement on behalf of all guests in my party.
+              {t('step4.agreementSubtext')}
             </span>
           </div>
         </label>
@@ -164,7 +164,7 @@ export default function Step4Agreement({
       {/* Messages */}
       {error && <ErrorBox>{error}</ErrorBox>}
       {hasReadAgreement && agreementAccepted && (
-        <SuccessBox>Thank you for accepting our guest agreement. You’re ready to complete your check-in!</SuccessBox>
+        <SuccessBox>{t('step4.thankYou')}</SuccessBox>
       )}
 
       <StepNavigation
@@ -174,7 +174,7 @@ export default function Step4Agreement({
         onPrevious={onPrevious}
         isNextDisabled={!agreementAccepted || !hasReadAgreement}
         isLoading={isSubmitting}
-        nextButtonText="Complete Check-in"
+        nextButtonText={t('step4.completeCheckIn')}
         showNext={!(checkinCompleted && agreementAccepted && !isModificationMode)}
       />
     </div>

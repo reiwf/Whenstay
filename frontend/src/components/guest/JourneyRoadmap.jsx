@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { CheckCircle, Clock, Unlock, CreditCard, MapPin, AlertCircle, Pointer } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Section from '../ui/Section'
 import { ListGroup }  from '../ui/ListGroup'
 
@@ -30,6 +31,7 @@ export default function JourneyRoadmap({
   reservation,
   onStartCheckin
 }) {
+  const { t } = useTranslation('guest')
   
   // Function to scroll to add-ons section
   const scrollToAddOns = () => {
@@ -154,13 +156,13 @@ export default function JourneyRoadmap({
     const steps = [
       {
         id: 'checkin',
-        title: 'Online Check-in',
+        title: t('journeyRoadmap.steps.checkin'),
         status: checkinCompleted ? 'completed' : 'current',
         icon: 'checkin'
       },
       {
         id: 'services',
-        title: 'Accommodation Tax',
+        title: t('journeyRoadmap.steps.accommodationTax'),
         status: checkinCompleted
           ? (unpaidMandatoryServices.length === 0 ? 'completed' : 'current')
           : 'pending',
@@ -168,7 +170,7 @@ export default function JourneyRoadmap({
       },
       {
         id: 'access',
-        title: 'Access Key',
+        title: t('journeyRoadmap.steps.accessKey'),
         status: accessUnlocked
           ? 'completed'
           : (checkinCompleted && unpaidMandatoryServices.length === 0 ? 'current' : 'pending'),
@@ -186,7 +188,7 @@ export default function JourneyRoadmap({
       completedSteps,
       totalSteps: steps.length
     }
-  }, [checkinCompleted, unpaidMandatoryServices.length, accessUnlocked])
+  }, [checkinCompleted, unpaidMandatoryServices.length, accessUnlocked, t])
 
   const getStepIcon = (iconType) => {
     switch (iconType) {
@@ -206,9 +208,9 @@ export default function JourneyRoadmap({
   }
 
   return (
-    <Section title="Self Check-in Journey" subtitle="Things to do before to get room key" className="pt-2">
+    <Section title={t('journeyRoadmap.title')} subtitle={t('journeyRoadmap.subtitle')} className="pt-2">
      <div className="flex items-center justify-between mb-3">
-       <div className="text-xs text-slate-500">Progress</div>
+       <div className="text-xs text-slate-500">{t('journeyRoadmap.progress')}</div>
        <div className="text-sm font-semibold text-slate-800">{progress.progressPercentage}%</div>
      </div>
      {/* (optional) thin progress bar for a native feel */}
@@ -246,22 +248,22 @@ export default function JourneyRoadmap({
                   {step.title}
                 </h3>
                  {step.status === 'completed' && (
-                    <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Done</span>
+                    <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{t('journeyRoadmap.status.done')}</span>
                   )}
                   {step.status === 'current' && (
-                    <span className="text-[11px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">In progress</span>
+                    <span className="text-[11px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">{t('journeyRoadmap.status.inProgress')}</span>
                   )}
               </div>
 
               {/* Check-in button */}
               {step.id === 'checkin' && step.status === 'current' && onStartCheckin && (
-                <div className="w-40 flex justify-between items-center px-3 py-2 bg-slate-50 rounded-xl ring-1 ring-slate-200">
+                <div className="flex items-center px-3 py-2 bg-slate-900 rounded-xl ring-1 ring-slate-300 w-fit ">
                   <button
-                    onClick={onStartCheckin}                   
+                    onClick={onStartCheckin}
                   >
                     <div className="flex items-center space-x-2">                   
-                   <span className="text-[11px] font-medium text-gray-800">Start Online Check-in</span>     
-                    <MapPin className="w-4 h-4 text-green-600" />               
+                   <span className="text-[11px] font-medium text-white animate-pulse">{t('journeyRoadmap.startCheckin')}</span>     
+                    <MapPin className="w-4 h-4 text-green-600 animate-pulse" />               
                    </div>
                   </button>
                   
@@ -290,7 +292,7 @@ export default function JourneyRoadmap({
                     <div className="mt-2 px-3 py-2  rounded-xl">
                       <div className="flex items-center text-amber-700 text-sm">
                         <AlertCircle className="w-4 h-4 mr-1 flex-shrink-0" />
-                        <span>Payment required for {unpaidMandatoryServices.length} service{unpaidMandatoryServices.length > 1 ? 's' : ''}</span>
+                        <span>{t('journeyRoadmap.paymentRequired', { count: unpaidMandatoryServices.length })}</span>
                       </div>
                     </div>
                   )}
@@ -302,13 +304,13 @@ export default function JourneyRoadmap({
                 <div>
                   {checkinCompleted && !accessUnlocked && countdown && (
                     <div>
-                      <span className="text-[11px] font-medium text-slate-600">Access available from</span>
+                      <span className="text-[11px] font-medium text-slate-600">{t('journeyRoadmap.accessAvailableFrom')}</span>
                       <div className="grid grid-cols-4 gap-2" aria-live="polite">
                         {[
-                          { k: 'days', label: 'Days' },
-                          { k: 'hours', label: 'Hours' },
-                          { k: 'minutes', label: 'Min' },
-                          { k: 'seconds', label: 'Sec' },
+                          { k: 'days', label: t('journeyRoadmap.countdown.days') },
+                          { k: 'hours', label: t('journeyRoadmap.countdown.hours') },
+                          { k: 'minutes', label: t('journeyRoadmap.countdown.minutes') },
+                          { k: 'seconds', label: t('journeyRoadmap.countdown.seconds') },
                         ].map(({ k, label }) => (
                           <div key={k} className="relative">
                             <div className="rounded-2xl bg-white/80 dark:bg-slate-900/60 backdrop-blur
@@ -327,7 +329,10 @@ export default function JourneyRoadmap({
                         ))}
                       </div>
                       <p className="text-[11px] text-slate-500 mt-2">
-                        visit at {new Date(reservation.check_in_date).toLocaleDateString()} at {formatAccessTime(property.access_time)}
+                        {t('journeyRoadmap.visitAt', { 
+                          date: new Date(reservation.check_in_date).toLocaleDateString(), 
+                          time: formatAccessTime(property.access_time) 
+                        })}
                       </p>
                     </div>
                   )}
@@ -344,22 +349,22 @@ export default function JourneyRoadmap({
           {progress.progressPercentage === 100 ? (
             <div className="flex items-center text-slate-600">
               <CheckCircle className="w-5 h-5 mr-2" />
-              <span className="text-sm font-medium">All steps completed! Enjoy your stay.</span>
+              <span className="text-sm font-medium">{t('journeyRoadmap.status.allCompleted')}</span>
             </div>
           ) : progress.currentStep?.id === 'access' ? (
             <div className="flex items-center text-slate-600">
               <Clock className="w-5 h-5 mr-2" />
-              <span className="text-sm font-medium">Waiting for check-in time. You're almost there!</span>
+              <span className="text-sm font-medium">{t('journeyRoadmap.status.waitingForCheckinTime')}</span>
             </div>
           ) : progress.currentStep?.id === 'services' ? (
             <div className="flex items-center text-slate-600">
               <CreditCard className="w-5 h-5 mr-2" />
-              <span className="text-sm font-medium">Complete service payments to unlock stay information.</span>
+              <span className="text-sm font-medium">{t('journeyRoadmap.status.completeServicePayments')}</span>
             </div>
           ) : (
             <div className="flex items-center text-slate-600">
               <MapPin className="w-5 h-5 mr-2" />
-              <span className="text-sm font-medium">Complete check-in to continue your journey.</span>
+              <span className="text-sm font-medium">{t('journeyRoadmap.status.completeCheckin')}</span>
             </div>
           )}
         </div>

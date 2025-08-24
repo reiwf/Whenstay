@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useCheckinProcess } from '../../hooks/useCheckinProcess'
 import CheckinLayout from '../checkin/shared/CheckinLayout'
 import Step1ReservationOverview from '../checkin/steps/Step1ReservationOverview'
@@ -15,6 +16,7 @@ export default function CheckinModal({
   token,
   onCheckInComplete 
 }) {
+  const { t } = useTranslation('guest')
   const {
     currentStep,
     reservation,
@@ -43,7 +45,7 @@ export default function CheckinModal({
     const result = await submitCheckin()
     if (result.success) {
       // Show success message
-      toast.success(result.message || 'Check-in completed successfully!', {
+      toast.success(result.message || t('checkinModal.checkinCompletedSuccessfully'), {
         duration: 5000,
         icon: '🎉'
       })
@@ -94,7 +96,7 @@ export default function CheckinModal({
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
         <div className="bg-white rounded-lg p-6 max-w-md mx-4">
           <div className="flex items-start justify-between mb-4">
-            <h3 className="text-lg font-semibold text-red-900">Check-in Error</h3>
+            <h3 className="text-lg font-semibold text-red-900">{t('checkinModal.checkinError')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
@@ -107,7 +109,7 @@ export default function CheckinModal({
             onClick={onClose}
             className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700"
           >
-            Close
+            {t('checkinModal.close')}
           </button>
         </div>
       </div>
@@ -119,7 +121,7 @@ export default function CheckinModal({
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
         <div className="bg-white rounded-lg p-6 max-w-md mx-4">
           <div className="flex items-start justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Reservation Not Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('checkinModal.reservationNotFound')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
@@ -128,13 +130,13 @@ export default function CheckinModal({
             </button>
           </div>
           <p className="text-gray-600 mb-4">
-            The reservation you're looking for could not be found or the link may have expired.
+            {t('checkinModal.reservationNotFoundMessage')}
           </p>
           <button
             onClick={onClose}
             className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700"
           >
-            Close
+            {t('checkinModal.close')}
           </button>
         </div>
       </div>

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { FileText, Download, Calendar, MapPin, Users, CreditCard, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import LoadingSpinner from '../LoadingSpinner'
 import Section from '../ui/Section'
 import { ListGroup, ListRow, PlainGroup }  from '../ui/ListGroup'
 
 const GuestProfile = ({ guestToken }) => {
+  const { t } = useTranslation('guest')
   const [guestProfile, setGuestProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [downloadingInvoice, setDownloadingInvoice] = useState(null)
@@ -19,7 +21,7 @@ const GuestProfile = ({ guestToken }) => {
       setLoading(true)
       
       if (!guestToken) {
-        toast.error('Invalid guest token')
+        console.warn('Guest token is missing')
         return
       }
 
@@ -27,9 +29,13 @@ const GuestProfile = ({ guestToken }) => {
       
       if (!response.ok) {
         if (response.status === 404) {
-          toast.error('Guest profile not found')
+          // Guest profile not found - this is expected for some cases
+          console.log('Guest profile not found (404) - showing empty state')
+          setGuestProfile(null)
         } else {
-          toast.error('Failed to load guest profile')
+          // Other errors should show toast
+          console.error('Failed to load guest profile:', response.status, response.statusText)
+          toast.error(t('guestProfile.errors.failedToLoad'))
         }
         return
       }
@@ -39,7 +45,7 @@ const GuestProfile = ({ guestToken }) => {
       
     } catch (error) {
       console.error('Error loading guest profile:', error)
-      toast.error('Failed to load guest profile')
+      toast.error(t('guestProfile.errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -50,7 +56,7 @@ const GuestProfile = ({ guestToken }) => {
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           <Clock className="w-3 h-3 mr-1" />
-          Current Stay
+          {t('guestProfile.status.currentStay')}
         </span>
       )
     }
@@ -60,21 +66,21 @@ const GuestProfile = ({ guestToken }) => {
         return (
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
             <CheckCircle className="w-3 h-3 mr-1" />
-            Completed
+            {t('guestProfile.status.completed')}
           </span>
         )
       case 'confirmed':
         return (
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
             <CheckCircle className="w-3 h-3 mr-1" />
-            Confirmed
+            {t('guestProfile.status.confirmed')}
           </span>
         )
       case 'cancelled':
         return (
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
             <AlertCircle className="w-3 h-3 mr-1" />
-            Cancelled
+            {t('guestProfile.status.cancelled')}
           </span>
         )
       default:
@@ -153,8 +159,8 @@ const GuestProfile = ({ guestToken }) => {
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Guest Data</h3>
-          <p className="text-gray-500">Unable to load guest profile information.</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('guestProfile.errors.noGuestData')}</h3>
+          <p className="text-gray-500">{t('guestProfile.errors.unableToLoad')}</p>
         </div>
       </div>
     )
@@ -164,11 +170,11 @@ const GuestProfile = ({ guestToken }) => {
     <div className="space-y-6">
       {/* Profile Header */}
       <Section
-        title="Guest profile"
-        subtitle={`Welcome back, ${guestProfile.guestInfo?.displayName || 'Guest'}!`}
+        title={t('guestProfile.title')}
+        subtitle={t('guestProfile.welcomeBack', { name: guestProfile.guestInfo?.displayName || t('guestProfile.guest') })}
         >
         <div className="text-right text-sm">
-          <span className="text-slate-500">Total reservations</span>
+          <span className="text-slate-500">{t('guestProfile.totalReservations')}</span>
           <span className="ml-2 font-semibold text-slate-900">
             {guestProfile.statistics?.totalReservations || 0}
           </span>
@@ -176,19 +182,19 @@ const GuestProfile = ({ guestToken }) => {
       </Section>
 
       {/* Guest Information */}
-       <Section title="Contact information">
+       <Section title={t('guestProfile.contactInformation')}>
           <ListGroup inset>
             <ListRow
-              left={<span className="text-slate-600">Name</span>}
-              right={<span className="font-medium">{guestProfile.guestInfo?.displayName || 'N/A'}</span>}
+              left={<span className="text-slate-600">{t('guestProfile.name')}</span>}
+              right={<span className="font-medium">{guestProfile.guestInfo?.displayName || t('guestProfile.notAvailable')}</span>}
             />
             <ListRow
-              left={<span className="text-slate-600">Email</span>}
-              right={<span className="font-medium">{guestProfile.guestInfo?.email || 'N/A'}</span>}
+              left={<span className="text-slate-600">{t('guestProfile.email')}</span>}
+              right={<span className="font-medium">{guestProfile.guestInfo?.email || t('guestProfile.notAvailable')}</span>}
             />
             {guestProfile.guestInfo?.phone && (
               <ListRow
-                left={<span className="text-slate-600">Phone</span>}
+                left={<span className="text-slate-600">{t('guestProfile.phone')}</span>}
                 right={<span className="font-medium">{guestProfile.guestInfo.phone}</span>}
               />
             )}
@@ -197,22 +203,22 @@ const GuestProfile = ({ guestToken }) => {
 
       {/* Current Stay (if applicable) */}
        {guestProfile.currentReservation && (
-        <Section title="Current stay" subtitle="Ongoing reservation">
+        <Section title={t('guestProfile.currentStay')} subtitle={t('guestProfile.ongoingReservation')}>
           <ListGroup inset className="mb-2">
             <ListRow
-              left="Property"
+              left={t('guestProfile.property')}
               right={<span className="font-medium">
-                {guestProfile.currentReservation.properties?.name || 'Property'}
+                {guestProfile.currentReservation.properties?.name || t('guestProfile.property')}
               </span>}
             />
             <ListRow
-              left="Room"
+              left={t('guestProfile.room')}
               right={<span className="font-medium">
-                {guestProfile.currentReservation.room_units?.room_types?.name || 'Room'}
+                {guestProfile.currentReservation.room_units?.room_types?.name || t('guestProfile.room')}
               </span>}
             />
             <ListRow
-              left="Dates"
+              left={t('guestProfile.dates')}
               right={
                 <span className="font-medium">
                   {new Date(guestProfile.currentReservation.check_in_date).toLocaleDateString()}
@@ -226,8 +232,8 @@ const GuestProfile = ({ guestToken }) => {
       )}
       {/* Reservation History */}
       <Section
-   title="Reservation history"
-   subtitle={`${guestProfile.reservationHistory?.length || 0} reservations`}
+   title={t('guestProfile.reservationHistory')}
+   subtitle={t('guestProfile.reservationCount', { count: guestProfile.reservationHistory?.length || 0 })}
  >
    <div className="space-y-3">
      {guestProfile.reservationHistory?.map((reservation, index) => {
@@ -238,12 +244,12 @@ const GuestProfile = ({ guestToken }) => {
          <ListGroup key={reservation.id || index} inset>
            <ListRow
              left={<div className="truncate">
-               <div className="font-medium">{reservation.properties?.name || 'Property'}</div>
-               <div className="text-xs text-slate-500">{reservation.room_units?.room_types?.name || 'Room'}</div>
+               <div className="font-medium">{reservation.properties?.name || t('guestProfile.property')}</div>
+               <div className="text-xs text-slate-500">{reservation.room_units?.room_types?.name || t('guestProfile.room')}</div>
              </div>}
              right={<div className="text-right">
                <div className="font-semibold">¥{(totalWithServices || 0).toLocaleString()}</div>
-               <div className="text-[11px] text-slate-500">{nights} night{nights>1?'s':''}</div>
+               <div className="text-[11px] text-slate-500">{t('guestProfile.nightCount', { count: nights })}</div>
              </div>}
            />
            <div className="hairline" />

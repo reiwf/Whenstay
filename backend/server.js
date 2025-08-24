@@ -145,8 +145,6 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 StayLabel API running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
   
   // Initialize services after server starts
   setTimeout(async () => {

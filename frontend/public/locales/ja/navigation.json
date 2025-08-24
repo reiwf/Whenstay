@@ -1,0 +1,18 @@
+{
+  "dashboard": "ダッシュボード",
+  "communication": "コミュニケーション",
+  "calendar": "カレンダー",
+  "reservationManagement": "予約管理",
+  "cleaningManagement": "清掃管理",
+  "properties": "物件",
+  "myProperties": "私の物件",
+  "pricing": "料金設定",
+  "marketSettings": "マーケット",
+  "users": "ユーザー",
+  "myTasks": "私のタスク",
+  "overview": "予約",
+  "propertyInfo": "物件情報",
+  "localGuide": "地域ガイド",
+  "documents": "書類",
+  "staylabel": "Staylabel"
+}

@@ -1,5 +1,7 @@
 // components/ui/LayoutShell.jsx
 import { CheckCircle, Clock } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '../LanguageSwitcher'
 
 export default function LayoutShell({
   token,
@@ -12,19 +14,20 @@ export default function LayoutShell({
   children,
   headerVariant = 'compact', // 'default' | 'compact'
 }) {
+  const { t } = useTranslation('guest')
   const isCompact = headerVariant === 'compact'
 
   const cls = {
     wrap: 'min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900',
     max: 'mx-auto w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]',
     header: 'sticky top-0 z-[60]',
-    hero: `relative overflow-hidden ${isCompact ? 'rounded-b-2xl' : 'rounded-b-3xl'} text-white shadow`,
+    hero: `relative overflow-visible ${isCompact ? 'rounded-b-2xl' : 'rounded-b-3xl'} text-white shadow`,
     grad: 'absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-500 pointer-events-none',
     pad: `relative ${isCompact ? 'px-4 pt-3 pb-3' : 'px-5 pt-5 pb-6'} safe-pt`,
     idRow: `text-[10px] ${isCompact ? 'opacity-70' : 'opacity-80'}`,
     name: `${isCompact ? 'text-lg' : 'text-2xl'} font-semibold`,
     chipsRow: `mt-2 flex flex-wrap gap-1.5`,
-    main: 'relative z-0 px-4 pt-6 pb-28',
+    main: 'relative z-0 px-4 pt-6 pb-24',
   }
 
   const StatusChip = ({ ok, okText = 'Ready', waitText = 'Pending' }) => (
@@ -64,9 +67,9 @@ export default function LayoutShell({
   )
 
   const FloatingBottomNav = ({ items, active, onSelect }) => (
-    <div className="fixed left-1/2 bottom-4 z-20 -translate-x-1/2 w-full px-4 safe-pb">
+    <div className="fixed left-1/2 bottom-3 z-20 -translate-x-1/2 w-full px-4 safe-pb">
       <div className="mx-auto w-full max-w-[420px] sm:max-w-[520px] md:max-w-[720px] lg:max-w-[840px] xl:max-w-[960px]">
-        <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg ring-1 ring-black/5">
+        <div className="pointer-events-auto rounded-full bg-white/70 backdrop-blur shadow-lg ring-1 ring-black/5">
           <div className="grid grid-cols-3">
             {items.map(({ id, label, icon: Icon }) => {
               const on = active === id
@@ -93,14 +96,24 @@ export default function LayoutShell({
       <div className={cls.max}>
         <header className={cls.header}>
           <div className={cls.hero}>
-            <div className={cls.grad} />
+            <div className={`${isCompact ? 'rounded-b-2xl' : 'rounded-b-3xl'} absolute inset-0 overflow-hidden pointer-events-none`}>
+              <div className={cls.grad} />
+            </div>
             <div className={cls.pad}>
-              {/* make ID inline + smaller in compact mode */}
-              <div className={cls.idRow}>Label ID: {token}</div>
-              <h1 className={cls.name}>Hi, {guestName} 👋</h1>
+              {/* Language switcher and ID row */}
+              <div className="flex items-center justify-between">
+                <div className={cls.idRow}>{t('labelId', { token })}</div>
+                <LanguageSwitcher 
+                  userType="guest" 
+                  identifier={token} 
+                  compact={true}
+                  className="ml-auto"
+                />
+              </div>
+              <h1 className={cls.name}>{t('welcome', { name: guestName })}</h1>
               <div className={cls.chipsRow}>
-                <StatusChip ok={checkinCompleted} okText="Check-in completed" waitText="Check-in required" />
-                <StatusChip ok={accessUnlocked} okText="Access available" waitText="Access locked" />
+                <StatusChip ok={checkinCompleted} okText={t('status.checkinCompleted')} waitText={t('status.checkinRequired')} />
+                <StatusChip ok={accessUnlocked} okText={t('status.accessAvailable')} waitText={t('status.accessLocked')} />
               </div>
             </div>
           </div>

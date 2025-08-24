@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import LanguageSwitcher from './LanguageSwitcher'
 
 const ProfileDropdown = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -144,6 +145,9 @@ const ProfileDropdown = () => {
                 </svg>
                 Account Settings
               </button>
+
+              {/* Language Switcher */}
+              <LanguageSwitcher userType="admin" identifier={user?.id} />
 
               <div className="border-t border-gray-100 my-1"></div>
               
