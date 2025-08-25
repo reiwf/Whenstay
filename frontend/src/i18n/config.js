@@ -24,10 +24,12 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    // Language configuration
+    debug: false,
     lng: 'en', // default language
     fallbackLng: 'en',
-    supportedLngs: ['en', 'ja', 'zh-CN', 'zh-TW', 'ko'],
+    supportedLngs: ['en', 'ja','zh', 'zh-CN', 'zh-TW', 'ko'],
+    nonExplicitSupportedLngs: true, 
+    load: 'currentOnly',  
     
     // Namespace configuration
     defaultNS: 'common',
@@ -45,11 +47,24 @@ i18n
       caches: ['localStorage', 'cookie'],
       
       // Storage keys for different user types
-      lookupLocalStorage: 'whenstay_language',
-      lookupCookie: 'whenstay_language',
+      lookupLocalStorage: 'staylabel_language',
+      lookupCookie: 'staylabel_language',
       
-      // Don't convert language codes
-      convertDetectedLanguage: false,
+      // Convert detected language codes to match our supported languages
+      convertDetectedLanguage: (lng) => {
+        // Handle generic Chinese language code
+        if (lng === 'zh') {
+          return 'zh-CN' // Default to Simplified Chinese
+        }
+        // Handle other Chinese variants
+        if (lng === 'zh-Hans') return 'zh-CN'
+        if (lng === 'zh-Hant') return 'zh-TW'
+        if (lng === 'zh-HK') return 'zh-TW'
+        if (lng === 'zh-MO') return 'zh-TW'
+        if (lng === 'zh-SG') return 'zh-CN'
+        // Return as-is for other languages
+        return lng
+      },
     },
     
     // React i18next configuration
@@ -64,33 +79,25 @@ i18n
     
     // Interpolation configuration
     interpolation: {
-      escapeValue: false, // React already escapes values
-      formatSeparator: ',',
-      format: function(value, format, lng) {
-        // Custom formatting for dates, numbers, etc.
-        if (format === 'uppercase') return value.toUpperCase()
-        if (format === 'lowercase') return value.toLowerCase()
-        
-        // Date formatting based on language
-        if (format === 'date') {
-          const date = new Date(value)
-          switch (lng) {
-            case 'ja':
-              return date.toLocaleDateString('ja-JP')
-            case 'ko':
-              return date.toLocaleDateString('ko-KR')
-            case 'zh-CN':
-              return date.toLocaleDateString('zh-CN')
-            case 'zh-TW':
-              return date.toLocaleDateString('zh-TW')
-            default:
-              return date.toLocaleDateString('en-US')
-          }
+      escapeValue: false,
+    },
+
+    // NEW
+    formatters: {
+      uppercase: (value) => String(value).toUpperCase(),
+      lowercase: (value) => String(value).toLowerCase(),
+      date: (value, lng) => {
+        const date = new Date(value)
+        switch (lng) {
+          case 'ja':    return date.toLocaleDateString('ja-JP')
+          case 'ko':    return date.toLocaleDateString('ko-KR')
+          case 'zh-CN': return date.toLocaleDateString('zh-CN')
+          case 'zh-TW': return date.toLocaleDateString('zh-TW')
+          default:      return date.toLocaleDateString('en-US')
         }
-        
-        return value
       }
     },
+
     
     // Debug configuration (disable in production)
     debug: process.env.NODE_ENV === 'development',
@@ -110,8 +117,15 @@ i18n
         console.warn(`Missing translation key: ${ns}:${key} for language: ${lng}`)
       }
     }
-  })
+  }
+)
+// i18n.on('languageChanged', (lng) => {
+//   if (lng === 'zh') {
+//     i18n.changeLanguage('zh-CN')
+//   }
+// })
 
+  
 /**
  * Initialize language for guest users based on phone number
  * @param {string} phoneNumber - Guest's booking phone number
@@ -122,14 +136,14 @@ export const initGuestLanguage = (phoneNumber, guestToken) => {
   const detectedLanguage = detectLanguageFromPhone(phoneNumber)
   
   // Check if guest has a previous language preference
-  const savedLanguage = localStorage.getItem(`whenstay_guest_language_${guestToken}`)
+  const savedLanguage = localStorage.getItem(`staylabel_guest_language_${guestToken}`)
   
   // Use saved preference if exists, otherwise use detected language
   const finalLanguage = savedLanguage || detectedLanguage
   
   // Set language and save preference
   i18n.changeLanguage(finalLanguage)
-  localStorage.setItem(`whenstay_guest_language_${guestToken}`, finalLanguage)
+  localStorage.setItem(`staylabel_guest_language_${guestToken}`, finalLanguage)
   
   return finalLanguage
 }
@@ -140,7 +154,7 @@ export const initGuestLanguage = (phoneNumber, guestToken) => {
  */
 export const initAdminLanguage = (userId) => {
   // Check for saved admin language preference
-  const savedLanguage = localStorage.getItem('whenstay_admin_language')
+  const savedLanguage = localStorage.getItem('staylabel_admin_language')
   
   if (savedLanguage && i18n.options.supportedLngs.includes(savedLanguage)) {
     i18n.changeLanguage(savedLanguage)
@@ -163,7 +177,7 @@ export const initAdminLanguage = (userId) => {
   }
   
   i18n.changeLanguage(detectedLanguage)
-  localStorage.setItem('whenstay_admin_language', detectedLanguage)
+  localStorage.setItem('staylabel_admin_language', detectedLanguage)
   
   return detectedLanguage
 }
@@ -185,9 +199,9 @@ export const changeLanguage = (languageCode, userType = 'admin', identifier = ''
   
   // Persist preference based on user type
   if (userType === 'guest' && identifier) {
-    localStorage.setItem(`whenstay_guest_language_${identifier}`, languageCode)
+    localStorage.setItem(`staylabel_guest_language_${identifier}`, languageCode)
   } else {
-    localStorage.setItem('whenstay_admin_language', languageCode)
+    localStorage.setItem('staylabel_admin_language', languageCode)
   }
   
   return true

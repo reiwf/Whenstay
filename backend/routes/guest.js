@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reservationService = require('../services/reservationService');
+const translationService = require('../services/translationService');
 const { supabaseAdmin } = require('../config/supabase');
 const supabase = supabaseAdmin; // Use admin client to bypass RLS policies
 
@@ -70,6 +71,69 @@ router.post('/:token/access-read', async (req, res) => {
   } catch (error) {
     console.error('Error updating access read status:', error);
     res.status(500).json({ error: 'Failed to update access read status' });
+  }
+});
+
+// GET /api/guest/:token/property-translations - Get property translations for guest
+router.get('/:token/property-translations', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { language = 'en' } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    // Validate language code
+    const supportedLanguages = ['en', 'ja', 'ko', 'zh-CN', 'zh-TW'];
+    if (!supportedLanguages.includes(language)) {
+      return res.status(400).json({ 
+        error: 'Unsupported language code',
+        supported: supportedLanguages 
+      });
+    }
+
+    // Get guest dashboard data to validate token and get property ID
+    const dashboardData = await reservationService.getGuestAppData(token);
+    if (!dashboardData) {
+      return res.status(404).json({ error: 'Reservation not found or invalid token' });
+    }
+
+    const propertyId = dashboardData.property?.id;
+    if (!propertyId) {
+      return res.status(404).json({ error: 'Property not found for this reservation' });
+    }
+
+    console.log(`🌐 [GUEST TRANSLATIONS] Getting translations for property: ${propertyId}, language: ${language}`);
+
+    // Get property translations using the translation service
+    const translations = await translationService.getPropertyTranslations(propertyId, language);
+
+    console.log(`🌐 [GUEST TRANSLATIONS] Found ${translations.length} translations for property: ${propertyId}`);
+
+    // Convert translations array to object for easier frontend consumption
+    const translationData = translations.reduce((acc, translation) => {
+      acc[translation.field_name] = translation.translated_text;
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        propertyId,
+        language,
+        translations: translationData,
+        supportedLanguages
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching guest property translations:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch property translations',
+      message: error.message 
+    });
   }
 });
 

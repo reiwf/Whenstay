@@ -639,7 +639,7 @@ class ReservationService {
     }
   }
 
-  // NEW: Get single reservation with full details
+  // NEW: Get single reservation with full details including guest information
   async getReservationFullDetails(reservationId) {
     try {
       const { data, error } = await supabaseAdmin
@@ -705,6 +705,9 @@ class ReservationService {
           throw new Error('Failed to fetch reservation details');
         }
 
+        // Get primary guest information
+        const primaryGuest = await this.getGuestByNumber(reservationId, 1);
+
         // Transform basic data to match view structure
         return {
           ...basicData,
@@ -742,23 +745,59 @@ class ReservationService {
           verified_by_name: basicData.user_profiles?.first_name,
           verified_by_lastname: basicData.user_profiles?.last_name,
           
+          // Guest information from reservation_guests table
+          guest_firstname: primaryGuest?.guest_firstname,
+          guest_lastname: primaryGuest?.guest_lastname,
+          guest_mail: primaryGuest?.guest_mail,
+          guest_contact: primaryGuest?.guest_contact,
+          guest_address: primaryGuest?.guest_address,
+          estimated_checkin_time: primaryGuest?.estimated_checkin_time,
+          travel_purpose: primaryGuest?.travel_purpose,
+          passport_url: primaryGuest?.passport_url,
+          emergency_contact_name: primaryGuest?.emergency_contact_name,
+          emergency_contact_phone: primaryGuest?.emergency_contact_phone,
+          agreement_accepted: primaryGuest?.agreement_accepted || false,
+          checkin_submitted_at: primaryGuest?.checkin_submitted_at,
+          admin_verified: primaryGuest?.admin_verified || false,
+          verified_at: primaryGuest?.verified_at,
+          
           // Backward compatibility
           guest_name: basicData.booking_name,
           guest_email: basicData.booking_email,
           guest_phone: basicData.booking_phone,
-          guest_personal_email: basicData.guest_mail,
+          guest_personal_email: primaryGuest?.guest_mail,
           room_number: basicData.room_units?.unit_number || 'TBD',
           room_name: basicData.room_types?.name || 'Standard Room'
         };
       }
 
-      // Add backward compatibility mappings
+      // Get primary guest information for the detailed view
+      const primaryGuest = await this.getGuestByNumber(reservationId, 1);
+
+      // Add backward compatibility mappings and guest information
       return {
         ...data,
+        // Guest information from reservation_guests table
+        guest_firstname: primaryGuest?.guest_firstname,
+        guest_lastname: primaryGuest?.guest_lastname,
+        guest_mail: primaryGuest?.guest_mail,
+        guest_contact: primaryGuest?.guest_contact,
+        guest_address: primaryGuest?.guest_address,
+        estimated_checkin_time: primaryGuest?.estimated_checkin_time,
+        travel_purpose: primaryGuest?.travel_purpose,
+        passport_url: primaryGuest?.passport_url,
+        emergency_contact_name: primaryGuest?.emergency_contact_name,
+        emergency_contact_phone: primaryGuest?.emergency_contact_phone,
+        agreement_accepted: primaryGuest?.agreement_accepted || false,
+        checkin_submitted_at: primaryGuest?.checkin_submitted_at,
+        admin_verified: primaryGuest?.admin_verified || false,
+        verified_at: primaryGuest?.verified_at,
+        
+        // Backward compatibility mappings
         guest_name: data.booking_name,
         guest_email: data.booking_email,
         guest_phone: data.booking_phone,
-        guest_personal_email: data.guest_mail,
+        guest_personal_email: primaryGuest?.guest_mail || data.guest_mail,
         bookingLastname: data.booking_lastname,
         room_number: data.unit_number || 'TBD',
         room_name: data.room_type_name || 'Standard Room'

@@ -1,26 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { adminAPI } from '../services/api'
+import { getSupabaseAdminClient, checkSupabaseEnvironment } from '../services/supabaseClient'
 import toast from 'react-hot-toast'
 
-// Initialize Supabase clients - Debug environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+// Check environment variables and get admin client
+checkSupabaseEnvironment()
+const supabase = getSupabaseAdminClient()
 
-console.log('🔧 Environment variables check:', {
-  url: supabaseUrl ? 'loaded' : 'missing',
-  anonKey: supabaseAnonKey ? 'loaded' : 'missing', 
-  serviceKey: supabaseServiceKey ? 'loaded' : 'missing'
-})
-
-// Use service role client for admin operations (bypasses RLS)
-const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
-
-if (supabaseServiceKey) {
-  console.log('🔧 Admin Supabase client initialized with service role key')
-} else {
-  console.log('⚠️ Admin Supabase client falling back to anonymous key - service key not loaded!')
+if (!supabase) {
+  console.error('Failed to initialize Supabase admin client')
 }
 
 export function useRealtimeCommunication() {
@@ -54,10 +42,14 @@ export function useRealtimeCommunication() {
 
   // Setup real-time subscription for threads
   const setupThreadsSubscription = useCallback(() => {
-    console.log('🔧 Setting up threads subscription...')
+    if (import.meta.env.MODE === 'development') {
+      console.log('🔧 Setting up threads subscription...')
+    }
     
     if (threadsChannelRef.current) {
-      console.log('🧹 Removing existing threads channel')
+      if (import.meta.env.MODE === 'development') {
+        console.log('🧹 Removing existing threads channel')
+      }
       supabase.removeChannel(threadsChannelRef.current)
       threadsChannelRef.current = null
     }
@@ -72,7 +64,9 @@ export function useRealtimeCommunication() {
           table: 'message_threads'
         },
         (payload) => {
-          console.log('📨 Thread change received:', payload.eventType, payload.new?.id)
+          if (import.meta.env.MODE === 'development') {
+            console.log('📨 Thread change received:', payload.eventType, payload.new?.id)
+          }
           
           switch (payload.eventType) {
             case 'INSERT':
@@ -87,7 +81,9 @@ export function useRealtimeCommunication() {
                 // If the updated thread is closed or archived, remove it from the list
                 // since InboxPanel only shows 'open' threads by default
                 if (payload.new.status !== 'open') {
-                  console.log(`Removing thread ${payload.new.id} from inbox (status: ${payload.new.status})`)
+                  if (import.meta.env.MODE === 'development') {
+                    console.log(`Removing thread ${payload.new.id} from inbox (status: ${payload.new.status})`)
+                  }
                   return updatedThreads.filter(thread => thread.id !== payload.new.id)
                 }
                 
@@ -99,7 +95,9 @@ export function useRealtimeCommunication() {
                 if (prev?.id === payload.new.id) {
                   // If the updated thread is closed/archived and it's currently selected, clear selection
                   if (payload.new.status !== 'open') {
-                    console.log(`Clearing selection for closed/archived thread ${payload.new.id}`)
+                    if (import.meta.env.MODE === 'development') {
+                      console.log(`Clearing selection for closed/archived thread ${payload.new.id}`)
+                    }
                     setMessages([])
                     setReservation(null)
                     setGroupBookingInfo(null)
@@ -133,11 +131,15 @@ export function useRealtimeCommunication() {
         }
       )
       .subscribe((status) => {
-        console.log('📡 Threads subscription status:', status)
+        if (import.meta.env.MODE === 'development') {
+          console.log('📡 Threads subscription status:', status)
+        }
         setConnectionStatus(status)
       })
       
-    console.log('✅ Threads subscription setup complete')
+    if (import.meta.env.MODE === 'development') {
+      console.log('✅ Threads subscription setup complete')
+    }
   }, []) // Remove selectedThread dependency to prevent recreating subscription
 
   // Setup global real-time subscription for message delivery status updates

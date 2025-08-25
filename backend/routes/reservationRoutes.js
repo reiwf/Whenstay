@@ -184,7 +184,7 @@ router.get('/:id', adminAuth, async (req, res) => {
   }
 });
 
-// Update reservation (booking info only - guest info uses separate endpoints)
+// Update reservation (includes both booking info and guest info)
 router.put('/:id', adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -200,7 +200,7 @@ router.put('/:id', adminAuth, async (req, res) => {
 
     console.log('Existing reservation found:', existingReservation.id);
 
-    // Prepare booking information updates (non-guest fields only)
+    // Prepare complete update data (including guest information)
     const reservationUpdateData = {};
 
     // Booking contact information (kept in reservations table)
@@ -238,19 +238,40 @@ router.put('/:id', adminAuth, async (req, res) => {
     if (updateData.roomTypeId !== undefined) reservationUpdateData.roomTypeId = updateData.roomTypeId;
     if (updateData.roomUnitId !== undefined) reservationUpdateData.roomUnitId = updateData.roomUnitId;
 
-    // Access read flag (kept in reservations table)
+    // Guest personal information (will be handled by service method)
+    if (updateData.guestFirstname !== undefined) reservationUpdateData.guestFirstname = updateData.guestFirstname;
+    if (updateData.guestLastname !== undefined) reservationUpdateData.guestLastname = updateData.guestLastname;
+    if (updateData.guestMail !== undefined) reservationUpdateData.guestMail = updateData.guestMail;
+    if (updateData.guestContact !== undefined) reservationUpdateData.guestContact = updateData.guestContact;
+    if (updateData.guestAddress !== undefined) reservationUpdateData.guestAddress = updateData.guestAddress;
+
+    // Check-in specific information
+    if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimatedCheckinTime = updateData.estimatedCheckinTime;
+    if (updateData.travelPurpose !== undefined) reservationUpdateData.travelPurpose = updateData.travelPurpose;
+    if (updateData.passportUrl !== undefined) reservationUpdateData.passportUrl = updateData.passportUrl;
+
+    // Emergency contact
+    if (updateData.emergencyContactName !== undefined) reservationUpdateData.emergencyContactName = updateData.emergencyContactName;
+    if (updateData.emergencyContactPhone !== undefined) reservationUpdateData.emergencyContactPhone = updateData.emergencyContactPhone;
+
+    // Administrative fields
+    if (updateData.agreementAccepted !== undefined) reservationUpdateData.agreementAccepted = updateData.agreementAccepted;
+    if (updateData.adminVerified !== undefined) reservationUpdateData.adminVerified = updateData.adminVerified;
     if (updateData.accessRead !== undefined) reservationUpdateData.accessRead = updateData.accessRead;
 
-    console.log('Mapped reservation update data:', reservationUpdateData);
+    console.log('Mapped complete update data:', reservationUpdateData);
 
-    // Update reservation using service
+    // Update reservation using service (this will now handle guest info too)
     const updatedReservation = await reservationService.updateReservation(id, reservationUpdateData);
 
     console.log('Reservation updated successfully:', updatedReservation.id);
 
+    // Get updated reservation with guest information for response
+    const updatedReservationWithGuests = await reservationService.getReservationFullDetails(id);
+
     res.status(200).json({
       message: 'Reservation updated successfully',
-      reservation: updatedReservation
+      reservation: updatedReservationWithGuests
     });
   } catch (error) {
     console.error('Error updating reservation:', error);

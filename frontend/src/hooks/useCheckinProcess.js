@@ -45,9 +45,7 @@ export function useCheckinProcess(reservationId) {
       setLoading(true)
       setError(null)
       
-      console.log('Loading reservation with token:', reservationId)
       const response = await checkinAPI.getReservation(reservationId)
-      console.log('API response:', response.data)
       
       // Handle the response structure from API (now includes multi-guest data)
       const reservationData = response.data.reservation
@@ -64,7 +62,6 @@ export function useCheckinProcess(reservationId) {
       
       // Handle group booking information - Only for actual group bookings
       const groupBookingData = response.data.groupBooking
-      console.log('Group booking data from API:', groupBookingData)
       
       // Strict validation: Only enable group features if this is confirmed as a group booking
       const isActuallyGroupBooking = groupBookingData && 
@@ -82,7 +79,6 @@ export function useCheckinProcess(reservationId) {
       } else {
         setIsGroupBooking(false)
         setGroupBooking(null)
-        console.log('✗ Single reservation (not a group booking)')
       }
       
       // Set guest data with multi-guest support

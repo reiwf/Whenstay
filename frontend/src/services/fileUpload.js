@@ -1,9 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from './supabaseClient'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// Get Supabase client from singleton service
+const supabase = getSupabaseClient()
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabase) {
+  console.error('Failed to initialize Supabase client for file upload')
+}
 
 export const uploadFile = async (file, bucketName = 'guest-documents', folder = '') => {
   try {
@@ -63,7 +65,3 @@ export const deleteFile = async (filePath, bucketName = 'guest-documents') => {
     }
   }
 }
-
-
-
-

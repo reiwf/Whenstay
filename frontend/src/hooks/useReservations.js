@@ -70,7 +70,6 @@ export function useReservations() {
         bookingEmail: reservationData.bookingEmail || reservationData.guestEmail,
         phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
         
-        
         // Stay details
         checkInDate: reservationData.checkInDate,
         checkOutDate: reservationData.checkOutDate,
@@ -78,11 +77,22 @@ export function useReservations() {
         numAdults: reservationData.numAdults,
         numChildren: reservationData.numChildren,
         totalAmount: reservationData.totalAmount,
+        price: reservationData.price,
+        commission: reservationData.commission,
         currency: reservationData.currency,
         status: reservationData.status,
         specialRequests: reservationData.specialRequests,
         bookingSource: reservationData.bookingSource,
+        comments: reservationData.comments,
         beds24BookingId: reservationData.beds24BookingId,
+        
+        // Beds24 webhook specific fields
+        apiReference: reservationData.apiReference,
+        rateDescription: reservationData.rateDescription,
+        apiMessage: reservationData.apiMessage,
+        bookingTime: reservationData.bookingTime,
+        timeStamp: reservationData.timeStamp,
+        lang: reservationData.lang,
         
         // Room assignment (V5 schema)
         propertyId: reservationData.propertyId,
@@ -90,10 +100,16 @@ export function useReservations() {
         roomUnitId: reservationData.roomUnitId,
         roomId: reservationData.roomId, // Legacy support
         
+        // Group booking fields
+        bookingGroupMasterId: reservationData.bookingGroupMasterId,
+        isGroupMaster: reservationData.isGroupMaster,
+        groupRoomCount: reservationData.groupRoomCount,
+        bookingGroupIds: reservationData.bookingGroupIds,
+        
         // Guest personal information (guest_* fields in DB)
         guestFirstname: reservationData.guestFirstname,
         guestLastname: reservationData.guestLastname,
-        guestPersonalEmail: reservationData.guestPersonalEmail,
+        guestMail: reservationData.guestMail,
         guestContact: reservationData.guestContact,
         guestAddress: reservationData.guestAddress,
         
@@ -108,7 +124,8 @@ export function useReservations() {
         
         // Administrative
         agreementAccepted: reservationData.agreementAccepted,
-        adminVerified: reservationData.adminVerified
+        adminVerified: reservationData.adminVerified,
+        accessRead: reservationData.accessRead
       }
       
       // Call the API to update the reservation
@@ -152,7 +169,6 @@ export function useReservations() {
         bookingEmail: reservationData.bookingEmail || reservationData.guestEmail,
         phoneNumber: reservationData.bookingPhone || reservationData.phoneNumber,
         
-        
         // Stay details
         checkInDate: reservationData.checkInDate,
         checkOutDate: reservationData.checkOutDate,
@@ -160,16 +176,55 @@ export function useReservations() {
         numAdults: reservationData.numAdults,
         numChildren: reservationData.numChildren,
         totalAmount: reservationData.totalAmount,
+        price: reservationData.price,
+        commission: reservationData.commission,
         currency: reservationData.currency,
+        status: reservationData.status,
         specialRequests: reservationData.specialRequests,
         bookingSource: reservationData.bookingSource,
+        comments: reservationData.comments,
         beds24BookingId: reservationData.beds24BookingId || `MANUAL-${Date.now()}`,
+        
+        // Beds24 webhook specific fields
+        apiReference: reservationData.apiReference,
+        rateDescription: reservationData.rateDescription,
+        apiMessage: reservationData.apiMessage,
+        bookingTime: reservationData.bookingTime,
+        timeStamp: reservationData.timeStamp,
+        lang: reservationData.lang,
         
         // Room assignment (V5 schema)
         propertyId: reservationData.propertyId,
         roomTypeId: reservationData.roomTypeId,
         roomUnitId: reservationData.roomUnitId,
-        roomId: reservationData.roomId // Legacy support
+        roomId: reservationData.roomId, // Legacy support
+        
+        // Group booking fields
+        bookingGroupMasterId: reservationData.bookingGroupMasterId,
+        isGroupMaster: reservationData.isGroupMaster,
+        groupRoomCount: reservationData.groupRoomCount,
+        bookingGroupIds: reservationData.bookingGroupIds,
+        
+        // Guest personal information (guest_* fields in DB)
+        guestFirstname: reservationData.guestFirstname,
+        guestLastname: reservationData.guestLastname,
+        guestMail: reservationData.guestMail,
+        guestContact: reservationData.guestContact,
+        guestAddress: reservationData.guestAddress,
+        
+        // Check-in details
+        estimatedCheckinTime: reservationData.estimatedCheckinTime,
+        travelPurpose: reservationData.travelPurpose,
+        passportUrl: reservationData.passportUrl,
+        
+        // Emergency contact
+        emergencyContactName: reservationData.emergencyContactName,
+        emergencyContactPhone: reservationData.emergencyContactPhone,
+        
+        // Administrative
+        agreementAccepted: reservationData.agreementAccepted,
+        adminVerified: reservationData.adminVerified,
+        accessRead: reservationData.accessRead
       }
       
       const response = await adminAPI.createReservation(mappedData)

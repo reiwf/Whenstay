@@ -68,6 +68,7 @@ const roomTypeRoutes = require('./routes/roomTypeRoutes');
 const marketDemandRoutes = require('./routes/marketDemandRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const upsellRoutes = require('./routes/upsellRoutes');
+const translationRoutes = require('./routes/translationRoutes');
 
 // Debug middleware to log all API requests
 app.use('/api/*', (req, res, next) => {
@@ -93,6 +94,7 @@ app.use('/api/room-types', roomTypeRoutes);
 app.use('/api/market-demand', marketDemandRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/upsell', upsellRoutes);
+app.use('/api/translations', translationRoutes);
 
 // Serve static files from frontend build
 // In development: frontend is at ../frontend/dist

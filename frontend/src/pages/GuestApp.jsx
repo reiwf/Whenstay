@@ -43,6 +43,8 @@ import Section from '../components/ui/Section'
 import { ListGroup, ListRow, PlainGroup  } from '../components/ui/ListGroup'
 import TaxDescription from '../components/payment/TaxDescription'
 import LongTextRow from '@/components/ui/LongTextRow'
+import { usePropertyTranslations } from '../hooks/usePropertyTranslations'
+import Markdown from '@/components/ui/Markdown'
 
 export default function GuestApp() {
   const { token } = useParams()
@@ -58,6 +60,19 @@ export default function GuestApp() {
   const [services, setServices] = useState([])
   const [servicesLoading, setServicesLoading] = useState(false)
   const [checkinModalOpen, setCheckinModalOpen] = useState(false)
+
+  // Use property translations hook - must be called at the top level
+  // Pass the guest token and enable guest mode for translation access
+  const { translatedContent, getTranslatedText, translations, loading: translationsLoading, error: translationsError } = usePropertyTranslations(token, true)
+
+  // Debug logging for translations
+  useEffect(() => {
+    if (dashboardData?.property?.id) {
+
+      // Test the getTranslatedText function
+      const checkInInstructions = getTranslatedText('check_in_instructions', dashboardData.property.check_in_instructions)
+    }
+  }, [dashboardData, translations, i18n.language, translatedContent, getTranslatedText, translationsLoading, translationsError])
 
   function StatusChip({ ok, okText = t('statusChip.ready'), waitText = t('statusChip.pending') }) {
     return (
@@ -191,7 +206,6 @@ export default function GuestApp() {
       }
       
       const data = await response.json()
-      console.log('GuestApp loaded data:', data)
       
       setDashboardData(data)
 
@@ -646,106 +660,62 @@ export default function GuestApp() {
               rightLines={1}
               rightClass="font-medium"
           />
-            {property.description && (
+            {(getTranslatedText('description', property.description) || property.description) && (
                 <LongTextRow
                   dialog="center"
                   icon={<TrainFront className="w-4 h-4 text-slate-500" />}
                   label={t('additionalStrings.description')}
-                  text={property.description}
+                  text={getTranslatedText('description', property.description)}
                   lines={2}
                   title={t('additionalStrings.description')}
                   showPreview={false} 
                   renderRich={(txt) => (
-                    <ul className="space-y-2">
-                      {String(txt || '')
-                        .split('\n').filter(Boolean)
-                        .map((l, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-300" />
-                            <span className="text-[13px] leading-6 text-slate-700">
-                              {l.replace(/^[-•\d.)]+\s*/, '')}
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
+                    <Markdown>{String(txt || '')}</Markdown>
                   )}
                 />
               )}
-             {property.check_in_instructions && (
+             {(getTranslatedText('check_in_instructions', property.check_in_instructions) || property.check_in_instructions) && (
               <LongTextRow
                 dialog="center"
                 icon={<KeyRound className="w-4 h-4 text-slate-500" />}
                 label={t('additionalStrings.selfCheckIn')}
-                text={property.check_in_instructions}
+                text={getTranslatedText('check_in_instructions', property.check_in_instructions)}
                 lines={2}
                 title={t('additionalStrings.selfCheckIn')}
                 showPreview={false} 
                 renderRich={(txt) => (
-                  <ul className="space-y-2">
-                    {String(txt || '')
-                      .split('\n').filter(Boolean)
-                      .map((l, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-300" />
-                          <span className="text-[13px] leading-6 text-slate-700">
-                            {l.replace(/^[-•\d.)]+\s*/, '')}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
+                  <Markdown>{String(txt || '')}</Markdown>
                 )}
               />
             )}
-            {property.luggage_info && (
+            {(getTranslatedText('luggage_info', property.luggage_info) || property.luggage_info) && (
               <LongTextRow
                 dialog="center"
                 icon={<ShoppingBag className="w-4 h-4 text-slate-500" />}
                 label={t('additionalStrings.luggageInfo')}
-                text={property.luggage_info}
+                text={getTranslatedText('luggage_info', property.luggage_info)}
                 lines={2}
                 title={t('additionalStrings.luggageInfo')}
                 showPreview={false} 
                 renderRich={(txt) => (
-                  <ul className="space-y-2">
-                    {String(txt || '')
-                      .split('\n').filter(Boolean)
-                      .map((l, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-300" />
-                          <span className="text-[13px] leading-6 text-slate-700">
-                            {l.replace(/^[-•\d.)]+\s*/, '')}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                )}
+                    <Markdown>{String(txt || '')}</Markdown>
+                  )}
               />
             )}
-            {property.house_rules && (
+            {(getTranslatedText('house_rules', property.house_rules) || property.house_rules) && (
               <LongTextRow
                 dialog="center"
                 icon={<FileText className="w-4 h-4 text-slate-500" />}
                 label={t('additionalStrings.houseRulesPolicy')}
-                text={property.house_rules}
+                text={getTranslatedText('house_rules', property.house_rules)}
                 lines={2}
                 title={t('additionalStrings.houseRulesPolicy')}
                 showPreview={false} 
                 renderRich={(txt) => (
-                  <ul className="space-y-2">
-                    {String(txt || '')
-                      .split('\n').filter(Boolean)
-                      .map((l, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-300" />
-                          <span className="text-[13px] leading-6 text-slate-700">
-                            {l.replace(/^[-•\d.)]+\s*/, '')}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                )}
+                    <Markdown>{String(txt || '')}</Markdown>
+                  )}
               />
-            )}            
+            )}
           </ListGroup>
         </Section>
 

@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require('../config/supabase');
 const { cleanObject } = require('./utils/dbHelpers');
+const translationService = require('./translationService');
 
 class PropertyService {
   // Property Management Methods
@@ -79,6 +80,67 @@ class PropertyService {
       return data;
     } catch (error) {
       console.error('Database error fetching property:', error);
+      throw error;
+    }
+  }
+
+  // Get property with translations in specific language
+  async getPropertyWithTranslations(propertyId, languageCode = 'en') {
+    try {
+      // Get basic property data
+      const property = await this.getPropertyById(propertyId);
+      
+      // Get translated fields
+      const translatedFields = await translationService.getPropertyTranslatedFields(
+        propertyId, 
+        languageCode
+      );
+
+      // Merge translations with property data
+      return {
+        ...property,
+        translations: {
+          house_rules: translatedFields.house_rules || property.house_rules,
+          description: translatedFields.description || property.description,
+          luggage_info: translatedFields.luggage_info || property.luggage_info,
+          check_in_instructions: translatedFields.check_in_instructions || property.check_in_instructions
+        }
+      };
+    } catch (error) {
+      console.error('Database error fetching property with translations:', error);
+      throw error;
+    }
+  }
+
+  // Get multiple properties with translations
+  async getPropertiesWithTranslations(languageCode = 'en', userProfile = null) {
+    try {
+      // Get basic properties
+      const properties = await this.getAllProperties(userProfile);
+      
+      // Add translations to each property
+      const propertiesWithTranslations = await Promise.all(
+        properties.map(async (property) => {
+          const translatedFields = await translationService.getPropertyTranslatedFields(
+            property.id, 
+            languageCode
+          );
+
+          return {
+            ...property,
+            translations: {
+              house_rules: translatedFields.house_rules || property.house_rules,
+              description: translatedFields.description || property.description,
+              luggage_info: translatedFields.luggage_info || property.luggage_info,
+              check_in_instructions: translatedFields.check_in_instructions || property.check_in_instructions
+            }
+          };
+        })
+      );
+
+      return propertiesWithTranslations;
+    } catch (error) {
+      console.error('Database error fetching properties with translations:', error);
       throw error;
     }
   }

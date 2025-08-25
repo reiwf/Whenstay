@@ -50,7 +50,7 @@ class ImageProcessingService {
       // Download the image
       const response = await fetch(imageUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; WhenStay/1.0)',
+          'User-Agent': 'Mozilla/5.0 (compatible; staylabel/1.0)',
         },
         timeout: 30000, // 30 second timeout
       });

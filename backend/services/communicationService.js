@@ -8,16 +8,6 @@ class CommunicationService {
   // ===== THREAD MANAGEMENT =====
   
   async createThread(data) {
-    // COMPREHENSIVE DEBUG LOGGING
-    console.log(`🏗️  [CREATE THREAD DEBUG] Creating new thread with data:`, {
-      reservation_id: data.reservation_id,
-      subject: data.subject,
-      hasParticipants: !!data.participants,
-      hasChannels: !!data.channels,
-      timestamp: new Date().toISOString(),
-      stack: new Error().stack?.split('\n').slice(1, 4).map(line => line.trim()) // Get call stack
-    });
-
     const { error, data: thread } = await this.supabase
       .from('message_threads')
       .insert({
@@ -34,8 +24,6 @@ class CommunicationService {
       console.error(`❌ [CREATE THREAD ERROR] Failed to create thread:`, error);
       throw error;
     }
-
-    console.log(`✅ [CREATE THREAD SUCCESS] Created thread ${thread.id} for reservation ${data.reservation_id}`);
 
     // Create initial participants if provided
     if (data.participants) {
@@ -109,15 +97,12 @@ class CommunicationService {
   }
 
   async addThreadChannels(threadId, channels) {
-    console.log(`Adding thread channels for thread ${threadId}:`, channels);
     
     const channelRows = channels.map(c => ({
       thread_id: threadId,
       channel: c.channel,
       external_thread_id: c.external_thread_id || threadId // Use threadId as fallback if external_thread_id is null
     }));
-
-    console.log('Inserting channel rows:', channelRows);
 
     const { error, data } = await this.supabase
       .from('thread_channels')
@@ -128,8 +113,6 @@ class CommunicationService {
       console.error('Error inserting thread channels:', error);
       throw error;
     }
-
-    console.log('Successfully inserted thread channels:', data);
     return data;
   }
 
@@ -168,7 +151,6 @@ class CommunicationService {
       if (deliveryError) {
         // Handle trigger error during insert
         if (deliveryError.code === '20000' && deliveryError.message?.includes('case not found')) {
-          console.log('Database trigger error during insert, using workaround...');
           // Insert with minimal data that won't trigger the CASE statement
           const { error: retryError } = await this.supabase
             .from('message_deliveries')
@@ -273,7 +255,6 @@ class CommunicationService {
       if (deliveryError) {
         // Handle trigger error during insert
         if (deliveryError.code === '20000' && deliveryError.message?.includes('case not found')) {
-          console.log('Database trigger error during receive message insert, using workaround...');
           // Insert with minimal data that won't trigger the CASE statement
           const { error: retryError } = await this.supabase
             .from('message_deliveries')
@@ -837,7 +818,6 @@ class CommunicationService {
       } else {
         // This reservation is a child - need to find the master reservation by Beds24 booking ID
         const masterBeds24Id = reservation.booking_group_master_id;
-        console.log(`🔍 [GROUP INFO] Child reservation ${reservationId}, looking for master with Beds24 ID: ${masterBeds24Id}`);
         
         // Find the master reservation using the Beds24 booking ID
         const { data: masterReservation, error: masterError } = await this.supabase
@@ -853,7 +833,6 @@ class CommunicationService {
         }
 
         masterReservationId = masterReservation.id;
-        console.log(`✅ [GROUP INFO] Found master reservation: ${masterReservationId} for Beds24 ID: ${masterBeds24Id}`);
       }
 
       // Get all reservations in the group using the master reservation ID and Beds24 master ID
@@ -884,8 +863,6 @@ class CommunicationService {
         totalRooms: reservation.group_room_count || groupReservations?.length || 1,
         groupReservations: groupReservations || []
       };
-
-      console.log(`✅ [GROUP INFO] Group booking info for ${reservationId}:`, result);
       return result;
     } catch (error) {
       console.error('❌ [GROUP INFO] Error getting group booking info:', error);
@@ -895,8 +872,7 @@ class CommunicationService {
 
   async findGroupBookingThread(reservationId) {
     try {
-      console.log(`🔍 Finding group booking thread for reservation ${reservationId}`);
-      
+     
       // Get reservation details to check if it's part of a group booking
       const { data: reservation } = await this.supabase
         .from('reservations')
@@ -905,22 +881,12 @@ class CommunicationService {
         .single();
 
       if (!reservation) {
-        console.log(`❌ Reservation ${reservationId} not found`);
         return null;
       }
-
-      console.log(`📄 Reservation details:`, {
-        id: reservationId,
-        booking_group_master_id: reservation.booking_group_master_id,
-        is_group_master: reservation.is_group_master,
-        beds24_booking_id: reservation.beds24_booking_id
-      });
-
       // Check if this is a group booking
       const isGroupBooking = reservation.is_group_master || !!reservation.booking_group_master_id;
       
       if (!isGroupBooking) {
-        console.log(`❌ Reservation ${reservationId} is not part of a group booking`);
         return null;
       }
 
@@ -946,14 +912,11 @@ class CommunicationService {
           .single();
 
         if (!masterReservation) {
-          console.log(`❌ Master reservation not found for Beds24 booking ID: ${masterBeds24BookingId}`);
           return null;
         }
 
         masterReservationId = masterReservation.id;
       }
-
-      console.log(`🔍 Looking for existing threads for group booking master: ${masterReservationId} (Beds24: ${masterBeds24BookingId})`);
 
       // Find all reservations that belong to this group booking using the master reservation ID
       const { data: groupReservations, error: groupError } = await this.supabase
@@ -967,15 +930,8 @@ class CommunicationService {
       }
 
       if (!groupReservations || groupReservations.length === 0) {
-        console.log(`❌ No group reservations found for master reservation: ${masterReservationId}`);
         return null;
       }
-
-      console.log(`✅ Found ${groupReservations.length} reservations in group:`, groupReservations.map(r => ({
-        id: r.id,
-        beds24_booking_id: r.beds24_booking_id,
-        is_master: r.is_group_master
-      })));
 
       const reservationIds = groupReservations.map(r => r.id);
 
@@ -996,14 +952,6 @@ class CommunicationService {
 
       if (existingThreads && existingThreads.length > 0) {
         const existingThread = existingThreads[0]; // Get the most recent thread
-        console.log(`✅ Found existing group booking thread ${existingThread.id} for group master ${masterReservationId}`);
-        console.log(`   Thread details:`, {
-          id: existingThread.id,
-          reservation_id: existingThread.reservation_id,
-          subject: existingThread.subject,
-          status: existingThread.status,
-          created_at: existingThread.created_at
-        });
 
         // If there are multiple threads, we need to merge them (this is the fix for existing duplicate threads)
         if (existingThreads.length > 1) {
@@ -1013,15 +961,11 @@ class CommunicationService {
             reservation_id: t.reservation_id,
             created_at: t.created_at
           })));
-          
-          // For now, use the most recent thread, but we should consider merging them
-          console.log(`   Using the most recent thread: ${existingThread.id}`);
         }
 
         return existingThread;
       }
 
-      console.log(`❌ No existing threads found for group booking master: ${masterReservationId}`);
       return null;
     } catch (error) {
       console.error('❌ Error finding group booking thread:', error);
@@ -1098,7 +1042,6 @@ class CommunicationService {
         parent_message_id
       });
 
-      console.log(`Sent group message ${message.id} to unified thread ${thread.id} for reservation ${reservation_id}`);
       return message;
 
     } catch (error) {
@@ -1158,7 +1101,6 @@ class CommunicationService {
 
       // Only reopen if thread is closed (not archived)
       if (thread.status === 'closed') {
-        console.log(`Auto-reopening closed thread ${threadId} due to new ${originRole} message`);
         
         const { error: updateError } = await this.supabase
           .from('message_threads')
@@ -1170,8 +1112,7 @@ class CommunicationService {
 
         if (updateError) {
           console.error('Error auto-reopening closed thread:', updateError);
-        } else {
-          console.log(`Successfully auto-reopened thread ${threadId}`);
+        } else {         
         }
       }
     } catch (error) {
@@ -1209,7 +1150,6 @@ class CommunicationService {
         // Check if any delivery record doesn't already have provider_message_id
         const deliveryWithoutProvider = message.message_deliveries?.find(d => !d.provider_message_id);
         if (deliveryWithoutProvider) {
-          console.log(`Found matching outbound message ${message.id} for webhook echo`);
           return message;
         }
       }
@@ -1237,8 +1177,6 @@ class CommunicationService {
         console.error('Error updating delivery provider message ID:', error);
         throw error;
       }
-
-      console.log(`Successfully backfilled provider_message_id ${providerMessageId} for message ${messageId}`);
       return { success: true };
     } catch (error) {
       console.error('Error in updateDeliveryProviderMessageId:', error);
@@ -1246,23 +1184,13 @@ class CommunicationService {
     }
   }
 
-  async findOrCreateThreadByReservation(reservationId, initialData = {}) {
-    console.log(`🎯 [FIND/CREATE THREAD DEBUG] Starting thread lookup for reservation ${reservationId}`, {
-      initialData,
-      timestamp: new Date().toISOString(),
-      stack: new Error().stack?.split('\n').slice(1, 3).map(line => line.trim()) // Get call stack
-    });
-    
-    // FIXED ORDER: Check for group booking FIRST to ensure unification
+  async findOrCreateThreadByReservation(reservationId, initialData = {}) {    
     // If this reservation is part of a group, look for existing threads for other reservations in the same group
-    console.log(`🔍 [STEP 1] Checking for group booking thread...`);
     const groupThread = await this.findGroupBookingThread(reservationId);
     if (groupThread) {
-      console.log(`✅ [STEP 1 SUCCESS] Found existing group booking thread ${groupThread.id} for reservation ${reservationId}`);
       
       // Auto-reopen if needed
       if (groupThread.status !== 'open') {
-        console.log(`🔄 [STEP 1] Auto-reopening group booking thread ${groupThread.id} for new activity`);
         await this.updateThreadStatus(groupThread.id, 'open');
         groupThread.status = 'open';
       }
@@ -1275,29 +1203,21 @@ class CommunicationService {
           );
           
           if (!existingChannelMapping) {
-            console.log(`🔗 [STEP 1] Adding missing channel mapping to group thread: ${channelData.channel}`);
             try {
               await this.addThreadChannels(groupThread.id, [channelData]);
             } catch (error) {
-              if (error.code === '23505') {
-                console.log('Channel mapping already exists, continuing...');
+              if (error.code === 'error map') {
               } else {
                 throw error;
               }
             }
           }
         }
-      }
-      
-      console.log(`🎯 [FIND/CREATE THREAD RESULT] Returning group thread ${groupThread.id} for reservation ${reservationId}`);
+      }      
       return groupThread;
     }
-    
-    console.log(`❌ [STEP 1] No group booking thread found, proceeding to individual lookup...`);
-    
+      
     // SECOND: Try to find thread by reservation_id with any status (not just 'open')
-    // This only applies to non-group bookings now
-    console.log(`🔍 [STEP 2] Checking for individual reservation thread...`);
     const { data: existingByReservation } = await this.supabase
       .from('message_threads')
       .select(`
@@ -1310,11 +1230,9 @@ class CommunicationService {
       .maybeSingle();
 
     if (existingByReservation) {
-      console.log(`✅ [STEP 2 SUCCESS] Found existing thread ${existingByReservation.id} for reservation ${reservationId} (status: ${existingByReservation.status})`);
       
       // If thread is closed/archived but we're getting new messages, auto-reopen it
       if (existingByReservation.status !== 'open') {
-        console.log(`🔄 [STEP 2] Auto-reopening ${existingByReservation.status} thread ${existingByReservation.id} for new activity`);
         await this.updateThreadStatus(existingByReservation.id, 'open');
         existingByReservation.status = 'open';
       }
@@ -1327,34 +1245,25 @@ class CommunicationService {
           );
           
           if (!existingChannelMapping) {
-            console.log(`🔗 [STEP 2] Adding missing channel mapping: ${channelData.channel} for thread ${existingByReservation.id}`);
             try {
               await this.addThreadChannels(existingByReservation.id, [channelData]);
-              console.log(`Successfully added channel mapping: ${channelData.channel}`);
             } catch (error) {
               console.error(`Error adding channel mapping: ${error.message}`);
               // If it's a unique constraint violation, the mapping may have been added by another process
-              if (error.code === '23505') {
-                console.log('Channel mapping already exists (added by another process), continuing...');
+              if (error.code === 'error map') {
               } else {
                 throw error;
               }
             }
           } else {
-            console.log(`Channel mapping already exists: ${channelData.channel} for thread ${existingByReservation.id}`);
           }
         }
       }
       
-      console.log(`🎯 [FIND/CREATE THREAD RESULT] Returning individual thread ${existingByReservation.id} for reservation ${reservationId}`);
       return existingByReservation;
     }
 
-    console.log(`❌ [STEP 2] No individual thread found, checking channel mappings...`);
-
-    // Third, check if there's already a thread_channel with this external_thread_id
     // This handles cases where the same external conversation spans multiple reservations
-    console.log(`🔍 [STEP 3] Checking for channel-based thread mappings...`);
     if (initialData.channels && Array.isArray(initialData.channels)) {
       for (const channelData of initialData.channels) {
         const { data: existingChannelThread } = await this.supabase
@@ -1368,11 +1277,10 @@ class CommunicationService {
           .maybeSingle();
 
         if (existingChannelThread?.message_threads) {
-          console.log(`✅ [STEP 3 SUCCESS] Found existing thread ${existingChannelThread.message_threads.id} via channel mapping ${channelData.channel}:${channelData.external_thread_id}`);
+
           
           // Update the thread to associate with this reservation if it's not already
           if (existingChannelThread.message_threads.reservation_id !== reservationId) {
-            console.log(`🔄 [STEP 3] Updating thread ${existingChannelThread.message_threads.id} to associate with reservation ${reservationId}`);
             const { error: updateError } = await this.supabase
               .from('message_threads')
               .update({ 
@@ -1390,20 +1298,14 @@ class CommunicationService {
 
           // Auto-reopen if closed
           if (existingChannelThread.message_threads.status !== 'open') {
-            console.log(`🔄 [STEP 3] Auto-reopening thread ${existingChannelThread.message_threads.id} for new activity`);
             await this.updateThreadStatus(existingChannelThread.message_threads.id, 'open');
             existingChannelThread.message_threads.status = 'open';
           }
 
-          console.log(`🎯 [FIND/CREATE THREAD RESULT] Returning channel-mapped thread ${existingChannelThread.message_threads.id} for reservation ${reservationId}`);
           return existingChannelThread.message_threads;
         }
       }
-    }
-
-    console.log(`❌ [STEP 3] No channel-mapped threads found, creating new thread...`);
-    console.log(`🏗️  [STEP 4] Creating new thread for reservation ${reservationId}`);
-    
+    }    
     // Create new thread with group booking awareness
     const newThread = await this.createThread({
       reservation_id: reservationId,
@@ -1411,8 +1313,6 @@ class CommunicationService {
       ...initialData
     });
     
-    console.log(`✅ [STEP 4 SUCCESS] Successfully created thread ${newThread.id} for reservation ${reservationId}`);
-    console.log(`🎯 [FIND/CREATE THREAD RESULT] Returning new thread ${newThread.id} for reservation ${reservationId}`);
     return newThread;
   }
 

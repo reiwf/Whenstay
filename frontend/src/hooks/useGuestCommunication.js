@@ -1,11 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../services/supabaseClient'
 import toast from 'react-hot-toast'
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Get Supabase client from singleton service
+const supabase = getSupabaseClient()
+
+if (!supabase) {
+  console.error('Failed to initialize Supabase client')
+}
 
 export function useGuestCommunication(token) {
   const [loading, setLoading] = useState(false)

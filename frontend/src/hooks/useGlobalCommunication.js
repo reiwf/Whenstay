@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdminClient } from '../services/supabaseClient'
 import { adminAPI } from '../services/api'
 
-// Initialize Supabase client for global notifications
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// Get Supabase admin client from singleton service for global notifications
+const supabase = getSupabaseAdminClient()
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
+if (!supabase) {
+  console.error('Failed to initialize Supabase admin client for global communication')
+}
 
 export function useGlobalCommunication() {
   const [unreadCount, setUnreadCount] = useState(0)

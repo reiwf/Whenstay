@@ -285,7 +285,7 @@
   },
   "guestProfile": {
     "title": "住客档案",
-    "welcomeBack": "欢迎回来，{{name}}！",
+    "welcomeBack": "欢迎回来，{{name}}!",
     "totalReservations": "总预订数",
     "contactInformation": "联系方式",
     "name": "姓名",
