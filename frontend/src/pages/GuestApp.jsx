@@ -44,6 +44,7 @@ import { ListGroup, ListRow, PlainGroup  } from '../components/ui/ListGroup'
 import TaxDescription from '../components/payment/TaxDescription'
 import LongTextRow from '@/components/ui/LongTextRow'
 import { usePropertyTranslations } from '../hooks/usePropertyTranslations'
+import useRoomTypeTranslations from '../hooks/useRoomTypeTranslations'
 import Markdown from '@/components/ui/Markdown'
 
 export default function GuestApp() {
@@ -65,6 +66,13 @@ export default function GuestApp() {
   // Pass the guest token and enable guest mode for translation access
   const { translatedContent, getTranslatedText, translations, loading: translationsLoading, error: translationsError } = usePropertyTranslations(token, true)
 
+  // Use room type translations hook with guest token
+  const { 
+    getCachedTranslation: getRoomTypeTranslation, 
+    loadRoomTypeTranslations,
+    loading: roomTypeTranslationsLoading 
+  } = useRoomTypeTranslations(token, true)
+
   // Debug logging for translations
   useEffect(() => {
     if (dashboardData?.property?.id) {
@@ -73,6 +81,26 @@ export default function GuestApp() {
       const checkInInstructions = getTranslatedText('check_in_instructions', dashboardData.property.check_in_instructions)
     }
   }, [dashboardData, translations, i18n.language, translatedContent, getTranslatedText, translationsLoading, translationsError])
+
+  // Load room type translations when dashboard data is available
+  useEffect(() => {
+    if (dashboardData?.room?.room_type_id && i18n.language) {
+      loadRoomTypeTranslations(dashboardData.room.room_type_id, i18n.language)
+    }
+  }, [dashboardData?.room?.room_type_id, i18n.language, loadRoomTypeTranslations])
+
+  // Function to get translated room type name
+  const getTranslatedRoomTypeName = (room) => {
+    if (!room?.room_type_id || !room?.room_name) {
+      return room?.room_name || '-'
+    }
+
+    // Try to get translated name
+    const translatedName = getRoomTypeTranslation(room.room_type_id, i18n.language, 'name')
+    
+    // Return translated name if available, otherwise fallback to original
+    return translatedName || room.room_name
+  }
 
   function StatusChip({ ok, okText = t('statusChip.ready'), waitText = t('statusChip.pending') }) {
     return (
@@ -646,20 +674,29 @@ export default function GuestApp() {
               rightLines={2}
               rightClass="font-medium"
           />
+           {(getTranslatedText('description', property.address) || property.address) && (
             <ListRow
               left={<div className="flex items-center gap-2"><MapPinned className="w-4 h-4 text-slate-500" /> {t('guestApp.address')}</div>}
-              right={property?.address || '-'}
-              rightTitle={property?.address}
-              rightLines={2}   
-              rightClass="font-medium"     // nicer for addresses (2 lines then clamp)
+              right={
+                  <div className="text-right">
+                    <div className="font-medium">
+                      {getTranslatedText('address', property.address)}
+                    </div>
+                    {/* <div className="text-xs text-slate-500">{getTranslatedText('address', property.address)}</div> */}
+                  </div>
+                }
+              rightLines={3}
             />
+            )}
+            
             <ListRow
               left={<div className="flex items-center gap-2"><Home className="w-4 h-4 text-slate-500" /> {t('guestApp.room')}</div>}
-              right={room?.room_name || '-'}
-              rightTitle={room?.room_name}
+              right={getTranslatedRoomTypeName(room)}
+              rightTitle={getTranslatedRoomTypeName(room)}
               rightLines={1}
               rightClass="font-medium"
           />
+          
             {(getTranslatedText('description', property.description) || property.description) && (
                 <LongTextRow
                   dialog="center"

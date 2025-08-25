@@ -1,1 +1,53 @@
 
+{
+  "close": "Close",
+  "save": "Save",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "delete": "Delete",
+  "edit": "Edit",
+  "add": "Add",
+  "update": "Update",
+  "create": "Create",
+  "loading": "Loading...",
+  "pleaseWait": "Please wait...",
+  "confirmDelete": "Are you sure you want to delete this item?",
+  "confirmAction": "Are you sure you want to proceed?",
+  "unsavedChanges": "You have unsaved changes. Are you sure you want to leave?",
+  "required": "This field is required",
+  "invalid": "Invalid input",
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Information",
+  "reservation": {
+    "title": "Reservation Details",
+    "newTitle": "New Reservation",
+    "editTitle": "Edit Reservation",
+    "deleteTitle": "Delete Reservation",
+    "bookingInfo": "Booking Information",
+    "guestInfo": "Guest Information",
+    "systemInfo": "System Information",
+    "adminSection": "Admin Section",
+    "checkinDetails": "Check-in Details",
+    "emergencyContact": "Emergency Contact"
+  },
+  "property": {
+    "title": "Property Details",
+    "newTitle": "New Property",
+    "editTitle": "Edit Property",
+    "deleteTitle": "Delete Property"
+  },
+  "roomType": {
+    "title": "Room Type Details",
+    "newTitle": "New Room Type",
+    "editTitle": "Edit Room Type",
+    "deleteTitle": "Delete Room Type"
+  },
+  "user": {
+    "title": "User Details",
+    "newTitle": "New User",
+    "editTitle": "Edit User",
+    "deleteTitle": "Delete User"
+  }
+}

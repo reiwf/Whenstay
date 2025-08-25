@@ -11,7 +11,7 @@ const { adminAuth } = require('../middleware/auth');
 // Beds24 webhook endpoint
 router.post('/beds24', async (req, res) => {
   try {
-    console.log('Received Beds24 webhook:', req.body);
+    // console.log('Received Beds24 webhook:', req.body);
     
     // Verify webhook signature if configured
     const signature = req.headers['x-beds24-signature'] || req.headers['signature'];
@@ -148,8 +148,6 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
-    console.log(`🎯 [WEBHOOK MESSAGES] Processing ${messages.length} messages from webhook`);
-
     // Get booking information to find the reservation
     const booking = webhookData.booking || webhookData;
     const beds24BookingId = booking.id || booking.beds24BookingId;
@@ -161,7 +159,6 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
-    console.log(`🎯 [WEBHOOK MESSAGES] Looking for reservation with Beds24 booking ID: ${beds24BookingId}`);
 
     // Find the reservation to get thread context
     const reservation = await reservationService.getReservationByBeds24Id(beds24BookingId.toString());
@@ -171,19 +168,15 @@ async function processWebhookMessages(webhookData) {
       return;
     }
 
-    console.log(`🎯 [WEBHOOK MESSAGES] Found reservation ${reservation.id} for Beds24 booking ${beds24BookingId}`);
-
     // CRITICAL FIX: For group bookings, ensure we find/create the unified thread properly
     // Check if this is part of a group booking
     const groupInfo = await communicationService.getGroupBookingInfo(reservation.id);
     
     if (groupInfo.isGroupBooking) {
-      console.log(`🎯 [WEBHOOK MESSAGES] Group booking detected! Master: ${groupInfo.masterReservationId}, Total rooms: ${groupInfo.totalRooms}`);
       
       // For group bookings, always use the master reservation ID to ensure unified thread
       const masterReservationId = groupInfo.masterReservationId;
       
-      console.log(`🎯 [WEBHOOK MESSAGES] Using master reservation ${masterReservationId} for unified group thread`);
       
       // Find or create communication thread using the master reservation
       const thread = await communicationService.findOrCreateThreadByReservation(
@@ -193,7 +186,6 @@ async function processWebhookMessages(webhookData) {
         }
       );
 
-      console.log(`🎯 [WEBHOOK MESSAGES] Processing messages for GROUP thread: ${thread.id}, master reservation: ${masterReservationId}, channel: ${channel}`);
 
       // Process each message
       for (const message of messages) {
@@ -207,10 +199,7 @@ async function processWebhookMessages(webhookData) {
           // Continue processing other messages even if one fails
         }
       }
-
-      console.log(`🎯 [WEBHOOK MESSAGES] Successfully processed ${messages.length} messages for GROUP reservation ${masterReservationId}`);
     } else {
-      console.log(`🎯 [WEBHOOK MESSAGES] Individual booking detected for reservation ${reservation.id}`);
       
       // Find or create communication thread for this individual reservation
       const thread = await communicationService.findOrCreateThreadByReservation(
@@ -220,8 +209,6 @@ async function processWebhookMessages(webhookData) {
         }
       );
 
-      console.log(`🎯 [WEBHOOK MESSAGES] Processing messages for INDIVIDUAL thread: ${thread.id}, reservation: ${reservation.id}, channel: ${channel}`);
-
       // Process each message
       for (const message of messages) {
         try {
@@ -234,8 +221,6 @@ async function processWebhookMessages(webhookData) {
           // Continue processing other messages even if one fails
         }
       }
-
-      console.log(`🎯 [WEBHOOK MESSAGES] Successfully processed ${messages.length} messages for INDIVIDUAL reservation ${reservation.id}`);
     }
 
   } catch (error) {
@@ -246,14 +231,6 @@ async function processWebhookMessages(webhookData) {
 
 // Process an individual message from Beds24
 async function processIndividualMessage(message, threadId, channel) {
-  console.log(`📨 [INDIVIDUAL MESSAGE] Processing message ${message.id} for thread ${threadId}, channel: ${channel}`, {
-    id: message.id,
-    source: message.source,
-    time: message.time,
-    read: message.read,
-    channel: channel,
-    content: message.message?.substring(0, 50) + '...'
-  });
 
   // Check if this is an echo of our outbound message (host source)
   if (message.source === 'host') {

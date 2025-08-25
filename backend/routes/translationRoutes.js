@@ -346,7 +346,8 @@ router.get('/config', (req, res) => {
       success: true,
       data: {
         supportedLanguages: translationService.constructor.SUPPORTED_LANGUAGES,
-        translatableFields: translationService.constructor.TRANSLATABLE_FIELDS
+        translatableFields: translationService.constructor.TRANSLATABLE_FIELDS,
+        roomTypeTranslatableFields: translationService.constructor.ROOM_TYPE_TRANSLATABLE_FIELDS
       }
     });
   } catch (error) {
@@ -354,6 +355,325 @@ router.get('/config', (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch translation config',
+      error: error.message
+    });
+  }
+});
+
+// ===== ROOM TYPE TRANSLATION ROUTES =====
+
+// Get all translations for a room type
+router.get('/room-types/:roomTypeId/translations', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const { language } = req.query;
+
+    const translations = await translationService.getRoomTypeTranslations(roomTypeId, language);
+    
+    res.json({
+      success: true,
+      data: translations
+    });
+  } catch (error) {
+    console.error('Error fetching room type translations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch room type translations',
+      error: error.message
+    });
+  }
+});
+
+// Get translated text for a specific room type field
+router.get('/room-types/:roomTypeId/translations/:fieldName/:language', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId, fieldName, language } = req.params;
+
+    const translatedText = await translationService.getRoomTypeTranslatedText(roomTypeId, fieldName, language);
+    
+    res.json({
+      success: true,
+      data: {
+        roomTypeId,
+        fieldName,
+        language,
+        translatedText
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching room type translated text:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch room type translated text',
+      error: error.message
+    });
+  }
+});
+
+// Get all translated fields for a room type in specific language
+router.get('/room-types/:roomTypeId/translated-fields', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const { language = 'en' } = req.query;
+
+    const translatedFields = await translationService.getRoomTypeTranslatedFields(roomTypeId, language);
+    
+    res.json({
+      success: true,
+      data: {
+        roomTypeId,
+        language,
+        fields: translatedFields
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching room type translated fields:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch room type translated fields',
+      error: error.message
+    });
+  }
+});
+
+// Create or update a room type translation
+router.post('/room-types/:roomTypeId/translations', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const { fieldName, languageCode, translatedText, isAutoTranslated, isApproved } = req.body;
+    const createdBy = req.user?.id;
+
+    // Validate required fields
+    if (!fieldName || !languageCode || !translatedText) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: fieldName, languageCode, and translatedText'
+      });
+    }
+
+    const options = {
+      isAutoTranslated: isAutoTranslated || false,
+      createdBy,
+      isApproved: isApproved || false
+    };
+
+    const translation = await translationService.upsertRoomTypeTranslation(
+      roomTypeId,
+      fieldName,
+      languageCode,
+      translatedText,
+      options
+    );
+    
+    res.json({
+      success: true,
+      data: translation,
+      message: 'Room type translation saved successfully'
+    });
+  } catch (error) {
+    console.error('Error creating/updating room type translation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save room type translation',
+      error: error.message
+    });
+  }
+});
+
+// Batch create/update room type translations
+router.post('/room-types/:roomTypeId/translations/batch', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+    const { translations, isAutoTranslated, isApproved } = req.body;
+    const createdBy = req.user?.id;
+
+    // Validate required fields
+    if (!translations || typeof translations !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing or invalid translations object'
+      });
+    }
+
+    const options = {
+      isAutoTranslated: isAutoTranslated || false,
+      createdBy,
+      isApproved: isApproved || false
+    };
+
+    const results = await translationService.batchUpsertRoomTypeTranslations(
+      roomTypeId,
+      translations,
+      options
+    );
+    
+    res.json({
+      success: true,
+      data: results,
+      message: `${results.length} room type translations saved successfully`
+    });
+  } catch (error) {
+    console.error('Error batch creating/updating room type translations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save room type translations',
+      error: error.message
+    });
+  }
+});
+
+// Update room type translation approval status
+router.patch('/room-type-translations/:translationId/approval', adminAuth, async (req, res) => {
+  try {
+    const { translationId } = req.params;
+    const { isApproved } = req.body;
+
+    if (typeof isApproved !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'isApproved must be a boolean value'
+      });
+    }
+
+    const translation = await translationService.updateRoomTypeTranslationApproval(translationId, isApproved);
+    
+    res.json({
+      success: true,
+      data: translation,
+      message: `Room type translation ${isApproved ? 'approved' : 'unapproved'} successfully`
+    });
+  } catch (error) {
+    console.error('Error updating room type translation approval:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update room type translation approval',
+      error: error.message
+    });
+  }
+});
+
+// Delete a specific room type translation
+router.delete('/room-types/:roomTypeId/translations/:fieldName/:language', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId, fieldName, language } = req.params;
+
+    const success = await translationService.deleteRoomTypeTranslation(roomTypeId, fieldName, language);
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Room type translation deleted successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: 'Room type translation not found'
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting room type translation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete room type translation',
+      error: error.message
+    });
+  }
+});
+
+// Delete all translations for a room type
+router.delete('/room-types/:roomTypeId/translations', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+
+    const success = await translationService.deleteRoomTypeTranslations(roomTypeId);
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'All room type translations deleted successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: 'Room type not found or no translations to delete'
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting room type translations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete room type translations',
+      error: error.message
+    });
+  }
+});
+
+// Get translation statistics for a room type
+router.get('/room-types/:roomTypeId/translation-stats', adminAuth, async (req, res) => {
+  try {
+    const { roomTypeId } = req.params;
+
+    const stats = await translationService.getRoomTypeTranslationStats(roomTypeId);
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error fetching room type translation stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch room type translation stats',
+      error: error.message
+    });
+  }
+});
+
+// Get room types that need translations
+router.get('/room-types/needing-translation', adminAuth, async (req, res) => {
+  try {
+    const { language = 'ja', limit = 10 } = req.query;
+
+    const roomTypes = await translationService.getRoomTypesNeedingTranslation(language, parseInt(limit));
+    
+    res.json({
+      success: true,
+      data: roomTypes
+    });
+  } catch (error) {
+    console.error('Error fetching room types needing translation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch room types needing translation',
+      error: error.message
+    });
+  }
+});
+
+// Search room type translations
+router.get('/room-type-translations/search', adminAuth, async (req, res) => {
+  try {
+    const { q: searchTerm, language, limit = 50 } = req.query;
+
+    if (!searchTerm) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search term (q) is required'
+      });
+    }
+
+    const results = await translationService.searchRoomTypeTranslations(searchTerm, language, parseInt(limit));
+    
+    res.json({
+      success: true,
+      data: results,
+      total: results.length
+    });
+  } catch (error) {
+    console.error('Error searching room type translations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search room type translations',
       error: error.message
     });
   }

@@ -12,6 +12,7 @@ export default function GuestMessagePanel({ token, guestName }) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const hasInitialScrolled = useRef(false);
   
   const {
     loading,
@@ -33,9 +34,15 @@ export default function GuestMessagePanel({ token, guestName }) {
     }
   }, [token, initialize]);
 
-  // Auto-scroll to bottom when messages change
+  // Scroll to bottom only once on initial load when messages are first loaded
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!messageListRef.current || !messagesEndRef.current) return;
+    
+    // Only scroll to bottom on initial load when messages are first populated
+    if (messages.length > 0 && !hasInitialScrolled.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      hasInitialScrolled.current = true;
+    }
   }, [messages]);
 
   // Auto-resize textarea
@@ -103,7 +110,7 @@ export default function GuestMessagePanel({ token, guestName }) {
       </Section>
 
       {/* Messages (inset sheet) */}
-      <div ref={messageListRef} className="flex-1 overflow-y-auto px-4 pt-1 pb-3">
+      <div ref={messageListRef} className="flex-1 overflow-y-auto pt-1 pb-3">
         <div
           className="rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur
                     supports-[backdrop-filter]:bg-white/60 ring-1 ring-slate-200/70 dark:ring-slate-700/60
@@ -155,7 +162,7 @@ export default function GuestMessagePanel({ token, guestName }) {
       </div>
 
         {/* Composer (modern pill) */}
-        <div className="px-4 pb-3 safe-pb">
+        <div className="pb-3 safe-pb">
           <div
             className="composer group rounded-2xl bg-white/90 dark:bg-slate-900/60 backdrop-blur
                       ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm px-3 py-2.5

@@ -137,6 +137,74 @@ router.get('/:token/property-translations', async (req, res) => {
   }
 });
 
+// GET /api/guest/:token/room-type-translations/:roomTypeId - Get room type translations for guest
+router.get('/:token/room-type-translations/:roomTypeId', async (req, res) => {
+  try {
+    const { token, roomTypeId } = req.params;
+    const { language = 'en' } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    if (!roomTypeId) {
+      return res.status(400).json({ error: 'Room type ID is required' });
+    }
+
+    // Validate language code
+    const supportedLanguages = ['en', 'ja', 'ko', 'zh-CN', 'zh-TW'];
+    if (!supportedLanguages.includes(language)) {
+      return res.status(400).json({ 
+        error: 'Unsupported language code',
+        supported: supportedLanguages 
+      });
+    }
+
+    // Get guest dashboard data to validate token
+    const dashboardData = await reservationService.getGuestAppData(token);
+    if (!dashboardData) {
+      return res.status(404).json({ error: 'Reservation not found or invalid token' });
+    }
+
+    // Verify that the room type belongs to this guest's reservation
+    const guestRoomTypeId = dashboardData.room?.room_type_id;
+    if (!guestRoomTypeId || guestRoomTypeId !== roomTypeId) {
+      return res.status(403).json({ error: 'Access denied to this room type' });
+    }
+
+    console.log(`🏨 [GUEST ROOM TYPE TRANSLATIONS] Getting translations for room type: ${roomTypeId}, language: ${language}`);
+
+    // Get room type translations using the translation service
+    const translations = await translationService.getRoomTypeTranslations(roomTypeId, language);
+
+    console.log(`🏨 [GUEST ROOM TYPE TRANSLATIONS] Found ${translations.length} translations for room type: ${roomTypeId}`);
+
+    // Convert translations array to object for easier frontend consumption
+    const translationData = translations.reduce((acc, translation) => {
+      acc[translation.field_name] = translation.translated_text;
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        roomTypeId,
+        language,
+        fields: translationData,
+        supportedLanguages
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching guest room type translations:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch room type translations',
+      message: error.message 
+    });
+  }
+});
+
 // GET /api/guest/:token/thread - Get existing communication thread for guest (READ-ONLY)
 router.get('/:token/thread', async (req, res) => {
   try {

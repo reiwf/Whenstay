@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ChevronRight } from 'lucide-react'
+import { X, Menu } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { ListRow } from './ListGroup'
 
@@ -9,7 +9,7 @@ export default function LongTextRow({
   text,
   title,
   lines = 2,
-  rightHint = 'View',
+  rightHint = '',
   showPreview = true,          // <— NEW
   dialog = 'center',
   renderRich,
@@ -46,7 +46,7 @@ export default function LongTextRow({
           <div className="ml-auto flex items-center gap-1 justify-end text-right">
             {preview}
             <span className="text-[11px] text-slate-400">{rightHint}</span>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <Menu className="w-4 h-4 text-slate-400" />
           </div>
         }
       />

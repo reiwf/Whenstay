@@ -33,6 +33,117 @@ function MessageContent({ content }) {
   if (!hasHTML) {
     return <span>{content}</span>;
   }
+
+  const parts = [];
+  let currentIndex = 0;
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let match;
+
+  while ((match = imgRegex.exec(content)) !== null) {
+    if (match.index > currentIndex) {
+      const textBefore = content.substring(currentIndex, match.index);
+      const cleanText = textBefore.replace(/<[^>]*>/g, '').trim();
+      if (cleanText) {
+        parts.push(
+          <span key={`text-${currentIndex}`} className="block mb-2">
+            {cleanText}
+          </span>
+        );
+      }
+    }
+
+    const imgSrc = match[1];
+    const styleMatch = match[0].match(/style=["']([^"']*)["']/);
+    let imageHeight = '200px';
+    if (styleMatch) {
+      const heightMatch = styleMatch[1].match(/height:\s*(\d+)px/);
+      if (heightMatch) imageHeight = `${Math.min(parseInt(heightMatch[1]), 300)}px`;
+    }
+
+    parts.push(
+      <div key={`img-${match.index}`} className="my-2">
+        <img
+          src={imgSrc}
+          alt="Shared image"
+          className="rounded-xl shadow-sm max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity block"
+          style={{ maxHeight: imageHeight, objectFit: 'cover' }}
+          onClick={() => window.open(imgSrc, '_blank')}
+          onError={(e) => {
+            e.target.style.display = 'none';
+            e.target.parentNode.innerHTML = `
+              <div class="text-xs p-2 rounded bg-gray-100 border border-gray-200">
+                🖼️ Image: ${imgSrc.split('/').pop() || 'Unable to load'}
+              </div>
+            `;
+          }}
+        />
+      </div>
+    );
+
+    currentIndex = match.index + match[0].length;
+  }
+
+  if (currentIndex < content.length) {
+    const textAfter = content.substring(currentIndex);
+    const cleanText = textAfter.replace(/<[^>]*>/g, '').trim();
+    if (cleanText) parts.push(<span key={`text-${currentIndex}`} className="block">{cleanText}</span>);
+  }
+  return <div>{parts.length > 0 ? parts : <span>{content.replace(/<[^>]*>/g, '')}</span>}</div>;
+}
+
+// Helper function to detect if message is primarily an image
+function isImageOnlyMessage(content) {
+  if (!content) return false;
+  
+  // Check if content contains images
+  const hasImages = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi.test(content);
+  if (!hasImages) return false;
+  
+  // Remove all HTML tags and check remaining text
+  const textOnly = content.replace(/<[^>]*>/g, '').trim();
+  
+  // Consider it image-only if there's no meaningful text (empty or just whitespace/minimal chars)
+  return textOnly.length <= 10; // Allow for very short captions or empty
+}
+
+// Component to render large images without bubble
+function LargeImageContent({ content, isFromHost }) {
+  if (!content) return null;
+  
+  const parts = [];
+  let currentIndex = 0;
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let match;
+
+  while ((match = imgRegex.exec(content)) !== null) {
+    const imgSrc = match[1];
+    
+    parts.push(
+      <div key={`img-${match.index}`} className="my-2">
+        <img
+          src={imgSrc}
+          alt="Shared image"
+          className="rounded-2xl shadow-lg max-w-full h-auto cursor-pointer hover:opacity-95 transition-all duration-200 block"
+          style={{ maxHeight: '400px', objectFit: 'cover' }}
+          onClick={() => window.open(imgSrc, '_blank')}
+          onError={(e) => {
+            e.target.style.display = 'none';
+            e.target.parentNode.innerHTML = `
+              <div class="text-xs p-3 rounded-lg ${
+                isFromHost 
+                  ? 'bg-primary-100 border border-primary-200 text-primary-800' 
+                  : 'bg-gray-100 border border-gray-200 text-gray-800'
+              }">
+                🖼️ Image: ${imgSrc.split('/').pop() || 'Unable to load'}
+              </div>
+            `;
+          }}
+        />
+      </div>
+    );
+  }
+  
+  return <div>{parts}</div>;
 }
 
 export default function MessageBubble({ message, showTimestamp = false, onMarkAsRead }) {
@@ -40,6 +151,9 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
   const isIncoming = message.direction === 'incoming';
   const isFromGuest = message.origin_role === 'guest';
   const isFromHost = message.origin_role === 'host' || message.origin_role === 'admin';
+
+  // Check if this is an image-only message
+  const isImageOnly = isImageOnlyMessage(message.content);
 
   // Setup intersection observer to track when guest messages become visible to admin
   useEffect(() => {
@@ -125,6 +239,41 @@ export default function MessageBubble({ message, showTimestamp = false, onMarkAs
     }
   };
 
+  // Render image-only messages without bubble
+  if (isImageOnly) {
+    return (
+      <div className={`flex flex-col ${isFromHost ? 'items-end' : 'items-start'} ${showTimestamp ? 'mt-3 sm:mt-4' : 'mt-1'}`}>
+        {/* Timestamp */}
+        {showTimestamp && (
+          <div className={`text-xs text-gray-500 mb-1 ${isFromHost ? 'mr-1 sm:mr-2' : 'ml-1 sm:ml-2'}`}>
+            {formatTime24Hour(message.created_at)}
+          </div>
+        )}
+
+        {/* Large image content without bubble */}
+        <div className={`max-w-[90%] sm:max-w-[80%] lg:max-w-[75%] ${isFromHost ? 'items-end' : 'items-start'} flex flex-col`}>
+          <div ref={messageRef}>
+            <LargeImageContent content={message.content} isFromHost={isFromHost} />
+          </div>
+
+          {/* Channel and delivery status for image-only messages */}
+          <div className="mt-2 flex items-center justify-center space-x-1 text-xs opacity-70">
+            <span title={`Channel: ${message.channel}`} className="inline-flex items-center">
+              {renderChannelIcon(message.channel)}
+            </span>
+
+            {/* Separator */}
+            {!isIncoming && <span className="opacity-40">•</span>}
+
+            {/* Delivery status */}
+            {!isIncoming && renderDeliveryIcon()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular bubble rendering for text and mixed content
   return (
     <div className={`flex flex-col ${isFromHost ? 'items-end' : 'items-start'} ${showTimestamp ? 'mt-3 sm:mt-4' : 'mt-1'}`}>
       {/* Timestamp - only show when showTimestamp is true */}

@@ -1,1 +1,82 @@
-
+{
+  "types": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Information"
+  },
+  "reservation": {
+    "created": "Reservation created successfully",
+    "updated": "Reservation updated successfully",
+    "deleted": "Reservation deleted successfully",
+    "checkinCompleted": "Check-in completed for {{guestName}}",
+    "checkoutCompleted": "Check-out completed for {{guestName}}",
+    "paymentReceived": "Payment received for booking {{bookingRef}}",
+    "paymentFailed": "Payment failed for booking {{bookingRef}}",
+    "cancelled": "Reservation cancelled",
+    "modified": "Reservation modified",
+    "newBooking": "New booking received from {{source}}"
+  },
+  "guest": {
+    "messageReceived": "New message from {{guestName}}",
+    "documentUploaded": "Guest uploaded required documents",
+    "checkinStarted": "Guest started check-in process",
+    "profileUpdated": "Guest profile updated",
+    "emergencyContactAdded": "Emergency contact information added"
+  },
+  "property": {
+    "created": "Property created successfully",
+    "updated": "Property updated successfully",
+    "deleted": "Property deleted successfully",
+    "statusChanged": "Property status changed to {{status}}",
+    "maintenanceScheduled": "Maintenance scheduled for {{propertyName}}"
+  },
+  "room": {
+    "created": "Room created successfully",
+    "updated": "Room updated successfully",
+    "deleted": "Room deleted successfully",
+    "statusChanged": "Room status changed to {{status}}",
+    "cleaningCompleted": "Cleaning completed for {{roomName}}",
+    "maintenanceRequired": "Maintenance required for {{roomName}}"
+  },
+  "system": {
+    "backupCompleted": "System backup completed successfully",
+    "backupFailed": "System backup failed",
+    "updateAvailable": "System update available",
+    "maintenanceMode": "System maintenance scheduled",
+    "connectionLost": "Connection lost. Attempting to reconnect...",
+    "connectionRestored": "Connection restored",
+    "sessionExpiring": "Your session will expire in {{minutes}} minutes",
+    "sessionExpired": "Your session has expired. Please log in again."
+  },
+  "communication": {
+    "messageSent": "Message sent successfully",
+    "messageFailed": "Failed to send message",
+    "emailSent": "Email sent successfully",
+    "emailFailed": "Failed to send email",
+    "templateSaved": "Message template saved",
+    "scheduledMessageSent": "Scheduled message sent to {{recipient}}"
+  },
+  "user": {
+    "created": "User account created successfully",
+    "updated": "User profile updated successfully",
+    "deleted": "User account deleted successfully",
+    "passwordChanged": "Password changed successfully",
+    "loginSuccess": "Login successful",
+    "loginFailed": "Login failed. Please check your credentials.",
+    "accountLocked": "Account locked due to multiple failed login attempts",
+    "passwordReset": "Password reset link sent to your email"
+  },
+  "cleaning": {
+    "taskCreated": "Cleaning task created for {{roomName}}",
+    "taskCompleted": "Cleaning task completed for {{roomName}}",
+    "taskOverdue": "Cleaning task overdue for {{roomName}}",
+    "scheduleUpdated": "Cleaning schedule updated"
+  },
+  "pricing": {
+    "updated": "Pricing updated successfully",
+    "ruleCreated": "Pricing rule created",
+    "ruleDeleted": "Pricing rule deleted",
+    "bulkUpdateCompleted": "Bulk pricing update completed"
+  }
+}
