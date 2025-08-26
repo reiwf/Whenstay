@@ -23,38 +23,28 @@ router.get('/scheduled-messages/:reservationId', adminAuth, async (req, res) => 
     const { reservationId } = req.params;
     const { supabaseAdmin } = require('../config/supabase');
     
-    // First get the thread for this reservation
-    const { data: thread, error: threadError } = await supabaseAdmin
-      .from('message_threads')
-      .select('id')
+    // Query scheduled_messages directly by reservation_id since it has this field
+    const { data: scheduledMessages, error: messagesError } = await supabaseAdmin
+      .from('scheduled_messages')
+      .select(`
+        *,
+        message_templates(name, content),
+        automation_rules!fk_scheduled_messages_rule_id(name, options)
+      `)
       .eq('reservation_id', reservationId)
-      .single();
+      .order('run_at', { ascending: true });
 
-    if (threadError && threadError.code !== 'PGRST116') { // Not found is ok
-      throw threadError;
+    if (messagesError) {
+      console.error('Error fetching scheduled messages:', messagesError);
+      throw messagesError;
     }
 
-    let scheduledMessages = [];
-    
-    if (thread) {
-      const { data: messages, error: messagesError } = await supabaseAdmin
-        .from('scheduled_messages')
-        .select(`
-          *,
-          message_templates(name, content),
-          automation_rules!fk_scheduled_messages_rule_id(name, options)
-        `)
-        .eq('thread_id', thread.id)
-        .order('run_at', { ascending: true });
-
-      if (messagesError) throw messagesError;
-      scheduledMessages = messages || [];
-    }
+    console.log(`Found ${scheduledMessages?.length || 0} scheduled messages for reservation ${reservationId}`);
 
     res.json({ 
-      scheduledMessages,
+      scheduledMessages: scheduledMessages || [],
       reservationId,
-      count: scheduledMessages.length
+      count: scheduledMessages?.length || 0
     });
   } catch (error) {
     console.error('Error fetching scheduled messages for reservation:', error);
@@ -402,6 +392,152 @@ router.patch('/templates/bulk-toggle', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error bulk toggling template status:', error);
     res.status(500).json({ error: 'Failed to bulk update template status' });
+  }
+});
+
+// Get single template details
+router.get('/templates/:templateId', adminAuth, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const { supabaseAdmin } = require('../config/supabase');
+
+    const { data: template, error } = await supabaseAdmin
+      .from('message_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+
+    if (error) throw error;
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({ template });
+  } catch (error) {
+    console.error('Error fetching template:', error);
+    res.status(500).json({ error: 'Failed to fetch template' });
+  }
+});
+
+// Update template content
+router.put('/templates/:templateId', adminAuth, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const { name, content, variables, language } = req.body;
+    const { supabaseAdmin } = require('../config/supabase');
+
+    // Validate input
+    if (!content || content.trim() === '') {
+      return res.status(400).json({ error: 'Template content is required' });
+    }
+
+    const updateData = {
+      content: content.trim(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (name) updateData.name = name.trim();
+    if (variables) updateData.variables = variables;
+    if (language) updateData.language = language;
+
+    const { data, error } = await supabaseAdmin
+      .from('message_templates')
+      .update(updateData)
+      .eq('id', templateId)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Template updated successfully',
+      template: data
+    });
+  } catch (error) {
+    console.error('Error updating template:', error);
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+// Get available template variables
+router.get('/templates/variables/available', adminAuth, async (req, res) => {
+  try {
+    // Define available variables grouped by category
+    const availableVariables = {
+      guest: {
+        label: 'Guest Information',
+        variables: [
+          { key: 'guest_name', label: 'Guest Name', description: 'Full name of the primary guest' },
+          { key: 'guest_firstname', label: 'Guest First Name', description: 'First name of the primary guest' },
+          { key: 'guest_lastname', label: 'Guest Last Name', description: 'Last name of the primary guest' },
+          { key: 'guest_email', label: 'Guest Email', description: 'Email address of the primary guest' },
+          { key: 'guest_phone', label: 'Guest Phone', description: 'Phone number of the primary guest' },
+          { key: 'num_guests', label: 'Number of Guests', description: 'Total number of guests in the reservation' },
+          { key: 'num_adults', label: 'Number of Adults', description: 'Number of adult guests' },
+          { key: 'num_children', label: 'Number of Children', description: 'Number of child guests' }
+        ]
+      },
+      reservation: {
+        label: 'Reservation Details',
+        variables: [
+          { key: 'check_in_date', label: 'Check-in Date', description: 'Reservation check-in date' },
+          { key: 'check_out_date', label: 'Check-out Date', description: 'Reservation check-out date' },
+          { key: 'booking_id', label: 'Booking ID', description: 'Unique booking reference number' },
+          { key: 'nights_count', label: 'Number of Nights', description: 'Total nights for the stay' },
+          { key: 'total_amount', label: 'Total Amount', description: 'Total reservation cost' },
+          { key: 'currency', label: 'Currency', description: 'Currency code (e.g., JPY, USD)' },
+          { key: 'booking_source', label: 'Booking Source', description: 'Platform where booking was made' },
+          { key: 'special_requests', label: 'Special Requests', description: 'Guest special requests or notes' }
+        ]
+      },
+      property: {
+        label: 'Property Information',
+        variables: [
+          { key: 'property_name', label: 'Property Name', description: 'Name of the property' },
+          { key: 'property_address', label: 'Property Address', description: 'Full property address' },
+          { key: 'wifi_name', label: 'WiFi Name', description: 'WiFi network name' },
+          { key: 'wifi_password', label: 'WiFi Password', description: 'WiFi password' },
+          { key: 'check_in_instructions', label: 'Check-in Instructions', description: 'Property check-in instructions' },
+          { key: 'house_rules', label: 'House Rules', description: 'Property house rules' },
+          { key: 'emergency_contact', label: 'Emergency Contact', description: 'Property emergency contact information' },
+          { key: 'access_time', label: 'Access Time', description: 'Property access time' },
+          { key: 'departure_time', label: 'Departure Time', description: 'Property departure time' }
+        ]
+      },
+      room: {
+        label: 'Room Information',
+        variables: [
+          { key: 'room_type_name', label: 'Room Type Name', description: 'Name of the room type' },
+          { key: 'room_number', label: 'Room Number', description: 'Specific room/unit number' },
+          { key: 'access_code', label: 'Room Access Code', description: 'Room access code or key information' },
+          { key: 'access_instructions', label: 'Room Access Instructions', description: 'Instructions for accessing the room' },
+          { key: 'room_amenities', label: 'Room Amenities', description: 'List of room amenities' },
+          { key: 'bed_configuration', label: 'Bed Configuration', description: 'Room bed setup information' },
+          { key: 'max_guests', label: 'Maximum Guests', description: 'Maximum number of guests for the room' }
+        ]
+      },
+      system: {
+        label: 'System Information',
+        variables: [
+          { key: 'current_date', label: 'Current Date', description: 'Today\'s date' },
+          { key: 'current_time', label: 'Current Time', description: 'Current time' },
+          { key: 'company_name', label: 'Company Name', description: 'Your company name' },
+          { key: 'support_email', label: 'Support Email', description: 'Customer support email' },
+          { key: 'support_phone', label: 'Support Phone', description: 'Customer support phone number' }
+        ]
+      }
+    };
+
+    res.json({ variables: availableVariables });
+  } catch (error) {
+    console.error('Error fetching available variables:', error);
+    res.status(500).json({ error: 'Failed to fetch available variables' });
   }
 });
 

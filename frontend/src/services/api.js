@@ -316,6 +316,15 @@ export const adminAPI = {
   bulkToggleAutomationTemplates: (templateIds, enabled) => 
     api.patch('/automation/templates/bulk-toggle', { templateIds, enabled }),
   
+  getAutomationTemplate: (templateId) => 
+    api.get(`/automation/templates/${templateId}`),
+
+  updateAutomationTemplate: (templateId, templateData) => 
+    api.put(`/automation/templates/${templateId}`, templateData),
+
+  getAvailableTemplateVariables: () => 
+    api.get('/automation/templates/variables/available'),
+
   getAutomationTemplateUsage: (templateId) => 
     api.get(`/automation/templates/${templateId}/usage`),
 }

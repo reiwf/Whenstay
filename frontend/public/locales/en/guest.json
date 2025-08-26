@@ -389,7 +389,21 @@
     },
     "composer": {
       "placeholder": "Type your message…",
-      "sendButton": "Send"
+      "sendButton": "Send",
+      "attachImages": "Attach images",
+      "addMessage": "Add a message (optional)...",
+      "sendWithImages": "Send with Images",
+      "imagesSelected": "{{count}}/{{max}} images selected",
+      "processingImages": "Processing images...",
+      "uploadingImages": "Uploading images...",
+      "imagesSentSuccessfully": "Message with images sent successfully",
+      "failedToProcessImages": "Failed to process images",
+      "failedToSendMessage": "Failed to send message",
+      "removeImage": "Remove image",
+      "imageResized": "{{count}} image(s) selected and resized",
+      "maxImagesExceeded": "Maximum {{max}} images allowed",
+      "imageTooLarge": "Image {{name}} is too large (max {{maxSize}}MB)",
+      "unsupportedFormat": "Image {{name}} has unsupported format"
     }
   },
   "stepProgress": {

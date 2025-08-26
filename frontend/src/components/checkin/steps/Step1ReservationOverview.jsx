@@ -1,6 +1,6 @@
+import React from 'react'
 import {
-  Calendar,
-  MapPin,
+  PlaneLanding,PlaneTakeoff,
   Users,
   Home,
   Clock,
@@ -10,12 +10,14 @@ import {
   LayoutPanelLeft,
   Crown,
   Building,
+  Bed,
 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import StepNavigation from '../shared/StepNavigation'
 import { useTranslation } from 'react-i18next'
 import Section from '../../ui/Section'
-import { ListGroup } from '../../ui/ListGroup'
+import { ListGroup, ListRow } from '../../ui/ListGroup'
+import useRoomTypeTranslations from '../../../hooks/useRoomTypeTranslations'
 
 export default function Step1ReservationOverview({
   reservation,
@@ -34,7 +36,21 @@ export default function Step1ReservationOverview({
 }) {
   const { token } = useParams()
   const { t , i18n } = useTranslation('guest')
+  const { loadRoomTypeTranslations, getCachedTranslation } = useRoomTypeTranslations(token, true)
   
+  // Load room type translations when component mounts
+  React.useEffect(() => {
+    if (reservation?.room_type_id && i18n.language) {
+      loadRoomTypeTranslations(reservation.room_type_id, i18n.language)
+    }
+  }, [reservation?.room_type_id, i18n.language, loadRoomTypeTranslations])
+
+  // Helper function to get translated room type text
+  const getTranslatedRoomType = (field, fallback) => {
+    if (!reservation?.room_type_id) return fallback
+    return getCachedTranslation(reservation.room_type_id, i18n.language, field) || fallback
+  }
+
   if (!reservation) {
     return (
       <div className="text-center py-10 text-slate-500">
@@ -190,7 +206,7 @@ export default function Step1ReservationOverview({
                     <Building className="w-4 h-4 text-amber-600 mr-1.5" />
                     <div className="truncate">
                       <div className="text-sm font-medium text-slate-900 truncate">
-                        Room {room.roomNumber} — {room.roomType}
+                        Room {room.roomNumber} — {getTranslatedRoomType('name', room.roomType)}
                       </div>
                       <div className="text-[11px] text-slate-500">
                         {room.numGuests} {room.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}
@@ -241,61 +257,71 @@ export default function Step1ReservationOverview({
       {/* Reservation details (inset list) */}
       <Section title={t('step1.yourReservation')} className="pt-1">
         <ListGroup>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <Calendar className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.checkIn')}</div>
-              <div className="text-sm text-slate-600">
-                {checkInDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <PlaneLanding className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.checkIn')}</span>
               </div>
-            </div>
-          </li>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <Clock className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.checkOut')}</div>
-              <div className="text-sm text-slate-600">
-                {checkInDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
+            }
+            right={checkInDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
+            rightClass="text-sm text-slate-600"
+          />
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <PlaneTakeoff className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.checkOut')}</span>
               </div>
-            </div>
-          </li>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <Users className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.guests')}</div>
-              <div className="text-sm text-slate-600">
-                {reservation.numGuests} {reservation.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}
+            }
+            right={checkOutDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}
+            rightClass="text-sm text-slate-600"
+          />
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <Users className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.guests')}</span>
               </div>
-            </div>
-          </li>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <Home className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.property')}</div>
-              <div className="text-sm text-slate-600 break-words">{reservation.propertyName || t('step1.property')}</div>
-            </div>
-          </li>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <MapPin className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.room')}</div>
-              <div className="text-sm text-slate-600 break-words">
-                {reservation.roomTypeName || reservation.roomTypes}
+            }
+            right={`${reservation.numGuests} ${reservation.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}`}
+            rightClass="text-sm text-slate-600"
+          />
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <Building className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.property')}</span>
               </div>
-            </div>
-          </li>
-          <li className="px-3 py-3 flex items-start gap-3">
-            <Clock className="w-4 h-4 text-slate-600 mt-0.5" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-slate-900">{t('step1.duration')}</div>
-              <div className="text-sm text-slate-600">
-                {nights} {nights === 1 ? t('step1.night') : t('step1.nights')}
+            }
+            right={reservation.propertyName || t('step1.property')}
+            rightClass="text-sm text-slate-600 break-words"
+            rightLines={2}
+          />
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <Home className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.room')}</span>
               </div>
-            </div>
-          </li>
+            }
+            right={getTranslatedRoomType('name', reservation.roomTypeName)}
+            rightClass="text-sm text-slate-600 break-words"
+            rightLines={2}
+          />
+          <ListRow
+            left={
+              <div className="flex items-center gap-3">
+                <Clock className="w-4 h-4 text-slate-600" />
+                <span className="text-sm font-medium text-slate-900">{t('step1.duration')}</span>
+              </div>
+            }
+            right={`${nights} ${nights === 1 ? t('step1.night') : t('step1.nights')}`}
+            rightClass="text-sm text-slate-600"
+          />
         </ListGroup>
 
-        {(reservation.roomTypeDescription ||
+        {/* {(reservation.roomTypeDescription ||
           reservation.bedConfiguration ||
           reservation.roomSizeSqm ||
           reservation.hasBalcony ||
@@ -304,8 +330,10 @@ export default function Step1ReservationOverview({
           <div className="mt-3">
             <div className="text-sm font-semibold text-slate-900 mb-2">{t('step1.roomFeatures')}</div>
             <div className="rounded-xl ring-1 ring-slate-200/70 bg-white/70 p-3 space-y-2">
-              {reservation.roomTypeDescription && (
-                <p className="text-sm text-slate-700">{reservation.roomTypeDescription}</p>
+              {(reservation.roomTypeDescription || getTranslatedRoomType('description', '')) && (
+                <p className="text-sm text-slate-700">
+                  {getTranslatedRoomType('description', reservation.roomTypeDescription)}
+                </p>
               )}
               <div className="flex flex-wrap gap-2 text-[12px]">
                 {reservation.bedConfiguration && (
@@ -332,7 +360,7 @@ export default function Step1ReservationOverview({
               </div>
             </div>
           </div>
-        )}
+        )} */}
       </Section>
 
       <StepNavigation

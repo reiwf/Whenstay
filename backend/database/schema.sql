@@ -484,46 +484,26 @@ $$;
 
 CREATE FUNCTION public.enforce_cleaner_role() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-declare
-
-    user_role text;
-
-begin
-
-    -- Skip if cleaner_id is null
-
-    if new.cleaner_id is null then
-
-        return new;
-
-    end if;
-
-
-
-    -- Check if this user has cleaner role
-
-    select role into user_role
-
-    from user_profiles
-
-    where id = new.cleaner_id;
-
-
-
-    if user_role is distinct from 'cleaner' then
-
-        raise exception 'User % is not a cleaner', new.cleaner_id;
-
-    end if;
-
-
-
-    return new;
-
-end;
-
+    AS $$
+declare
+    user_role text;
+begin
+    -- Skip if cleaner_id is null
+    if new.cleaner_id is null then
+        return new;
+    end if;
+
+    -- Check if this user has cleaner role
+    select role into user_role
+    from user_profiles
+    where id = new.cleaner_id;
+
+    if user_role is distinct from 'cleaner' then
+        raise exception 'User % is not a cleaner', new.cleaner_id;
+    end if;
+
+    return new;
+end;
 $$;
 
 
@@ -533,18 +513,12 @@ $$;
 
 CREATE FUNCTION public.execute(query text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-BEGIN
-
-  EXECUTE query;
-
-EXCEPTION WHEN OTHERS THEN
-
-  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
-
-END;
-
+    AS $$
+BEGIN
+  EXECUTE query;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
+END;
 $$;
 
 
@@ -554,32 +528,19 @@ $$;
 
 CREATE FUNCTION public.generate_checkin_token() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-DECLARE
-
-    token TEXT;
-
-BEGIN
-
-    LOOP
-
-        -- Generate random 8-digit number
-
-        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
-
-        -- Check if it exists
-
-        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
-
-    END LOOP;
-
-    NEW.check_in_token := token;
-
-    RETURN NEW;
-
-END;
-
+    AS $$
+DECLARE
+    token TEXT;
+BEGIN
+    LOOP
+        -- Generate random 8-digit number
+        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
+        -- Check if it exists
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
+    END LOOP;
+    NEW.check_in_token := token;
+    RETURN NEW;
+END;
 $$;
 
 
@@ -589,8 +550,7 @@ $$;
 
 CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date date DEFAULT (CURRENT_DATE - '1 day'::interval), p_end_date date DEFAULT (CURRENT_DATE + '29 days'::interval)) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_order integer, room_unit_id uuid, room_unit_number text, reservation_id uuid, segment_id uuid, booking_name text, start_date date, end_date date, status text, color text, label text, is_segment boolean)
     LANGUAGE sql STABLE
-    AS $$
-    -- First get ALL room units for the property (including those with no reservations)
+    AS $$-- First get ALL room units for the property (including those with no reservations)
     SELECT 
         rt.id as room_type_id,
         rt.name as room_type_name,
@@ -702,8 +662,7 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
     AND rs.end_date > p_start_date
     AND r.status::text <> 'cancelled'
     
-    ORDER BY room_type_order, room_unit_number, start_date;
-$$;
+    ORDER BY room_type_name, room_unit_number, start_date;$$;
 
 
 --
@@ -712,46 +671,26 @@ $$;
 
 CREATE FUNCTION public.get_dashboard_stats() RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-DECLARE
-
-    result JSON;
-
-BEGIN
-
-    SELECT json_build_object(
-
-        'totalReservations', (SELECT COUNT(*) FROM reservations),
-
-        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
-
-        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
-
-        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
-
-        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
-
-        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
-
-        'totalProperties', (SELECT COUNT(*) FROM properties),
-
-        'totalRooms', (SELECT COUNT(*) FROM rooms),
-
-        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
-
-        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
-
-        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
-
-    ) INTO result;
-
-    
-
-    RETURN result;
-
-END;
-
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'totalReservations', (SELECT COUNT(*) FROM reservations),
+        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
+        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
+        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
+        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
+        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
+        'totalProperties', (SELECT COUNT(*) FROM properties),
+        'totalRooms', (SELECT COUNT(*) FROM rooms),
+        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
+        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
+        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
+    ) INTO result;
+    
+    RETURN result;
+END;
 $$;
 
 
@@ -795,96 +734,51 @@ COMMENT ON FUNCTION public.get_group_reservations(master_booking_id text) IS 'Re
 
 CREATE FUNCTION public.get_guest_dashboard_data(reservation_token uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-DECLARE
-
-    result JSON;
-
-BEGIN
-
-    SELECT json_build_object(
-
-        'reservation', json_build_object(
-
-            'id', r.id,
-
-            'guest_name', r.guest_name,
-
-            'check_in_date', r.check_in_date,
-
-            'check_out_date', r.check_out_date,
-
-            'num_guests', r.num_guests,
-
-            'status', r.status
-
-        ),
-
-        'property', json_build_object(
-
-            'name', p.name,
-
-            'address', p.address,
-
-            'wifi_name', p.wifi_name,
-
-            'wifi_password', p.wifi_password,
-
-            'house_rules', p.house_rules,
-
-            'check_in_instructions', p.check_in_instructions,
-
-            'emergency_contact', p.emergency_contact,
-
-            'amenities', p.property_amenities
-
-        ),
-
-        'room', json_build_object(
-
-            'room_number', rm.room_number,
-
-            'room_name', rm.room_name,
-
-            'access_code', rm.access_code,
-
-            'access_instructions', rm.access_instructions,
-
-            'amenities', rm.room_amenities,
-
-            'max_guests', rm.max_guests,
-
-            'bed_configuration', rm.bed_configuration
-
-        ),
-
-        'checkin_status', CASE 
-
-            WHEN gc.id IS NOT NULL THEN 'completed'
-
-            ELSE 'pending'
-
-        END
-
-    ) INTO result
-
-    FROM reservations r
-
-    LEFT JOIN rooms rm ON r.room_id = rm.id
-
-    LEFT JOIN properties p ON rm.property_id = p.id
-
-    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
-
-    WHERE r.check_in_token = reservation_token;
-
-    
-
-    RETURN result;
-
-END;
-
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'reservation', json_build_object(
+            'id', r.id,
+            'guest_name', r.guest_name,
+            'check_in_date', r.check_in_date,
+            'check_out_date', r.check_out_date,
+            'num_guests', r.num_guests,
+            'status', r.status
+        ),
+        'property', json_build_object(
+            'name', p.name,
+            'address', p.address,
+            'wifi_name', p.wifi_name,
+            'wifi_password', p.wifi_password,
+            'house_rules', p.house_rules,
+            'check_in_instructions', p.check_in_instructions,
+            'emergency_contact', p.emergency_contact,
+            'amenities', p.property_amenities
+        ),
+        'room', json_build_object(
+            'room_number', rm.room_number,
+            'room_name', rm.room_name,
+            'access_code', rm.access_code,
+            'access_instructions', rm.access_instructions,
+            'amenities', rm.room_amenities,
+            'max_guests', rm.max_guests,
+            'bed_configuration', rm.bed_configuration
+        ),
+        'checkin_status', CASE 
+            WHEN gc.id IS NOT NULL THEN 'completed'
+            ELSE 'pending'
+        END
+    ) INTO result
+    FROM reservations r
+    LEFT JOIN rooms rm ON r.room_id = rm.id
+    LEFT JOIN properties p ON rm.property_id = p.id
+    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
+    WHERE r.check_in_token = reservation_token;
+    
+    RETURN result;
+END;
 $$;
 
 
@@ -894,98 +788,52 @@ $$;
 
 CREATE FUNCTION public.get_owner_stats(owner_uuid uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-DECLARE
-
-    result JSON;
-
-    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
-
-    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
-
-BEGIN
-
-    SELECT json_build_object(
-
-        'monthlyRevenue', COALESCE(SUM(CASE 
-
-            WHEN r.status = 'completed' 
-
-            AND r.check_in_date >= start_date 
-
-            AND r.check_in_date <= end_date 
-
-            THEN r.total_amount 
-
-        END), 0),
-
-        'occupancyRate', ROUND(
-
-            (COUNT(CASE 
-
-                WHEN r.check_in_date >= start_date 
-
-                AND r.check_in_date <= end_date 
-
-                THEN 1 
-
-            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
-
-        ),
-
-        'averageDailyRate', COALESCE(AVG(CASE 
-
-            WHEN r.status = 'completed' 
-
-            AND r.check_in_date >= start_date 
-
-            AND r.check_in_date <= end_date 
-
-            THEN r.total_amount 
-
-        END), 0),
-
-        'upcomingReservations', COUNT(CASE 
-
-            WHEN r.check_in_date > CURRENT_DATE 
-
-            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
-
-            THEN 1 
-
-        END),
-
-        'totalProperties', COUNT(DISTINCT p.id),
-
-        'totalRooms', COUNT(DISTINCT rm.id),
-
-        'pendingCleaningTasks', COUNT(CASE 
-
-            WHEN ct.status = 'pending' 
-
-            THEN 1 
-
-        END)
-
-    ) INTO result
-
-    FROM properties p
-
-    LEFT JOIN rooms rm ON p.id = rm.property_id
-
-    LEFT JOIN reservations r ON rm.id = r.room_id
-
-    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
-
-    WHERE p.owner_id = owner_uuid;
-
-    
-
-    RETURN result;
-
-END;
-
+    AS $$
+DECLARE
+    result JSON;
+    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
+    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
+BEGIN
+    SELECT json_build_object(
+        'monthlyRevenue', COALESCE(SUM(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'occupancyRate', ROUND(
+            (COUNT(CASE 
+                WHEN r.check_in_date >= start_date 
+                AND r.check_in_date <= end_date 
+                THEN 1 
+            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
+        ),
+        'averageDailyRate', COALESCE(AVG(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'upcomingReservations', COUNT(CASE 
+            WHEN r.check_in_date > CURRENT_DATE 
+            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
+            THEN 1 
+        END),
+        'totalProperties', COUNT(DISTINCT p.id),
+        'totalRooms', COUNT(DISTINCT rm.id),
+        'pendingCleaningTasks', COUNT(CASE 
+            WHEN ct.status = 'pending' 
+            THEN 1 
+        END)
+    ) INTO result
+    FROM properties p
+    LEFT JOIN rooms rm ON p.id = rm.property_id
+    LEFT JOIN reservations r ON rm.id = r.room_id
+    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
+    WHERE p.owner_id = owner_uuid;
+    
+    RETURN result;
+END;
 $$;
 
 
@@ -1016,8 +864,7 @@ CREATE FUNCTION public.get_property_default_cleaner(unit_id uuid) RETURNS uuid
 
 CREATE FUNCTION public.get_property_room_hierarchy(p_property_id uuid) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_description text, max_guests integer, room_units jsonb)
     LANGUAGE sql STABLE
-    AS $$
-    SELECT 
+    AS $$SELECT 
         rt.id as room_type_id,
         rt.name as room_type_name,
         rt.description as room_type_description,
@@ -1035,8 +882,125 @@ CREATE FUNCTION public.get_property_room_hierarchy(p_property_id uuid) RETURNS T
     WHERE rt.property_id = p_property_id
     AND rt.is_active = true
     GROUP BY rt.id, rt.name, rt.description, rt.max_guests, rt.sort_order
-    ORDER BY rt.sort_order;
+    ORDER BY rt.sort_order;$$;
+
+
+--
+-- Name: get_room_type_translated_text(uuid, character varying, character varying); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_room_type_translated_text(p_room_type_id uuid, p_field_name character varying, p_language_code character varying DEFAULT 'en'::character varying) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    translated_text TEXT;
+    fallback_text TEXT;
+BEGIN
+    -- Try to get translation in requested language
+    SELECT rt.translated_text INTO translated_text
+    FROM room_type_translations rt
+    WHERE rt.room_type_id = p_room_type_id
+      AND rt.field_name = p_field_name
+      AND rt.language_code = p_language_code;
+    
+    -- If translation found, return it
+    IF translated_text IS NOT NULL THEN
+        RETURN translated_text;
+    END IF;
+    
+    -- Fallback to English if not found
+    IF p_language_code != 'en' THEN
+        SELECT rt.translated_text INTO translated_text
+        FROM room_type_translations rt
+        WHERE rt.room_type_id = p_room_type_id
+          AND rt.field_name = p_field_name
+          AND rt.language_code = 'en';
+        
+        IF translated_text IS NOT NULL THEN
+            RETURN translated_text;
+        END IF;
+    END IF;
+    
+    -- Final fallback to original room_types field
+    CASE p_field_name
+        WHEN 'name' THEN
+            SELECT name INTO fallback_text FROM room_types WHERE id = p_room_type_id;
+        WHEN 'description' THEN
+            SELECT description INTO fallback_text FROM room_types WHERE id = p_room_type_id;
+        WHEN 'bed_configuration' THEN
+            SELECT bed_configuration INTO fallback_text FROM room_types WHERE id = p_room_type_id;
+    END CASE;
+    
+    RETURN COALESCE(fallback_text, '');
+END;
 $$;
+
+
+--
+-- Name: FUNCTION get_room_type_translated_text(p_room_type_id uuid, p_field_name character varying, p_language_code character varying); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_room_type_translated_text(p_room_type_id uuid, p_field_name character varying, p_language_code character varying) IS 'Helper function to retrieve translated room type text with fallback logic';
+
+
+--
+-- Name: get_translated_text(uuid, character varying, character varying); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_translated_text(p_property_id uuid, p_field_name character varying, p_language_code character varying DEFAULT 'en'::character varying) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    translated_text TEXT;
+    fallback_text TEXT;
+BEGIN
+    -- Try to get translation in requested language
+    SELECT pt.translated_text INTO translated_text
+    FROM property_translations pt
+    WHERE pt.property_id = p_property_id
+      AND pt.field_name = p_field_name
+      AND pt.language_code = p_language_code;
+    
+    -- If translation found, return it
+    IF translated_text IS NOT NULL THEN
+        RETURN translated_text;
+    END IF;
+    
+    -- Fallback to English if not found
+    IF p_language_code != 'en' THEN
+        SELECT pt.translated_text INTO translated_text
+        FROM property_translations pt
+        WHERE pt.property_id = p_property_id
+          AND pt.field_name = p_field_name
+          AND pt.language_code = 'en';
+        
+        IF translated_text IS NOT NULL THEN
+            RETURN translated_text;
+        END IF;
+    END IF;
+    
+    -- Final fallback to original property field
+    CASE p_field_name
+        WHEN 'house_rules' THEN
+            SELECT house_rules INTO fallback_text FROM properties WHERE id = p_property_id;
+        WHEN 'description' THEN
+            SELECT description INTO fallback_text FROM properties WHERE id = p_property_id;
+        WHEN 'luggage_info' THEN
+            SELECT luggage_info INTO fallback_text FROM properties WHERE id = p_property_id;
+        WHEN 'check_in_instructions' THEN
+            SELECT check_in_instructions INTO fallback_text FROM properties WHERE id = p_property_id;
+    END CASE;
+    
+    RETURN COALESCE(fallback_text, '');
+END;
+$$;
+
+
+--
+-- Name: FUNCTION get_translated_text(p_property_id uuid, p_field_name character varying, p_language_code character varying); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_translated_text(p_property_id uuid, p_field_name character varying, p_language_code character varying) IS 'Helper function to retrieve translated text with fallback logic';
 
 
 --
@@ -1185,106 +1149,56 @@ $$;
 
 CREATE FUNCTION public.manage_cleaning_task() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-BEGIN
-
-    -- 1. Delete old cleaning task if room or checkout date changed
-
-    DELETE FROM cleaning_tasks
-
-    WHERE reservation_id = NEW.id;
-
-
-
-    -- 2. Insert new cleaning task
-
-    INSERT INTO cleaning_tasks (
-
-        property_id,
-
-        room_unit_id,
-
-        reservation_id,
-
-        cleaner_id,
-
-        task_date,
-
-        task_type,
-
-        status,
-
-        priority,
-
-        created_at,
-
-        updated_at
-
-    )
-
-    VALUES (
-
-        NEW.property_id,
-
-        NEW.room_unit_id,
-
-        NEW.id,
-
-        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
-
-        NEW.check_out_date,
-
-        'checkout',
-
-        'pending',
-
-        'normal', -- temporary, will recalc below
-
-        now(),
-
-        now()
-
-    );
-
-
-
-    -- 3. Recalculate priority for all tasks of this room & date
-
-    UPDATE cleaning_tasks ct
-
-    SET priority = CASE
-
-        WHEN EXISTS (
-
-            SELECT 1 FROM reservations r
-
-            WHERE r.room_unit_id = ct.room_unit_id
-
-              AND r.check_in_date = ct.task_date
-
-              AND r.id <> ct.reservation_id
-
-        )
-
-        THEN 'high'
-
-        ELSE 'normal'
-
-    END,
-
-    updated_at = now()
-
-    WHERE ct.room_unit_id = NEW.room_unit_id
-
-      AND ct.task_date = NEW.check_out_date;
-
-
-
-    RETURN NEW;
-
-END;
-
+    AS $$
+BEGIN
+    -- 1. Delete old cleaning task if room or checkout date changed
+    DELETE FROM cleaning_tasks
+    WHERE reservation_id = NEW.id;
+
+    -- 2. Insert new cleaning task
+    INSERT INTO cleaning_tasks (
+        property_id,
+        room_unit_id,
+        reservation_id,
+        cleaner_id,
+        task_date,
+        task_type,
+        status,
+        priority,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        NEW.property_id,
+        NEW.room_unit_id,
+        NEW.id,
+        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
+        NEW.check_out_date,
+        'checkout',
+        'pending',
+        'normal', -- temporary, will recalc below
+        now(),
+        now()
+    );
+
+    -- 3. Recalculate priority for all tasks of this room & date
+    UPDATE cleaning_tasks ct
+    SET priority = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.room_unit_id = ct.room_unit_id
+              AND r.check_in_date = ct.task_date
+              AND r.id <> ct.reservation_id
+        )
+        THEN 'high'
+        ELSE 'normal'
+    END,
+    updated_at = now()
+    WHERE ct.room_unit_id = NEW.room_unit_id
+      AND ct.task_date = NEW.check_out_date;
+
+    RETURN NEW;
+END;
 $$;
 
 
@@ -1423,34 +1337,20 @@ $$;
 
 CREATE FUNCTION public.match_documents(query_embedding public.vector, match_count integer DEFAULT NULL::integer, filter jsonb DEFAULT '{}'::jsonb) RETURNS TABLE(id bigint, content text, metadata jsonb, similarity double precision)
     LANGUAGE plpgsql
-    AS $$
-
-#variable_conflict use_column
-
-begin
-
-  return query
-
-  select
-
-    id,
-
-    content,
-
-    metadata,
-
-    1 - (documents.embedding <=> query_embedding) as similarity
-
-  from documents
-
-  where metadata @> filter
-
-  order by documents.embedding <=> query_embedding
-
-  limit match_count;
-
-end;
-
+    AS $$
+#variable_conflict use_column
+begin
+  return query
+  select
+    id,
+    content,
+    metadata,
+    1 - (documents.embedding <=> query_embedding) as similarity
+  from documents
+  where metadata @> filter
+  order by documents.embedding <=> query_embedding
+  limit match_count;
+end;
 $$;
 
 
@@ -1924,22 +1824,14 @@ $$;
 
 CREATE FUNCTION public.set_default_name_en() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-BEGIN
-
-  -- If name_en is NULL, set it to the value of name
-
-  IF NEW.name_en IS NULL THEN
-
-    NEW.name_en := NEW.name;
-
-  END IF;
-
-  RETURN NEW;
-
-END;
-
+    AS $$
+BEGIN
+  -- If name_en is NULL, set it to the value of name
+  IF NEW.name_en IS NULL THEN
+    NEW.name_en := NEW.name;
+  END IF;
+  RETURN NEW;
+END;
 $$;
 
 
@@ -2396,16 +2288,11 @@ CREATE FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id u
 
 CREATE FUNCTION public.update_cleaning_task_updated_at() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-begin
-
-  new.updated_at = now();
-
-  return new;
-
-end;
-
+    AS $$
+begin
+  new.updated_at = now();
+  return new;
+end;
 $$;
 
 
@@ -2485,6 +2372,100 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: upsert_property_translation(uuid, character varying, character varying, text, boolean, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.upsert_property_translation(p_property_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean DEFAULT false, p_created_by uuid DEFAULT auth.uid()) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    translation_id UUID;
+BEGIN
+    INSERT INTO property_translations (
+        property_id,
+        field_name,
+        language_code,
+        translated_text,
+        is_auto_translated,
+        created_by,
+        updated_at
+    ) VALUES (
+        p_property_id,
+        p_field_name,
+        p_language_code,
+        p_translated_text,
+        p_is_auto_translated,
+        p_created_by,
+        NOW()
+    )
+    ON CONFLICT (property_id, field_name, language_code)
+    DO UPDATE SET
+        translated_text = EXCLUDED.translated_text,
+        is_auto_translated = EXCLUDED.is_auto_translated,
+        updated_at = NOW(),
+        created_by = COALESCE(EXCLUDED.created_by, property_translations.created_by)
+    RETURNING id INTO translation_id;
+    
+    RETURN translation_id;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION upsert_property_translation(p_property_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean, p_created_by uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.upsert_property_translation(p_property_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean, p_created_by uuid) IS 'Function to insert or update property translations';
+
+
+--
+-- Name: upsert_room_type_translation(uuid, character varying, character varying, text, boolean, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.upsert_room_type_translation(p_room_type_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean DEFAULT false, p_created_by uuid DEFAULT auth.uid()) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    translation_id UUID;
+BEGIN
+    INSERT INTO room_type_translations (
+        room_type_id,
+        field_name,
+        language_code,
+        translated_text,
+        is_auto_translated,
+        created_by,
+        updated_at
+    ) VALUES (
+        p_room_type_id,
+        p_field_name,
+        p_language_code,
+        p_translated_text,
+        p_is_auto_translated,
+        p_created_by,
+        NOW()
+    )
+    ON CONFLICT (room_type_id, field_name, language_code)
+    DO UPDATE SET
+        translated_text = EXCLUDED.translated_text,
+        is_auto_translated = EXCLUDED.is_auto_translated,
+        updated_at = NOW(),
+        created_by = COALESCE(EXCLUDED.created_by, room_type_translations.created_by)
+    RETURNING id INTO translation_id;
+    
+    RETURN translation_id;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION upsert_room_type_translation(p_room_type_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean, p_created_by uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.upsert_room_type_translation(p_room_type_id uuid, p_field_name character varying, p_language_code character varying, p_translated_text text, p_is_auto_translated boolean, p_created_by uuid) IS 'Function to insert or update room type translations';
 
 
 --
@@ -3617,7 +3598,7 @@ CREATE TABLE public.properties (
     wifi_password character varying(255),
     house_rules text,
     check_in_instructions text,
-    emergency_contact character varying(255),
+    contact_number character varying(255),
     property_amenities jsonb,
     location_info jsonb,
     is_active boolean DEFAULT true,
@@ -3626,7 +3607,10 @@ CREATE TABLE public.properties (
     access_time time without time zone,
     default_cleaner_id uuid,
     beds24_property_id bigint,
-    departure_time time without time zone
+    departure_time time without time zone,
+    entrance_code text,
+    property_email text,
+    luggage_info text
 );
 
 
@@ -4080,6 +4064,28 @@ CREATE TABLE public.guest_payment_services (
 --
 
 COMMENT ON TABLE public.guest_payment_services IS 'Defines available payment services for guests (accommodation tax, damage deposit, etc.)';
+
+
+--
+-- Name: guest_services; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guest_services (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    service_key character varying(50) NOT NULL,
+    name character varying(100) NOT NULL,
+    description text,
+    price numeric(10,2) NOT NULL,
+    currency character varying(3) DEFAULT 'JPY'::character varying,
+    requires_admin_activation boolean DEFAULT false,
+    access_time_override_hours integer,
+    departure_time_override_hours integer,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    is_mandatory boolean DEFAULT false,
+    requires_calculation boolean DEFAULT false
+);
 
 
 --
@@ -4596,6 +4602,78 @@ CREATE VIEW public.property_summary AS
 
 
 --
+-- Name: property_translations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.property_translations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    property_id uuid NOT NULL,
+    field_name character varying(50) NOT NULL,
+    language_code character varying(5) NOT NULL,
+    translated_text text NOT NULL,
+    is_auto_translated boolean DEFAULT false,
+    is_approved boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    created_by uuid
+);
+
+
+--
+-- Name: TABLE property_translations; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.property_translations IS 'Stores translations for property text fields in multiple languages';
+
+
+--
+-- Name: property_translations_view; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.property_translations_view AS
+ SELECT p.id AS property_id,
+    p.name AS property_name,
+    pt.field_name,
+    pt.language_code,
+    pt.translated_text,
+    pt.is_auto_translated,
+    pt.is_approved,
+    pt.created_at,
+    pt.updated_at,
+    u.email AS created_by_email
+   FROM ((public.properties p
+     LEFT JOIN public.property_translations pt ON ((p.id = pt.property_id)))
+     LEFT JOIN auth.users u ON ((pt.created_by = u.id)))
+  WHERE (p.is_active = true);
+
+
+--
+-- Name: reservation_addons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservation_addons (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid NOT NULL,
+    service_id uuid NOT NULL,
+    admin_enabled boolean DEFAULT false,
+    purchase_status character varying(20) DEFAULT 'available'::character varying,
+    stripe_payment_intent_id character varying(100),
+    amount_paid numeric(10,2),
+    calculated_amount numeric(10,2),
+    is_tax_exempted boolean DEFAULT false,
+    tax_calculation_details jsonb,
+    access_time_override time without time zone,
+    departure_time_override time without time zone,
+    purchased_at timestamp with time zone,
+    exempted_at timestamp with time zone,
+    exempted_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT reservation_addons_status_check CHECK (((purchase_status)::text = ANY ((ARRAY['available'::character varying, 'pending'::character varying, 'paid'::character varying, 'failed'::character varying, 'exempted'::character varying])::text[])))
+);
+
+
+--
 -- Name: reservation_guests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4785,9 +4863,10 @@ CREATE VIEW public.reservations_details AS
     p.wifi_password AS property_wifi_password,
     p.house_rules,
     p.check_in_instructions,
-    p.emergency_contact AS property_emergency_contact,
+    p.contact_number AS property_emergency_contact,
     p.property_amenities,
     p.location_info,
+    p.luggage_info,
     p.is_active AS property_is_active,
     p.created_at AS property_created_at,
     p.updated_at AS property_updated_at,
@@ -4854,6 +4933,55 @@ CREATE VIEW public.room_availability AS
      LEFT JOIN public.reservations r ON (((ru.id = r.room_unit_id) AND (r.status = ANY (ARRAY['confirmed'::text, 'checked_in'::text])) AND (r.check_in_date <= CURRENT_DATE) AND (r.check_out_date > CURRENT_DATE))))
   WHERE (p.is_active = true)
   GROUP BY p.id, p.name, rt.id, rt.name, rt.base_price, rt.max_guests, ru.id, ru.unit_number, ru.is_active, rt.is_active, p.is_active;
+
+
+--
+-- Name: room_type_translations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_type_translations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    room_type_id uuid NOT NULL,
+    field_name character varying(50) NOT NULL,
+    language_code character varying(5) NOT NULL,
+    translated_text text NOT NULL,
+    is_auto_translated boolean DEFAULT false,
+    is_approved boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    created_by uuid
+);
+
+
+--
+-- Name: TABLE room_type_translations; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.room_type_translations IS 'Stores translations for room type text fields in multiple languages';
+
+
+--
+-- Name: room_type_translations_view; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.room_type_translations_view AS
+ SELECT rt.id AS room_type_id,
+    rt.name AS room_type_name,
+    p.id AS property_id,
+    p.name AS property_name,
+    rtt.field_name,
+    rtt.language_code,
+    rtt.translated_text,
+    rtt.is_auto_translated,
+    rtt.is_approved,
+    rtt.created_at,
+    rtt.updated_at,
+    u.email AS created_by_email
+   FROM (((public.room_types rt
+     JOIN public.properties p ON ((rt.property_id = p.id)))
+     LEFT JOIN public.room_type_translations rtt ON ((rt.id = rtt.room_type_id)))
+     LEFT JOIN auth.users u ON ((rtt.created_by = u.id)))
+  WHERE (rt.is_active = true);
 
 
 --
@@ -5426,6 +5554,22 @@ ALTER TABLE ONLY public.guest_payment_services
 
 
 --
+-- Name: guest_services guest_services_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_services
+    ADD CONSTRAINT guest_services_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guest_services guest_services_service_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_services
+    ADD CONSTRAINT guest_services_service_key_key UNIQUE (service_key);
+
+
+--
 -- Name: guest_sessions guest_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5642,6 +5786,38 @@ ALTER TABLE ONLY public.property_images
 
 
 --
+-- Name: property_translations property_translations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_translations
+    ADD CONSTRAINT property_translations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: property_translations property_translations_property_id_field_name_language_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_translations
+    ADD CONSTRAINT property_translations_property_id_field_name_language_code_key UNIQUE (property_id, field_name, language_code);
+
+
+--
+-- Name: reservation_addons reservation_addons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_addons
+    ADD CONSTRAINT reservation_addons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: reservation_addons reservation_addons_unique_service; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_addons
+    ADD CONSTRAINT reservation_addons_unique_service UNIQUE (reservation_id, service_id);
+
+
+--
 -- Name: reservation_guests reservation_guests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5695,6 +5871,22 @@ ALTER TABLE ONLY public.reservations
 
 ALTER TABLE ONLY public.reservations
     ADD CONSTRAINT reservations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_type_translations room_type_translations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_type_translations
+    ADD CONSTRAINT room_type_translations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_type_translations room_type_translations_room_type_id_field_name_language_cod_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_type_translations
+    ADD CONSTRAINT room_type_translations_room_type_id_field_name_language_cod_key UNIQUE (room_type_id, field_name, language_code);
 
 
 --
@@ -6351,6 +6543,20 @@ CREATE INDEX idx_events_location_daterange ON public.events USING btree (locatio
 
 
 --
+-- Name: idx_guest_services_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_guest_services_active ON public.guest_services USING btree (is_active) WHERE (is_active = true);
+
+
+--
+-- Name: idx_guest_services_service_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_guest_services_service_key ON public.guest_services USING btree (service_key);
+
+
+--
 -- Name: idx_holidays_date_range; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6589,6 +6795,48 @@ CREATE INDEX idx_property_images_room_unit_id ON public.property_images USING bt
 
 
 --
+-- Name: idx_property_translations_field; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_translations_field ON public.property_translations USING btree (property_id, field_name);
+
+
+--
+-- Name: idx_property_translations_property_language; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_translations_property_language ON public.property_translations USING btree (property_id, language_code);
+
+
+--
+-- Name: idx_property_translations_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_property_translations_status ON public.property_translations USING btree (property_id, is_approved);
+
+
+--
+-- Name: idx_reservation_addons_admin_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_addons_admin_enabled ON public.reservation_addons USING btree (admin_enabled) WHERE (admin_enabled = true);
+
+
+--
+-- Name: idx_reservation_addons_reservation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_addons_reservation ON public.reservation_addons USING btree (reservation_id);
+
+
+--
+-- Name: idx_reservation_addons_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_reservation_addons_status ON public.reservation_addons USING btree (purchase_status);
+
+
+--
 -- Name: idx_reservation_guests_admin_verified; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6747,6 +6995,27 @@ CREATE INDEX idx_reservations_status ON public.reservations USING btree (status)
 --
 
 CREATE INDEX idx_reservations_status_date ON public.reservations USING btree (status, check_in_date);
+
+
+--
+-- Name: idx_room_type_translations_field; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_type_translations_field ON public.room_type_translations USING btree (room_type_id, field_name);
+
+
+--
+-- Name: idx_room_type_translations_room_type_language; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_type_translations_room_type_language ON public.room_type_translations USING btree (room_type_id, language_code);
+
+
+--
+-- Name: idx_room_type_translations_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_room_type_translations_status ON public.room_type_translations USING btree (room_type_id, is_approved);
 
 
 --
@@ -7233,6 +7502,13 @@ CREATE TRIGGER update_guest_payment_services_updated_at BEFORE UPDATE ON public.
 
 
 --
+-- Name: guest_services update_guest_services_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_guest_services_updated_at BEFORE UPDATE ON public.guest_services FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: holidays update_holidays_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7279,6 +7555,13 @@ CREATE TRIGGER update_pricing_rules_updated_at BEFORE UPDATE ON public.pricing_r
 --
 
 CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON public.properties FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: reservation_addons update_reservation_addons_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_reservation_addons_updated_at BEFORE UPDATE ON public.reservation_addons FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -7711,6 +7994,46 @@ ALTER TABLE ONLY public.property_images
 
 
 --
+-- Name: property_translations property_translations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_translations
+    ADD CONSTRAINT property_translations_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+
+
+--
+-- Name: property_translations property_translations_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.property_translations
+    ADD CONSTRAINT property_translations_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
+
+
+--
+-- Name: reservation_addons reservation_addons_exempted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_addons
+    ADD CONSTRAINT reservation_addons_exempted_by_fkey FOREIGN KEY (exempted_by) REFERENCES public.users(id);
+
+
+--
+-- Name: reservation_addons reservation_addons_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_addons
+    ADD CONSTRAINT reservation_addons_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: reservation_addons reservation_addons_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservation_addons
+    ADD CONSTRAINT reservation_addons_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.guest_services(id);
+
+
+--
 -- Name: reservation_guests reservation_guests_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7764,6 +8087,22 @@ ALTER TABLE ONLY public.reservations
 
 ALTER TABLE ONLY public.reservations
     ADD CONSTRAINT reservations_room_unit_id_fkey FOREIGN KEY (room_unit_id) REFERENCES public.room_units(id) ON DELETE SET NULL;
+
+
+--
+-- Name: room_type_translations room_type_translations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_type_translations
+    ADD CONSTRAINT room_type_translations_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+
+
+--
+-- Name: room_type_translations room_type_translations_room_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_type_translations
+    ADD CONSTRAINT room_type_translations_room_type_id_fkey FOREIGN KEY (room_type_id) REFERENCES public.room_types(id) ON DELETE CASCADE;
 
 
 --
@@ -7925,3 +8264,231 @@ ALTER TABLE auth.instances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.mfa_amr_claims ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: mfa_challenges; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_challenges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mfa_factors; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_factors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: one_time_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.one_time_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: refresh_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.refresh_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_relay_states; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_relay_states ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schema_migrations; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sessions; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_domains; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_domains ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: properties Service role can manage properties; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage properties" ON public.properties USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: property_images Service role can manage property_images; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage property_images" ON public.property_images USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Service role can manage user_profiles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage user_profiles" ON public.user_profiles USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: webhook_events Service role can manage webhook_events; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage webhook_events" ON public.webhook_events USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Users can view own profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own profile" ON public.user_profiles FOR SELECT USING ((auth.uid() = id));
+
+
+--
+-- Name: cleaning_tasks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cleaning_tasks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_deliveries message_deliveries_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY message_deliveries_policy ON public.message_deliveries USING ((EXISTS ( SELECT 1
+   FROM (((public.messages m
+     JOIN public.message_threads mt ON ((m.thread_id = mt.id)))
+     JOIN public.reservations r ON ((mt.reservation_id = r.id)))
+     JOIN public.properties p ON ((r.property_id = p.id)))
+  WHERE ((m.id = message_deliveries.message_id) AND ((p.owner_id = auth.uid()) OR (auth.uid() IN ( SELECT user_profiles.id
+           FROM public.user_profiles
+          WHERE (user_profiles.role = 'admin'::public.user_role))) OR (auth.uid() IS NULL))))));
+
+
+--
+-- Name: properties; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: property_images; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.property_images ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: reservations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_types; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_types ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_units; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: webhook_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects Service role can manage guest documents; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage guest documents" ON storage.objects USING ((bucket_id = 'guest-documents'::text)) WITH CHECK ((bucket_id = 'guest-documents'::text));
+
+
+--
+-- Name: objects Service role can manage property images; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage property images" ON storage.objects USING (((bucket_id = 'property-images'::text) AND (auth.role() = 'service_role'::text)));
+
+
+--
+-- Name: buckets; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: buckets_analytics; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets_analytics ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: migrations; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: prefixes; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.prefixes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads_parts; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads_parts ENABLE ROW LEVEL SECURITY;
+
+--
+-- PostgreSQL database dump complete
+--
+

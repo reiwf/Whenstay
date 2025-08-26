@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState  } from 'react'
-import { CheckCircle, Clock, AlertCircle, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CheckCircle, Clock, AlertCircle, X, ChevronLeft, ChevronRight, MoreHorizontal, Trash2 } from 'lucide-react'
 import airbnbLogo from '../../../shared/airbnblogo.png'
 import { createPortal } from 'react-dom'
 
@@ -208,57 +208,96 @@ function isImageOnlyMessage(content) {
   return textOnly.length <= 10; // Allow for very short captions or empty
 }
 
-// Component to render large images without bubble
-function LargeImageContent({ content, isFromGuest, onImageClick }) {
-  if (!content) return null
-
-  const parts = []
-  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
-  let match
-  let imageIdx = 0
-
-  while ((match = imgRegex.exec(content)) !== null) {
-    const imgSrc = match[1]
-    parts.push(
-      <div key={`img-${match.index}`} className="my-2">
-        <img
-          src={imgSrc}
-          alt="Shared image"
-          className="rounded-2xl shadow-lg max-w-full h-auto cursor-pointer hover:opacity-95 transition-all duration-200 block"
-          style={{ maxHeight: '400px', objectFit: 'cover' }}
-          onClick={() => onImageClick?.(imageIdx)}
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-            e.currentTarget.parentNode.innerHTML = `
-              <div class="text-xs p-3 rounded-lg ${
-                isFromGuest 
-                  ? 'bg-slate-600 text-slate-100' 
-                  : 'bg-slate-100 border border-slate-200 text-slate-800'
-              }">
-                🖼️ Image: ${imgSrc.split('/').pop() || 'Unable to load'}
-              </div>
-            `
-          }}
-        />
-      </div>
-    )
-    imageIdx += 1
+function getFileNameFromUrl(url) {
+  try {
+    const u = new URL(url); // strips ?query automatically
+    const last = u.pathname.split('/').pop() || 'image';
+    return decodeURIComponent(last);
+  } catch {
+    // non-http(s) or invalid
+    const noQuery = url.split('?')[0];
+    return decodeURIComponent(noQuery.split('/').pop() || 'image');
   }
-
-  return <div>{parts}</div>
 }
 
-export default function GuestMessageBubble({ message, showTimestamp = false, onMarkAsRead }) {
-  const messageRef = useRef(null)
+function LargeImageContent({ content, isFromGuest, onImageClick }) {
+  if (!content) return null;
+
+  const parts = [];
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  let imageIndex = 0;
+
+  while ((match = imgRegex.exec(content)) !== null) {
+    const imgSrc = match[1];
+
+    parts.push(
+      <ImageWithFallback
+        key={`img-${match.index}`}
+        src={imgSrc}
+        isFromGuest={isFromGuest}
+        imageIndex={imageIndex}
+        onImageClick={onImageClick}
+      />
+    );
+    imageIndex++;
+  }
+
+  return <div>{parts}</div>;
+}
+
+function ImageWithFallback({ src, isFromGuest, imageIndex, onImageClick }) {
+  const [failed, setFailed] = React.useState(false);
+  const fileName = getFileNameFromUrl(src);
+
+  if (failed) {
+    return (
+      <div
+        className={`my-2 text-xs p-3 rounded-lg border ${
+          isFromGuest
+            ? 'bg-slate-700/10 border-slate-600/20 text-slate-800'
+            : 'bg-gray-50 border-gray-200 text-gray-800'
+        } break-all`}
+        style={{ overflowWrap: 'anywhere' }}
+      >
+        🖼️ Image: <span className="font-medium">{fileName}</span>
+        <button
+          className="ml-2 underline"
+          onClick={() => window.open(src, '_blank')}
+        >
+          open link
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-2">
+      <img
+        src={src}
+        alt={fileName}
+        className="rounded-2xl shadow-lg max-w-full h-auto cursor-pointer hover:opacity-95 transition-all duration-200 block"
+        style={{ maxHeight: '400px', objectFit: 'cover' }}
+        onClick={() => onImageClick?.(imageIndex)}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+export default function GuestMessageBubble({ message, showTimestamp = false, onMarkAsRead, onUnsendMessage, currentUser }) {
+  const wrapperRef = useRef(null) 
   const isFromGuest = message.origin_role === 'guest'
   const isFromAdmin = message.origin_role === 'host' || message.origin_role === 'admin'
 
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const images = extractAllMessageImages(message)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showUnsendConfirm, setShowUnsendConfirm] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   const openLightboxAt = (idx) => {
-      // idx refers to index within "content" images first; find the global index in `images`
       setLightboxIndex(Math.max(0, Math.min(idx, images.length - 1)))
       setLightboxOpen(true)
     }
@@ -266,8 +305,55 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
   // Check if this is an image-only message
   const isImageOnly = isImageOnlyMessage(message.content)
 
+  // Check if message is unsent
+  const isUnsent = message.is_unsent
+
+  // Check if current user can unsend this message
+  const canUnsend = () => {
+    if (isUnsent) return false; // Already unsent
+    if (message.channel !== 'inapp') return false; // Only in-app messages
+    if (!isFromGuest) return false; // Only guest messages (in guest panel)
+    
+    // Check 24 hour time limit
+    const messageTime = new Date(message.created_at);
+    const now = new Date();
+    const hoursDifference = (now - messageTime) / (1000 * 60 * 60);
+    
+    return hoursDifference < 24;
+  };
+
+  const handleUnsendClick = () => {
+    setShowMenu(false);
+    setShowUnsendConfirm(true);
+  };
+
+  const handleConfirmUnsend = () => {
+    if (onUnsendMessage) {
+      onUnsendMessage(message.id);
+    }
+    setShowUnsendConfirm(false);
+  };
+
+  const handleCancelUnsend = () => {
+    setShowUnsendConfirm(false);
+  };
+
+  // Close menu when clicking outside
+   useEffect(() => {
+    const handleDocClick = (e) => {
+      if (showMenu && wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setShowMenu(false)
+      }
+    }
+
+    document.addEventListener('click', handleDocClick)
+    return () => {
+     document.removeEventListener('click', handleDocClick)
+    };
+  }, [showMenu]);
+
   useEffect(() => {
-    if (!messageRef.current || !onMarkAsRead || !isFromAdmin) return
+    if (!wrapperRef.current || !onMarkAsRead || !isFromAdmin) return
     const currentStatus = message.message_deliveries?.[0]?.status
     if (currentStatus === 'read') return
 
@@ -285,7 +371,7 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
       { threshold: 0.5, rootMargin: '0px 0px -50px 0px' }
     )
 
-    observer.observe(messageRef.current)
+    observer.observe(wrapperRef.current)
     return () => observer.disconnect()
   }, [message.id, message.message_deliveries, isFromAdmin, onMarkAsRead])
 
@@ -304,6 +390,52 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
     if (d.status === 'sending') return { status: 'sending', icon: Clock, color: 'text-slate-400' }
     return { status: 'pending', icon: Clock, color: 'text-slate-400' }
   }
+    
+  function useLockBodyScroll(locked) {
+    useEffect(() => {
+      if (!locked) return;
+      const { overflow } = document.body.style;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = overflow; };
+    }, [locked]);
+  }
+
+  function ConfirmDialog({ open, title, message, onCancel, onConfirm }) {
+    useLockBodyScroll(open);
+    if (!open) return null;
+
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div
+          className="absolute inset-0 bg-black/50"
+          onClick={onCancel}
+          aria-hidden="true"
+        />
+        <div
+          role="dialog" aria-modal="true"
+          className="relative bg-white rounded-lg p-6 max-w-sm w-[92%] shadow-xl"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+          <p className="text-gray-600 mb-4">{message}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={onCancel}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex-1 px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg"
+            >
+              Unsend
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
   const deliveryStatus = getDeliveryStatus()
   const StatusIcon = deliveryStatus.icon
@@ -321,6 +453,31 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
   const attachmentTileHost =
     'bg-slate-100 text-slate-800 border border-slate-200 rounded-lg px-2 py-1 text-xs'
 
+  // If message is unsent, show placeholder
+  if (isUnsent) {
+    return (
+      <div className={`flex flex-col ${isFromGuest ? 'items-end' : 'items-start'} ${showTimestamp ? 'mt-3 sm:mt-4' : 'mt-1'}`}>
+        {/* Timestamp */}
+        {showTimestamp && (
+          <div className={`text-[11px] text-slate-500 mb-1 ${isFromGuest ? 'mr-1 sm:mr-2' : 'ml-1 sm:ml-2'}`}>
+            {formatTime24Hour(message.created_at)}
+          </div>
+        )}
+
+        {/* Unsent message placeholder */}
+        <div className={`max-w-[85%] sm:max-w-[75%] lg:max-w-[70%] ${isFromGuest ? 'items-end' : 'items-start'} flex flex-col`}>
+          <div className={`px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm italic opacity-60 ${
+            isFromGuest
+              ? 'bg-slate-50 border border-slate-400 text-slate-900 rounded-2xl rounded-br-md'
+              : 'bg-slate-50 border border-slate-400 text-slate-900 rounded-2xl rounded-bl-md ring-1 ring-slate-200/70'
+          }`}>
+            Message unsent
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Render image-only messages without bubble
   if (isImageOnly) {
     return (
@@ -334,12 +491,56 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
 
         {/* Large image content without bubble */}
         <div className={`max-w-[90%] sm:max-w-[80%] lg:max-w-[75%] ${isFromGuest ? 'items-end' : 'items-start'} flex flex-col`}>
-          <div ref={messageRef}>
-             <LargeImageContent
-                content={message.content}
-                isFromGuest={isFromGuest}
-                onImageClick={(idx) => openLightboxAt(idx)}
+          <div 
+            className={`relative flex items-start gap-2 ${isFromGuest ? 'flex-row-reverse' : ''}`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            ref={wrapperRef}
+          >
+             {/* Image wrapper becomes positioning context */}
+              <div className="relative">
+                <LargeImageContent
+                  content={message.content}
+                  isFromGuest={isFromGuest}
+                  onImageClick={(idx) => openLightboxAt(idx)}
+                />
+
+                {/* Dots + menu anchored to bottom-left of the image */}
+                {isFromGuest && canUnsend() && (isHovered || showMenu) && (
+                  <div className="absolute left-2 bottom-2">
+                    <button
+                      onClick={() => setShowMenu(!showMenu)}
+                      className="p-1 rounded-full hover:bg-slate-200 transition-colors bg-white/90 shadow-sm"
+                      title="Message options"
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-slate-700" />
+                    </button>
+
+                    {showMenu && (
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[140px] z-50">
+                        <button
+                          onClick={handleUnsendClick}
+                          className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Unsend</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+            {/* Confirmation modal for unsend */}
+            {showUnsendConfirm && (
+              <ConfirmDialog
+                open={showUnsendConfirm}
+                title="Unsend Message?"
+                message="This will remove the message from the conversation. This action cannot be undone."
+                onCancel={handleCancelUnsend}
+                onConfirm={handleConfirmUnsend}
               />
+            )}
           </div>
 
           {/* Delivery status for image-only messages */}
@@ -375,11 +576,16 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
 
       {/* Bubble */}
       <div className={`max-w-[85%] sm:max-w-[75%] lg:max-w-[70%] ${isFromGuest ? 'items-end' : 'items-start'} flex flex-col`}>
-        <div className="relative">
+        <div 
+          className={`relative flex items-start gap-2 ${isFromGuest ? 'flex-row-reverse' : ''}`}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          ref={wrapperRef}
+        >
           <div
-            ref={messageRef}
+            ref={wrapperRef}
             className={[
-              'px-3 py-2 sm:px-3.5 sm:py-2.5 relative w-full animate-pop',
+              'px-3 py-2 sm:px-3.5 sm:py-2.5 relative w-full animate-pop message-menu-container',
               isFromGuest ? bubbleClsGuest : bubbleClsHost,
             ].join(' ')}
             style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
@@ -457,6 +663,43 @@ export default function GuestMessageBubble({ message, showTimestamp = false, onM
               </div>
             )}
           </div>
+
+          {/* Three dots menu positioned next to the bubble */}
+          {isFromGuest && canUnsend() && (isHovered || showMenu) && (
+            <div className="relative flex-shrink-0 self-end mb-1">
+              <button
+                onClick={() => setShowMenu((v) => !v)}
+                className="p-1 rounded-full hover:bg-slate-200 transition-colors"
+                title="Message options"
+              >
+                <MoreHorizontal className="w-4 h-4 text-slate-600" />
+              </button>
+
+              {showMenu && (
+                <div
+                  className="absolute right-0 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[140px] z-50"
+                >
+                  <button
+                    onClick={handleUnsendClick}
+                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Unsend</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Confirmation modal for unsend */}
+          {showUnsendConfirm && (
+            <ConfirmDialog
+              open={showUnsendConfirm}
+              title="Unsend Message?"
+              message="This will remove the message from the conversation. This action cannot be undone."
+              onCancel={handleCancelUnsend}
+              onConfirm={handleConfirmUnsend}
+            />
+          )}
         </div>
 
         {/* Delivery status (guest messages only, under bubble) */}

@@ -6,7 +6,8 @@ import { initGuestLanguage } from '../i18n/config'
 import { 
   MapPin, 
   Wifi, 
-  Phone, 
+  Phone,
+  Luggage, 
   Clock, 
   Users, 
   Key,
@@ -101,73 +102,7 @@ export default function GuestApp() {
     // Return translated name if available, otherwise fallback to original
     return translatedName || room.room_name
   }
-
-  function StatusChip({ ok, okText = t('statusChip.ready'), waitText = t('statusChip.pending') }) {
-    return (
-      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium
-        ${ok ? 'bg-white/15 text-white' : 'bg-black/10 text-white/90'} backdrop-blur`}>
-        {ok ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-        {ok ? okText : waitText}
-      </span>
-    )
-  }
-
-  function SegmentedTabs({ items, active, onSelect }) {
-    return (
-      <div className="px-4">
-        <div className="mx-auto -mt-4 w-full max-w-[430px]">
-          <div className="rounded-full bg-white shadow ring-1 ring-black/5 overflow-hidden">
-            <nav className="grid grid-cols-3">
-              {items.map(({ id, label, icon: Icon }) => {
-                const isActive = active === id
-                return (
-                  <button
-                    key={id}
-                    onClick={() => onSelect(id)}
-                    className={`flex items-center justify-center gap-2 py-2.5 text-sm transition
-                      ${isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:bg-gray-50'}`}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
-                    <span className="hidden sm:inline">{label}</span>
-                  </button>
-                )
-              })}
-            </nav>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function FloatingBottomNav({ items, active, onSelect }) {
-    return (
-      <div className="fixed left-1/2 bottom-4 z-20 -translate-x-1/2 w-full px-4">
-        <div className="mx-auto max-w-[430px]">
-          <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg ring-1 ring-black/5">
-            <div className="grid grid-cols-3">
-              {items.map(({ id, label, icon: Icon }) => {
-                const isActive = active === id
-                return (
-                  <button
-                    key={id}
-                    onClick={() => onSelect(id)}
-                    className={`flex flex-col items-center py-3 px-3 text-[11px] transition
-                      ${isActive ? 'text-primary-700' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <Icon className={`w-5 h-5 mb-0.5 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
-                    <span className="truncate">{label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-
+  
   useEffect(() => {
     if (token) {
       loadGuestData()
@@ -728,7 +663,7 @@ export default function GuestApp() {
             {(getTranslatedText('luggage_info', property.luggage_info) || property.luggage_info) && (
               <LongTextRow
                 dialog="center"
-                icon={<ShoppingBag className="w-4 h-4 text-slate-500" />}
+                icon={<Luggage className="w-4 h-4 text-slate-500" />}
                 label={t('additionalStrings.luggageInfo')}
                 text={getTranslatedText('luggage_info', property.luggage_info)}
                 lines={2}

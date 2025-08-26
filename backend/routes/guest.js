@@ -104,12 +104,8 @@ router.get('/:token/property-translations', async (req, res) => {
       return res.status(404).json({ error: 'Property not found for this reservation' });
     }
 
-    console.log(`🌐 [GUEST TRANSLATIONS] Getting translations for property: ${propertyId}, language: ${language}`);
-
     // Get property translations using the translation service
     const translations = await translationService.getPropertyTranslations(propertyId, language);
-
-    console.log(`🌐 [GUEST TRANSLATIONS] Found ${translations.length} translations for property: ${propertyId}`);
 
     // Convert translations array to object for easier frontend consumption
     const translationData = translations.reduce((acc, translation) => {
@@ -172,12 +168,8 @@ router.get('/:token/room-type-translations/:roomTypeId', async (req, res) => {
       return res.status(403).json({ error: 'Access denied to this room type' });
     }
 
-    console.log(`🏨 [GUEST ROOM TYPE TRANSLATIONS] Getting translations for room type: ${roomTypeId}, language: ${language}`);
-
     // Get room type translations using the translation service
     const translations = await translationService.getRoomTypeTranslations(roomTypeId, language);
-
-    console.log(`🏨 [GUEST ROOM TYPE TRANSLATIONS] Found ${translations.length} translations for room type: ${roomTypeId}`);
 
     // Convert translations array to object for easier frontend consumption
     const translationData = translations.reduce((acc, translation) => {
@@ -259,7 +251,6 @@ router.get('/:token/thread', async (req, res) => {
       if (groupThreadError) throw groupThreadError;
       
       if (groupThread) {
-        console.log(`✅ [GUEST THREAD] Found existing group thread: ${groupThread.id} for master reservation: ${masterReservationId}`);
         thread = groupThread;
       } else {
       }
@@ -289,7 +280,6 @@ router.get('/:token/thread', async (req, res) => {
       if (individualThreadError) throw individualThreadError;
       
       if (individualThread) {
-        console.log(`✅ [GUEST THREAD] Found existing individual thread: ${individualThread.id} for reservation: ${reservationId}`);
         thread = individualThread;
       } else {
       }
@@ -318,8 +308,6 @@ router.get('/:token/thread/messages', async (req, res) => {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
 
-    console.log(`📨 [GUEST MESSAGES] Getting messages for token: ${token}`);
-
     // Get reservation data to validate token
     const dashboardData = await reservationService.getGuestAppData(token);
     if (!dashboardData) {
@@ -327,19 +315,16 @@ router.get('/:token/thread/messages', async (req, res) => {
     }
 
     const reservationId = dashboardData.reservation.id;
-    console.log(`📨 [GUEST MESSAGES] Found reservation: ${reservationId}`);
 
     // ENHANCED: Use group-aware thread lookup to find the unified thread
     const communicationService = require('../services/communicationService');
     
     // Check if this is part of a group booking
     const groupInfo = await communicationService.getGroupBookingInfo(reservationId);
-    console.log(`📨 [GUEST MESSAGES] Group booking info:`, groupInfo);
 
     let thread = null;
 
     if (groupInfo.isGroupBooking) {
-      console.log(`📨 [GUEST MESSAGES] Group booking detected! Looking for unified thread using master reservation: ${groupInfo.masterReservationId}`);
       
       // For group bookings, look for thread using master reservation ID
       const masterReservationId = groupInfo.masterReservationId;
@@ -356,13 +341,10 @@ router.get('/:token/thread/messages', async (req, res) => {
       if (groupThreadError) throw groupThreadError;
       
       if (groupThread) {
-        console.log(`✅ [GUEST MESSAGES] Found existing group thread: ${groupThread.id} for master reservation: ${masterReservationId}`);
         thread = groupThread;
       } else {
-        console.log(`❌ [GUEST MESSAGES] No existing group thread found for master reservation: ${masterReservationId}`);
       }
     } else {
-      console.log(`📨 [GUEST MESSAGES] Individual booking detected. Looking for individual thread for reservation: ${reservationId}`);
       
       // For individual bookings, look for thread using this reservation ID
       const { data: individualThread, error: individualThreadError } = await supabase
@@ -377,10 +359,8 @@ router.get('/:token/thread/messages', async (req, res) => {
       if (individualThreadError) throw individualThreadError;
       
       if (individualThread) {
-        console.log(`✅ [GUEST MESSAGES] Found existing individual thread: ${individualThread.id} for reservation: ${reservationId}`);
         thread = individualThread;
       } else {
-        console.log(`❌ [GUEST MESSAGES] No existing individual thread found for reservation: ${reservationId}`);
       }
     }
 
@@ -388,8 +368,6 @@ router.get('/:token/thread/messages', async (req, res) => {
       console.log(`📨 [GUEST MESSAGES] No thread found, returning empty messages array`);
       return res.json({ messages: [] });
     }
-
-    console.log(`📨 [GUEST MESSAGES] Loading messages for thread: ${thread.id} (status: ${thread.status})`);
 
     // Get messages for the thread
     const { data: messages, error: messagesError } = await supabase
@@ -405,6 +383,9 @@ router.get('/:token/thread/messages', async (req, res) => {
         sent_at,
         created_at,
         updated_at,
+        is_unsent,
+        unsent_at,
+        unsent_by,
         message_deliveries (
           id,
           status,
@@ -419,8 +400,6 @@ router.get('/:token/thread/messages', async (req, res) => {
       .range(offset, offset + limit - 1);
 
     if (messagesError) throw messagesError;
-
-    console.log(`📨 [GUEST MESSAGES] Found ${messages.length} messages for thread: ${thread.id}`);
 
     res.json({ messages });
 
@@ -444,11 +423,15 @@ router.post('/:token/thread/messages', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    if (content.trim().length > 1000) {
-      return res.status(400).json({ error: 'Message content too long (max 1000 characters)' });
+    // For messages with images, allow longer content due to HTML image tags
+    const hasImages = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi.test(content);
+    const maxLength = hasImages ? 10000 : 1000; // Allow 10KB for messages with images
+    
+    if (content.trim().length > maxLength) {
+      return res.status(400).json({ 
+        error: `Message content too long (max ${hasImages ? '10000' : '1000'} characters)` 
+      });
     }
-
-    console.log(`📨 [GUEST MESSAGE] Sending message for token: ${token}`);
 
     // Get reservation data to validate token
     const dashboardData = await reservationService.getGuestAppData(token);
@@ -461,15 +444,11 @@ router.post('/:token/thread/messages', async (req, res) => {
     const bookingLastname = dashboardData.reservation.booking_lastname;
     const guestEmail = dashboardData.reservation.guest_email;
 
-    console.log(`📨 [GUEST MESSAGE] Found reservation: ${reservationId}, guest: ${bookingName}`);
-
     // Create full name for subject generation
     const fullGuestName = bookingLastname ? `${bookingName} ${bookingLastname}` : bookingName;
 
     // ENHANCED: Use group-aware thread creation through CommunicationService
     const communicationService = require('../services/communicationService');
-    
-    console.log(`📨 [GUEST MESSAGE] Using group-aware thread lookup/creation for reservation: ${reservationId}`);
     
     // Find or create thread using the unified group booking logic
     const thread = await communicationService.findOrCreateThreadByReservation(
@@ -492,8 +471,6 @@ router.post('/:token/thread/messages', async (req, res) => {
       }
     );
 
-    console.log(`📨 [GUEST MESSAGE] Using thread: ${thread.id} (reservation: ${thread.reservation_id}) for guest message`);
-
     // Send the message using the CommunicationService to ensure delivery tracking
     const message = await communicationService.sendMessage({
       thread_id: thread.id,
@@ -502,8 +479,6 @@ router.post('/:token/thread/messages', async (req, res) => {
       origin_role: 'guest',
       parent_message_id: parent_message_id
     });
-
-    console.log(`✅ [GUEST MESSAGE] Message sent successfully: ${message.id} in thread: ${thread.id}`);
 
     // Get the complete message data with delivery information
     const { data: messageWithDeliveries, error: getMessageError } = await supabase
@@ -530,8 +505,6 @@ router.post('/:token/thread/messages', async (req, res) => {
       .single();
 
     if (getMessageError) throw getMessageError;
-
-    console.log(`📨 [GUEST MESSAGE] Returning message data: ${messageWithDeliveries.id}`);
 
     res.status(201).json({ 
       message: messageWithDeliveries,
@@ -593,6 +566,111 @@ router.post('/:token/messages/:messageId/read', async (req, res) => {
   }
 });
 
+// DELETE /api/guest/:token/messages/:messageId/unsend - Unsend a message for guest
+router.delete('/:token/messages/:messageId/unsend', async (req, res) => {
+  try {
+    const { token, messageId } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Check-in token is required' });
+    }
+
+    if (!messageId) {
+      return res.status(400).json({ error: 'Message ID is required' });
+    }
+
+    // Get reservation data to validate token
+    const dashboardData = await reservationService.getGuestAppData(token);
+    if (!dashboardData) {
+      return res.status(404).json({ error: 'Reservation not found or invalid token' });
+    }
+
+    const reservationId = dashboardData.reservation.id;
+
+    // ENHANCED: Use group-aware thread lookup to verify message access
+    const communicationService = require('../services/communicationService');
+    
+    // Check if this is part of a group booking
+    const groupInfo = await communicationService.getGroupBookingInfo(reservationId);
+
+    let allowedReservationIds = [reservationId];
+
+    if (groupInfo.isGroupBooking) {
+      // For group bookings, allow access to messages in any thread for the group
+      const reservationService = require('../services/reservationService');
+      const groupReservations = await reservationService.getGroupBookingReservations(groupInfo.masterReservationId);
+      allowedReservationIds = groupReservations.map(r => r.id);
+    }
+
+    // Verify the message belongs to this guest's thread(s)
+    const { data: message, error: messageError } = await supabase
+      .from('messages')
+      .select(`
+        id,
+        thread_id,
+        origin_role,
+        channel,
+        created_at,
+        is_unsent,
+        message_threads!inner(reservation_id)
+      `)
+      .eq('id', messageId)
+      .in('message_threads.reservation_id', allowedReservationIds)
+      .single();
+
+    if (messageError || !message) {
+      return res.status(404).json({ error: 'Message not found or access denied' });
+    }
+
+    // Verify this is a guest message
+    if (message.origin_role !== 'guest') {
+      return res.status(403).json({ error: 'You can only unsend your own messages' });
+    }
+
+    // Verify this is an in-app message (guests can only unsend in-app messages)
+    if (message.channel !== 'inapp') {
+      return res.status(403).json({ error: 'You can only unsend in-app messages' });
+    }
+
+    // Check if already unsent
+    if (message.is_unsent) {
+      return res.status(409).json({ error: 'Message has already been unsent' });
+    }
+
+    // Check 24 hour time limit
+    const messageTime = new Date(message.created_at);
+    const now = new Date();
+    const hoursDifference = (now - messageTime) / (1000 * 60 * 60);
+    
+    if (hoursDifference >= 24) {
+      return res.status(403).json({ error: 'You can only unsend messages within 24 hours' });
+    }
+
+    // Create a fake user ID for guests (we don't have a real user ID for guests)
+    // The communication service expects a user ID, but for guests we can use a special identifier
+    const guestUserId = `guest_${dashboardData.reservation.id}`;
+
+    // Use the communication service to unsend the message
+    const result = await communicationService.unsendMessage(messageId, guestUserId);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Error unsending guest message:', error);
+    
+    // Return appropriate HTTP status codes based on error type
+    if (error.message.includes('cannot be unsent') || error.message.includes('too old') || error.message.includes('insufficient permissions')) {
+      res.status(403).json({ error: error.message });
+    } else if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else if (error.message.includes('already unsent')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to unsend message' });
+    }
+  }
+});
+
 // GET /api/guest/:token/services - Get available services for guest purchase
 router.get('/:token/services', async (req, res) => {
   try {
@@ -627,15 +705,11 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
       return res.status(400).json({ error: 'Service ID is required' });
     }
 
-    console.log(`💳 [GUEST SERVICE PURCHASE] Creating checkout for service: ${serviceId}, token: ${token}`);
-
     // Get reservation data to validate token and get reservation ID
     const reservationData = await reservationService.getReservationByToken(token);
     if (!reservationData) {
       return res.status(404).json({ error: 'Reservation not found or invalid token' });
     }
-
-    console.log(`💳 [GUEST SERVICE PURCHASE] Found reservation: ${reservationData.id}`);
 
     // Find the service by addon ID (not service_key)
     const guestServicesService = require('../services/guestServicesService');
@@ -646,8 +720,6 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
       return res.status(404).json({ error: 'Service not found or not available for purchase' });
     }
 
-    console.log(`💳 [GUEST SERVICE PURCHASE] Service found: ${serviceToPurchase.name} (${serviceToPurchase.service_type})`);
-
     // Create Stripe checkout session
     const checkoutSession = await guestServicesService.createServiceCheckout(
       reservationData.id,
@@ -655,8 +727,6 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
       token,
       req
     );
-
-    console.log(`✅ [GUEST SERVICE PURCHASE] Checkout session created: ${checkoutSession.id}`);
 
     res.json({
       checkout_url: checkoutSession.checkoutUrl,

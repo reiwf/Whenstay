@@ -137,8 +137,9 @@ router.get('/:token', async (req, res) => {
       numGuests: reservation.num_guests,
       // Enhanced information from reservations_details view
       propertyName: dashboardData.property.name,
-      roomTypeName: dashboardData.room.room_type_name,
+      roomTypeName: dashboardData.room.room_name,
       roomTypeDescription: dashboardData.room.room_type_description,
+      room_type_id: dashboardData.room.room_type_id,
       unitNumber: dashboardData.room.unit_number,
       floorNumber: dashboardData.room.floor_number,
       bedConfiguration: dashboardData.room.bed_configuration,

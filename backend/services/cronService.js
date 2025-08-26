@@ -477,8 +477,6 @@ class CronService {
         factorsToInsert.push({
           location_id: null, // Global factors
           dt: dateStr,
-          seasonality,
-          seasonality_auto: seasonality,
           demand,
           demand_auto: demand,
           comp_pressure_auto: 1.0,

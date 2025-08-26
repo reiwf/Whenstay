@@ -17,6 +17,7 @@ export default function CommunicationPage() {
     messages,
     loading,
     sendMessage,
+    unsendMessage,
     loadThreads,
     updateThreadStatus,
     selectThread,
@@ -71,6 +72,13 @@ export default function CommunicationPage() {
       }
     } catch (error) {
       console.error('Thread action failed:', error);
+    }
+  };
+
+  const handleMessageUpdate = async () => {
+    // Refresh the current thread to get updated messages after unsend
+    if (selectedThread) {
+      await selectThread(selectedThread);
     }
   };
 
@@ -216,6 +224,8 @@ export default function CommunicationPage() {
                     onSendMessage={handleSendMessage}
                     onThreadAction={handleThreadAction}
                     onMarkAsRead={markMessageAsRead}
+                    onUnsendMessage={unsendMessage}
+                    onMessageUpdate={handleMessageUpdate}
                     loading={loading}
                     reservation={reservation}
                     groupBookingInfo={groupBookingInfo}
@@ -243,6 +253,8 @@ export default function CommunicationPage() {
                     onSendMessage={handleSendMessage}
                     onThreadAction={handleThreadAction}
                     onMarkAsRead={markMessageAsRead}
+                    onUnsendMessage={unsendMessage}
+                    onMessageUpdate={handleMessageUpdate}
                     loading={loading}
                   />
                 </div>

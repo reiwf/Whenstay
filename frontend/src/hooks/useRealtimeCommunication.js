@@ -274,6 +274,44 @@ export function useRealtimeCommunication() {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${threadId}`
+        },
+        (payload) => {
+          console.log('📝 Message updated for thread:', threadId, 'Message ID:', payload.new.id)
+          
+          // Update the message in local state
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === payload.new.id ? { ...msg, ...payload.new } : msg
+            )
+          )
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'message_unsent' },
+        (payload) => {
+          console.log('🗑️ Message unsent event received:', payload)
+          
+          // Update the message to show as unsent
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === payload.messageId 
+                ? { ...msg, is_unsent: true, unsent_at: payload.timestamp }
+                : msg
+            )
+          )
+          
+          // Show notification
+          toast.success('Message unsent successfully')
+        }
+      )
       .subscribe((status) => {
         console.log('📡 Messages subscription status:', status, 'for thread:', threadId)
       })
@@ -774,6 +812,58 @@ export function useRealtimeCommunication() {
     }
   }, [loadMessages, loadThreadChannels, loadReservationDetails, markMessagesRead])
 
+  // Unsend a message with optimistic update
+  const unsendMessage = useCallback(async (messageId) => {
+    try {
+      // Optimistic update - immediately mark message as unsent
+      const originalMessages = [...messages];
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, is_unsent: true, unsent_at: new Date().toISOString() }
+            : msg
+        )
+      );
+
+      // Make API call
+      const response = await fetch(`/api/communication/messages/${messageId}/unsend`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on error
+        setMessages(originalMessages);
+        
+        const errorData = await response.json().catch(() => ({}));
+        let errorMessage = 'Failed to unsend message';
+        
+        if (response.status === 403) {
+          errorMessage = 'You can only unsend your own messages within 24 hours';
+        } else if (response.status === 404) {
+          errorMessage = 'Message not found';
+        } else if (response.status === 409) {
+          errorMessage = 'Message has already been unsent';
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+        
+        toast.error(errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      // Success - no need to update messages again since real-time will handle it
+      toast.success('Message unsent successfully');
+      return true;
+    } catch (error) {
+      console.error('Error unsending message:', error);
+      throw error;
+    }
+  }, [messages]);
+
   // Refresh current data
   const refresh = useCallback(async () => {
     try {
@@ -821,6 +911,7 @@ export function useRealtimeCommunication() {
     loadThreads,
     loadMessages,
     sendMessage,
+    unsendMessage,
     updateThreadStatus,
     loadThreadChannels,
     markMessagesRead,

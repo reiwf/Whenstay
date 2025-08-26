@@ -241,8 +241,16 @@
 }
 
 @layer utilities {
+  .no-focus-ring,
+  .no-focus-ring:focus,
+  .no-focus-ring:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+  }
   .text-balance {
     text-wrap: balance;
+    
   }
   
   /* Touch-friendly utilities */

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { adminAPI } from '../../services/api';
+import TemplateEditor from './TemplateEditor';
 
 export default function TemplateManagementPanel() {
   const [templates, setTemplates] = useState([]);
@@ -8,6 +10,8 @@ export default function TemplateManagementPanel() {
   const [stats, setStats] = useState({ total: 0, enabled: 0, disabled: 0 });
   const [error, setError] = useState(null);
   const [toggling, setToggling] = useState(new Set());
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -88,6 +92,35 @@ export default function TemplateManagementPanel() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditTemplate = (template) => {
+    setSelectedTemplate(template);
+    setIsEditorOpen(true);
+  };
+
+  const handleCloseEditor = () => {
+    setIsEditorOpen(false);
+    setSelectedTemplate(null);
+  };
+
+  const handleSaveTemplate = async (updatedTemplate) => {
+    try {
+      // Update the template in the list
+      setTemplates(prev => prev.map(template => 
+        template.id === updatedTemplate.id 
+          ? { ...template, ...updatedTemplate }
+          : template
+      ));
+      
+      handleCloseEditor();
+      
+      // Show success message by clearing any existing error
+      setError(null);
+    } catch (err) {
+      console.error('Error saving template:', err);
+      setError(err.message);
     }
   };
 
@@ -230,8 +263,22 @@ export default function TemplateManagementPanel() {
                     </div>
                   </div>
                   
-                  {/* Toggle Switch */}
-                  <div className="ml-4">
+                  {/* Actions */}
+                  <div className="ml-4 flex items-center gap-2">
+                    {/* Edit Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditTemplate(template)}
+                      className="text-xs px-2 py-1 h-7"
+                    >
+                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </Button>
+                    
+                    {/* Toggle Switch */}
                     <label className="inline-flex items-center">
                       <input
                         type="checkbox"
@@ -260,6 +307,16 @@ export default function TemplateManagementPanel() {
           )}
         </div>
       </div>
+
+      {/* Template Editor Modal */}
+      {isEditorOpen && selectedTemplate && (
+        <TemplateEditor
+          template={selectedTemplate}
+          isOpen={isEditorOpen}
+          onClose={handleCloseEditor}
+          onSave={handleSaveTemplate}
+        />
+      )}
     </div>
   );
 }

@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Calendar, Archive, X, ChevronDown, Clock } from 'lucide-react';
+import { Send, Calendar, Archive, X, ChevronDown, Clock, Camera } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import ChannelSelector from './ChannelSelector';
-import ScheduleModal from './ScheduleModal';
+import ScheduledMessagesPanel from './ScheduledMessagesPanel';
 import GroupBookingPanel from './GroupBookingPanel';
+import imageResizeService from '../../services/imageResizeService';
+import { uploadMessageImages } from '../../services/fileUpload';
+import { useAuth } from '../../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 export default function MessagePanel({
   thread,
@@ -13,16 +17,23 @@ export default function MessagePanel({
   onSendMessage,
   onThreadAction,
   onMarkAsRead,
+  onUnsendMessage,
+  onMessageUpdate,
   loading,
   reservation,
   groupBookingInfo
 }) {
+  const { user } = useAuth();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showScheduledMessages, setShowScheduledMessages] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [isUserScrolled, setIsUserScrolled] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState(null);
 
@@ -40,23 +51,40 @@ export default function MessagePanel({
     setIsUserScrolled(!isAtBottom());
   };
 
+  // Scroll to bottom helper function
+  const scrollToBottom = (immediate = false) => {
+    if (!messagesEndRef.current) return;
+    
+    const scrollOptions = immediate 
+      ? { behavior: 'instant' } 
+      : { behavior: 'smooth' };
+    
+    messagesEndRef.current.scrollIntoView(scrollOptions);
+  };
+
   // Only auto-scroll when thread changes (initial load) or when user is at bottom and new message arrives
   useEffect(() => {
     // Thread changed - this is initial load, always scroll to bottom
     if (thread?.id !== currentThreadId) {
       setCurrentThreadId(thread?.id || null);
       setIsUserScrolled(false);
+      // Use longer timeout and requestAnimationFrame for initial load to ensure complete rendering
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-      }, 100);
+        requestAnimationFrame(() => {
+          scrollToBottom(true);
+        });
+      }, 150);
       return;
     }
 
     // Same thread, new messages - only scroll if user hasn't manually scrolled up
     if (messages.length > 0 && !isUserScrolled) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      // Use requestAnimationFrame + timeout for proper timing with DOM updates
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          scrollToBottom(false);
+        }, 75);
+      });
     }
   }, [thread?.id, messages, currentThreadId, isUserScrolled]);
 
@@ -111,6 +139,185 @@ export default function MessagePanel({
     return thread.subject || 'Conversation';
   };
 
+  // Image attachment handlers
+  const handleImageSelect = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      // Validate selected images
+      const validation = imageResizeService.validateImages(files, {
+        maxFiles: 5,
+        maxFileSizeMB: 10
+      });
+
+      if (!validation.isValid) {
+        toast.error(validation.errors.join('\n'));
+        return;
+      }
+
+      setUploading(true);
+      setUploadProgress({ current: 0, total: validation.validFiles.length });
+
+      // Resize images
+      const resizedImages = await imageResizeService.resizeMultipleImages(
+        validation.validFiles,
+        (current, total) => {
+          setUploadProgress({ current: current + 1, total });
+        }
+      );
+
+      // Create preview objects
+      const imagePreviews = resizedImages.map((file, index) => ({
+        id: `temp_${Date.now()}_${index}`,
+        file: file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+        size: file.size
+      }));
+
+      setSelectedImages(prev => [...prev, ...imagePreviews]);
+      toast.success(`${resizedImages.length} image(s) selected and resized`);
+
+    } catch (error) {
+      console.error('Error processing images:', error);
+      toast.error('Failed to process images');
+    } finally {
+      setUploading(false);
+      setUploadProgress({ current: 0, total: 0 });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveImage = (imageId) => {
+    setSelectedImages(prev => {
+      const imageToRemove = prev.find(img => img.id === imageId);
+      if (imageToRemove?.preview) {
+        URL.revokeObjectURL(imageToRemove.preview);
+      }
+      return prev.filter(img => img.id !== imageId);
+    });
+  };
+
+  const handleSendWithImages = async () => {
+    if ((!draft.trim() && selectedImages.length === 0) || sending || !thread) return;
+
+    const messageContent = draft.trim();
+    const imagesToSend = [...selectedImages];
+    
+    // Don't clear state until we're sure the message will be sent
+    setSending(true);
+    setUploading(true);
+
+    try {
+      let finalMessageContent = messageContent;
+
+      if (imagesToSend.length > 0) {
+        // Upload images first
+        const uploadResults = await uploadMessageImages(
+          imagesToSend.map(img => img.file),
+          `temp_${Date.now()}`,
+          (current, total) => {
+            setUploadProgress({ current, total });
+          }
+        );
+
+        // Create message content with images
+        // If we have text, add a line break before images, otherwise start with images
+        if (messageContent) {
+          finalMessageContent = messageContent + '\n';
+        } else {
+          finalMessageContent = '';
+        }
+        
+        uploadResults.forEach(result => {
+          if (result.success) {
+            finalMessageContent += `<img src="${result.publicUrl}" alt="${result.originalName}" style="max-width: 100%; height: auto;" />\n`;
+          }
+        });
+
+        // Clean up preview URLs
+        imagesToSend.forEach(img => {
+          if (img.preview) {
+            URL.revokeObjectURL(img.preview);
+          }
+        });
+      }
+
+      // Send the message (either text-only or text + images)
+      await onSendMessage(finalMessageContent, selectedChannel);
+      
+      // Clear state only after successful send
+      setDraft('');
+      setSelectedImages([]);
+      
+      if (imagesToSend.length > 0) {
+        toast.success('Message with images sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sending message with images:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setSending(false);
+      setUploading(false);
+      setUploadProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const canSend = (draft.trim() || selectedImages.length > 0) && !sending && !uploading;
+
+  // Handle unsending a message
+  const handleUnsendMessage = async (messageId) => {
+    if (!onUnsendMessage) {
+      console.error('onUnsendMessage function not provided');
+      toast.error('Unable to unsend message');
+      return;
+    }
+
+    try {
+      await onUnsendMessage(messageId);
+      // Don't call onMessageUpdate here - the real-time subscription and optimistic update 
+      // in useRealtimeCommunication will handle showing the unsent state
+    } catch (error) {
+      // Error handling is already done in the hook's unsendMessage function
+      console.error('Failed to unsend message:', error);
+    }
+  };
+
+  // Automation handlers for ScheduledMessagesPanel
+  const handleTriggerAutomation = async (reservationId) => {
+    if (!reservationId) return;
+    
+    try {
+      const { adminAPI } = await import('../../services/api');
+      const response = await adminAPI.triggerAutomationForReservation(reservationId, false);
+      console.log('Automation triggered:', response.data);
+      
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error triggering automation:', error);
+      throw error;
+    }
+  };
+
+  const handleCancelMessages = async (reservationId) => {
+    if (!reservationId) return;
+    
+    try {
+      const { adminAPI } = await import('../../services/api');
+      const response = await adminAPI.cancelScheduledMessagesForReservation(reservationId, 'Manual cancellation via message panel');
+      console.log('Messages cancelled:', response.data);
+      
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error cancelling messages:', error);
+      throw error;
+    }
+  };
+
   if (!thread) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 p-4">
@@ -154,14 +361,24 @@ export default function MessagePanel({
               </span>
             </div>
           </div>
+          {/* Scheduled Messages Panel */}
+      {showScheduledMessages && thread?.reservation_id && (
+        <div className="border-t border-gray-200 bg-white">
+          <ScheduledMessagesPanel
+            reservationId={thread.reservation_id}
+            onTriggerAutomation={handleTriggerAutomation}
+            onCancelMessages={handleCancelMessages}
+          />
+        </div>
+      )}
 
           <div className="flex items-center mt-3 sm:mt-0 space-x-1 sm:space-x-2">
             <button
-              onClick={() => setShowScheduleModal(true)}
+              onClick={() => setShowScheduledMessages(!showScheduledMessages)}
               className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Schedule</span>
+              <Clock className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Scheduled</span>
             </button>
 
             <div className="relative">
@@ -240,6 +457,8 @@ export default function MessagePanel({
                 message={message}
                 showTimestamp={showTimestamp}
                 onMarkAsRead={onMarkAsRead}
+                onUnsendMessage={handleUnsendMessage}
+                currentUser={user}
               />
             );
           })}
@@ -248,19 +467,116 @@ export default function MessagePanel({
       </div>
 
       {/* Composer */}
-      <div className="bg-white border-t border-gray-200 p-3 sm:p-4">
+      <div className="bg-white border-t border-gray-200 p-3 sm:p-4 space-y-3">
+        {/* Image Previews */}
+        {selectedImages.length > 0 && (
+          <div className="border rounded-lg p-3 bg-gray-50">
+            <div className="flex flex-wrap gap-2">
+              {selectedImages.map((image) => (
+                <div
+                  key={image.id}
+                  className="relative group rounded-lg overflow-hidden bg-white border border-gray-200 shadow-sm"
+                >
+                  <img
+                    src={image.preview}
+                    alt={image.name}
+                    className="w-20 h-20 object-cover"
+                  />
+                  <button
+                    onClick={() => handleRemoveImage(image.id)}
+                    className="absolute top-1 right-1 w-6 h-6 bg-red-500 hover:bg-red-600 
+                             text-white rounded-full flex items-center justify-center opacity-0 
+                             group-hover:opacity-100 transition-opacity"
+                    aria-label="Remove image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
+                    <div className="text-xs text-white truncate">
+                      {Math.round(image.size / 1024)}KB
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Upload Progress */}
+        {uploading && uploadProgress.total > 0 && (
+          <div className="border rounded-lg p-3 bg-blue-50">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-blue-700">
+                {uploading && selectedImages.length === 0
+                  ? 'Processing images...'
+                  : 'Uploading images...'
+                }
+              </span>
+              <span className="text-sm text-blue-600">
+                {uploadProgress.current}/{uploadProgress.total}
+              </span>
+            </div>
+            <div className="bg-blue-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-blue-600 h-2 transition-all duration-300"
+                style={{
+                  width: `${(uploadProgress.current / uploadProgress.total) * 100}%`
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-end space-y-3 sm:space-y-0 sm:space-x-3">
           <div className="flex-1">
-            <textarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={`Type your message...`}
-              className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 max-h-32 text-base sm:text-sm"
-              rows="1"
-              style={{ fontSize: '16px' }}
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              className="hidden"
             />
+
+            <div className="flex items-end space-x-2">
+              {/* Image attachment button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || uploading || selectedImages.length >= 5}
+                className="inline-flex items-center justify-center p-2 border border-gray-300 rounded-lg 
+                         text-gray-600 hover:text-gray-700 hover:bg-gray-50 
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Attach images"
+                type="button"
+              >
+                <Camera className="w-5 h-5" />
+              </button>
+
+              <div className="flex-1">
+                <textarea
+                  ref={textareaRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendWithImages();
+                    }
+                  }}
+                  placeholder={
+                    selectedImages.length > 0 
+                      ? "Add a message (optional)..." 
+                      : "Type your message..."
+                  }
+                  className="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 max-h-32 text-base sm:text-sm"
+                  rows="1"
+                  style={{ fontSize: '16px' }}
+                  disabled={sending || uploading}
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-2 gap-2">
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <span className="text-xs text-gray-500 whitespace-nowrap">Send via:</span>
@@ -269,6 +585,11 @@ export default function MessagePanel({
                   selectedChannel={selectedChannel}
                   onChannelChange={onChannelChange}
                 />
+                {selectedImages.length > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {selectedImages.length}/5 images
+                  </span>
+                )}
               </div>
               <span className="text-xs text-gray-500">{draft.length}/1000</span>
             </div>
@@ -278,32 +599,21 @@ export default function MessagePanel({
           </div>
           
           <button
-            onClick={handleSend}
-            disabled={!draft.trim() || sending || draft.length > 1000}
+            onClick={handleSendWithImages}
+            disabled={!canSend || draft.length > 1000}
             className="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
-            {sending ? (
+            {sending || uploading ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
             ) : (
               <Send className="w-4 h-4 mr-2" />
             )}
-            Send
+            {selectedImages.length > 0 ? 'Send with Images' : 'Send'}
           </button>
         </div>
       </div>
 
-      {/* Schedule Modal */}
-      {showScheduleModal && (
-        <ScheduleModal
-          thread={thread}
-          channel={selectedChannel}
-          onClose={() => setShowScheduleModal(false)}
-          onSchedule={(data) => {
-            console.log('Schedule message:', data);
-            setShowScheduleModal(false);
-          }}
-        />
-      )}
+      
     </div>
   );
 }

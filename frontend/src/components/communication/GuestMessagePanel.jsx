@@ -1,19 +1,49 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageCircle, RefreshCw } from 'lucide-react';
+import { Send, MessageCircle, RefreshCw, Camera, X, Upload, ArrowUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Section from '../ui/Section'
 import { ListGroup } from '../ui/ListGroup'
 import GuestMessageBubble from './GuestMessageBubble';
 import useGuestCommunication from '../../hooks/useGuestCommunication';
 import LoadingSpinner from '../LoadingSpinner';
+import imageResizeService from '../../services/imageResizeService';
+import { uploadMessageImages } from '../../services/fileUpload';
+import api from '../../services/api';
+import toast from 'react-hot-toast';
+
+function useKeyboardInsets() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--kb', `${kb}px`);
+    };
+
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      document.documentElement.style.removeProperty('--kb');
+    };
+  }, []);
+}
 
 export default function GuestMessagePanel({ token, guestName }) {
   const { t } = useTranslation('guest');
   const [draft, setDraft] = useState('');
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
   const hasInitialScrolled = useRef(false);
-  
+  const keyboardInset = useKeyboardInsets();
+    
   const {
     loading,
     thread,
@@ -34,14 +64,38 @@ export default function GuestMessagePanel({ token, guestName }) {
     }
   }, [token, initialize]);
 
-  // Scroll to bottom only once on initial load when messages are first loaded
+  // Scroll to bottom helper function
+  const scrollToBottom = (immediate = false) => {
+    if (!messagesEndRef.current) return;
+    
+    const scrollOptions = immediate 
+      ? { behavior: 'auto' } 
+      : { behavior: 'smooth' };
+    
+    messagesEndRef.current.scrollIntoView(scrollOptions);
+  };
+
+  // Scroll to bottom when messages change
   useEffect(() => {
     if (!messageListRef.current || !messagesEndRef.current) return;
     
-    // Only scroll to bottom on initial load when messages are first populated
+    // For initial load, scroll immediately after a short delay to ensure rendering
     if (messages.length > 0 && !hasInitialScrolled.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      hasInitialScrolled.current = true;
+      setTimeout(() => {
+        scrollToBottom(true);
+        hasInitialScrolled.current = true;
+      }, 100);
+      return;
+    }
+    
+    // For new messages, wait for DOM to update then scroll
+    if (messages.length > 0 && hasInitialScrolled.current) {
+      // Use multiple techniques to ensure proper timing
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          scrollToBottom(false);
+        }, 50);
+      });
     }
   }, [messages]);
 
@@ -70,7 +124,7 @@ export default function GuestMessagePanel({ token, guestName }) {
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSendWithImages();
     }
   };
 
@@ -78,6 +132,178 @@ export default function GuestMessagePanel({ token, guestName }) {
     refresh();
   };
 
+  // Image attachment handlers
+  const handleImageSelect = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      // Validate selected images
+      const validation = imageResizeService.validateImages(files, {
+        maxFiles: 3,
+        maxFileSizeMB: 10
+      });
+
+      if (!validation.isValid) {
+        toast.error(validation.errors.join('\n'));
+        return;
+      }
+
+      setUploading(true);
+      setUploadProgress({ current: 0, total: validation.validFiles.length });
+
+      // Resize images
+      const resizedImages = await imageResizeService.resizeMultipleImages(
+        validation.validFiles,
+        (current, total) => {
+          setUploadProgress({ current: current + 1, total });
+        }
+      );
+
+      // Create preview objects
+      const imagePreviews = resizedImages.map((file, index) => ({
+        id: `temp_${Date.now()}_${index}`,
+        file: file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+        size: file.size
+      }));
+
+      setSelectedImages(prev => [...prev, ...imagePreviews]);
+      toast.success(`${resizedImages.length} image(s) selected and resized`);
+
+    } catch (error) {
+      console.error('Error processing images:', error);
+      toast.error('Failed to process images');
+    } finally {
+      setUploading(false);
+      setUploadProgress({ current: 0, total: 0 });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveImage = (imageId) => {
+    setSelectedImages(prev => {
+      const imageToRemove = prev.find(img => img.id === imageId);
+      if (imageToRemove?.preview) {
+        URL.revokeObjectURL(imageToRemove.preview);
+      }
+      return prev.filter(img => img.id !== imageId);
+    });
+  };
+
+  const handleSendWithImages = async () => {
+    if ((!draft.trim() && selectedImages.length === 0) || sending) return;
+
+    const messageContent = draft.trim();
+    const imagesToSend = [...selectedImages];
+    
+    console.log('handleSendWithImages called:', { 
+      messageContent: messageContent, 
+      hasText: !!messageContent,
+      imageCount: imagesToSend.length,
+      sending: sending,
+      uploading: uploading
+    });
+
+    // Clear the UI state immediately
+    setDraft('');
+    setSelectedImages([]);
+
+    try {
+      // Step 1: Send text message first if we have text
+      if (messageContent) {
+        console.log('Step 1: Sending text message:', messageContent);
+        await sendMessage(messageContent);
+        console.log('✅ Text message sent successfully');
+      }
+
+      // Step 2: Send images separately if we have any
+      if (imagesToSend.length > 0) {
+        console.log('Step 2: Processing and sending images...');
+        setUploading(true);
+
+        // Upload images first
+        const uploadResults = await uploadMessageImages(
+          imagesToSend.map(img => img.file),
+          `temp_${Date.now()}`,
+          (current, total) => {
+            setUploadProgress({ current, total });
+            console.log(`Upload progress: ${current}/${total}`);
+          }
+        );
+
+        console.log('Upload results:', uploadResults);
+
+        // Send each image as a separate message
+        for (const result of uploadResults) {
+          if (result.success) {
+            const imageMessage = `<img src="${result.publicUrl}" alt="${result.originalName}" style="max-width: 100%; height: auto;" />`;
+            console.log('Sending image message:', imageMessage);
+            await sendMessage(imageMessage);
+            console.log('✅ Image message sent successfully');
+          } else {
+            console.error('❌ Failed to upload image:', result.error);
+          }
+        }
+
+        // Clean up preview URLs
+        imagesToSend.forEach(img => {
+          if (img.preview) {
+            URL.revokeObjectURL(img.preview);
+          }
+        });
+
+        toast.success(`Sent message${messageContent ? ' with text' : ''} and ${uploadResults.filter(r => r.success).length} image(s)`);
+        console.log('✅ All messages sent successfully');
+      } else if (messageContent) {
+        toast.success('Text message sent');
+      }
+
+    } catch (error) {
+      console.error('❌ Error sending messages:', error);
+      
+      // Restore state on error
+      if (messageContent) setDraft(messageContent);
+      if (imagesToSend.length > 0) setSelectedImages(imagesToSend);
+      
+      toast.error('Failed to send message');
+    } finally {
+      setUploading(false);
+      setUploadProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const canSend = (draft.trim() || selectedImages.length > 0) && !sending && !uploading;
+
+  // Handle unsending a message
+  const handleUnsendMessage = async (messageId) => {
+    try {
+      const response = await api.delete(`guest/${token}/messages/${messageId}/unsend`);
+      
+      if (response.status === 200) {
+        toast.success('Message unsent successfully');
+        
+        // Refresh messages
+        refresh();
+      }
+    } catch (error) {
+      console.error('Failed to unsend message:', error);
+      
+      if (error.response?.status === 403) {
+        toast.error('You can only unsend your own messages within 24 hours');
+      } else if (error.response?.status === 404) {
+        toast.error('Message not found');
+      } else if (error.response?.status === 409) {
+        toast.error('Message has already been unsent');
+      } else {
+        toast.error('Failed to unsend message');
+      }
+    }
+  };
 
  return (
     <div className="h-full flex flex-col">
@@ -96,7 +322,6 @@ export default function GuestMessagePanel({ token, guestName }) {
               ].join(' ')}
               title={t('supportChat.connectionStatus', { status: connectionStatus })}
             />
-            <span className="text-xs text-slate-600">{connectionStatus}</span>
           </div>
           <button
             onClick={handleRefresh}
@@ -153,6 +378,8 @@ export default function GuestMessagePanel({ token, guestName }) {
                 message={message}
                 showTimestamp={showTimestamp}
                 onMarkAsRead={markMessageAsRead}
+                onUnsendMessage={handleUnsendMessage}
+                currentUser={{ role: 'guest' }}
               />
             )
           })}
@@ -161,46 +388,118 @@ export default function GuestMessagePanel({ token, guestName }) {
         </div>
       </div>
 
-        {/* Composer (modern pill) */}
-        <div className="pb-3 safe-pb">
-          <div
-            className="composer group rounded-2xl bg-white/90 dark:bg-slate-900/60 backdrop-blur
-                      ring-1 ring-slate-200/70 dark:ring-slate-700/60 shadow-sm px-3 py-2.5
-                      flex items-end gap-2 focus-within:ring-2 focus-within:ring-slate-300"
-          >
+        {/* --- Composer -------------------------------------------------------- */}
+      <div className="pb-3 safe-pb">
+        <div className="">
+          {/* Composer container: ring disappears while typing */}
+          <div className="rounded-2xl bg-white shadow-sm
+            [box-shadow:0_0_0_1px_theme(colors.slate.200)_inset]">
+            {/* Typing area */}
             <textarea
               ref={textareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-              }}
-              placeholder={t('supportChat.composer.placeholder')}
-              className="flex-1 bg-transparent appearance-none border-0 ring-0 outline-none
-                        focus:border-transparent focus:ring-0 focus:outline-none focus-visible:outline-none
-                        resize-none text-[15px] leading-5 placeholder-slate-400 max-h-32 min-h-[22px]
-                        textarea-no-scrollbar"
+              onKeyDown={handleKeyPress}
+              placeholder="Write a message..."
               rows={1}
-              disabled={sending}
+              style={{ paddingBottom: keyboardInset }}
+              className="
+                no-focus-ring
+                w-full rounded-2xl resize-none bg-transparent px-4 py-2.5 text-sm
+                appearance-none border-0 outline-none
+                focus:outline-none focus:border-0 focus:ring-0 focus:shadow-none"
             />
 
-            <button
-              onClick={handleSend}
-              disabled={!draft.trim() || sending || draft.length > 1000}
-              className="shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-white
-                        hover:opacity-90 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-slate-900
-                        disabled:opacity-50 disabled:cursor-not-allowed transition"
-              aria-label={t('supportChat.composer.sendButton')}
-              type="button"
-            >
-              {sending ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </button>
+            {/* Inline previews (under typing) */}
+            {selectedImages.length > 0 && (
+              <div className="px-3">
+                <div className="flex flex-wrap gap-2">
+                  {selectedImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className="relative group rounded-xl overflow-hidden bg-slate-100 border border-slate-200"
+                    >
+                      <img src={image.preview} alt={image.name} className="w-14 h-14 object-cover" />
+                      <button
+                        onClick={() => handleRemoveImage(image.id)}
+                        className="absolute top-1 right-1 w-6 h-6 bg-slate-900/60 hover:bg-slate-900/80 
+                                  text-white rounded-full flex items-center justify-center opacity-0 
+                                  group-hover:opacity-100 transition-opacity"
+                        aria-label="Remove image"
+                        type="button"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/60 to-transparent p-1">
+                        <div className="text-xs text-white truncate">{Math.round(image.size / 1024)}KB</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Footer row INSIDE the box */}
+            <div className="flex items-center justify-between  px-2.5">
+              {/* Left: Camera */}
+              <div className="flex items-center gap-2">
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending || uploading || selectedImages.length >= 3}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full 
+                            text-slate-600 hover:text-slate-700 hover:bg-slate-100 
+                            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Attach images"
+                  type="button"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Right: Send */}
+              <button
+                onClick={handleSendWithImages}
+                disabled={!canSend}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full 
+                          bg-slate-800 text-white hover:bg-slate-700
+                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="button"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
+          {/* Progress (below box) */}
+          {uploading && uploadProgress.total > 0 && (
+            <div className="mt-2">
+              <div className="bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-slate-600 h-2 transition-all duration-300"
+                  style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                />
+              </div>
+              <div className="text-xs text-slate-600 mt-1">
+                {uploading && selectedImages.length === 0
+                  ? `Processing images... ${uploadProgress.current}/${uploadProgress.total}`
+                  : uploading
+                  ? `Uploading images... ${uploadProgress.current}/${uploadProgress.total}`
+                  : ''}
+              </div>
+            </div>
+          )}
         </div>
+      </div>
     </div>
   );
 }

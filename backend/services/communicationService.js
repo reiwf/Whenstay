@@ -762,6 +762,206 @@ class CommunicationService {
     }
   }
 
+  // ===== UNSEND MESSAGE =====
+
+  async unsendMessage(messageId, userId) {
+    try {
+      // Get message details before unsending
+      const { data: message, error: msgError } = await this.supabase
+        .from('messages')
+        .select(`
+          id,
+          thread_id,
+          content,
+          created_at,
+          is_unsent,
+          origin_role,
+          channel
+        `)
+        .eq('id', messageId)
+        .single();
+
+      if (msgError || !message) {
+        throw new Error('Message not found');
+      }
+
+      if (message.is_unsent) {
+        throw new Error('Message is already unsent');
+      }
+
+      // Check if this is a guest user (fake user ID)
+      const isGuestUser = userId.startsWith('guest_');
+
+      if (isGuestUser) {
+        // For guest users, do manual validation
+        
+        // Only allow guests to unsend their own messages
+        if (message.origin_role !== 'guest') {
+          throw new Error('You can only unsend your own messages');
+        }
+
+        // Only allow in-app messages
+        if (message.channel !== 'inapp') {
+          throw new Error('You can only unsend in-app messages');
+        }
+
+        // Check 24 hour time limit
+        const messageTime = new Date(message.created_at);
+        const now = new Date();
+        const hoursDifference = (now - messageTime) / (1000 * 60 * 60);
+        
+        if (hoursDifference >= 24) {
+          throw new Error('You can only unsend messages within 24 hours');
+        }
+      } else {
+        // For admin/host users, use database function if it exists
+        try {
+          const { data: canUnsend, error: checkError } = await this.supabase
+            .rpc('can_unsend_message', {
+              message_id: messageId,
+              user_id: userId
+            });
+
+          if (checkError) {
+            console.error('Error checking unsend permission:', checkError);
+            throw new Error('Failed to verify unsend permissions');
+          }
+
+          if (!canUnsend) {
+            throw new Error('Message cannot be unsent - either too old, wrong channel, already unsent, or insufficient permissions');
+          }
+        } catch (error) {
+          // If database function doesn't exist, fall back to basic checks
+          if (error.message.includes('function') && error.message.includes('does not exist')) {
+            console.warn('can_unsend_message function not found, falling back to basic checks');
+            
+            // Basic validation for admin users
+            const messageTime = new Date(message.created_at);
+            const now = new Date();
+            const hoursDifference = (now - messageTime) / (1000 * 60 * 60);
+            
+            if (hoursDifference >= 24) {
+              throw new Error('Message cannot be unsent after 24 hours');
+            }
+            
+            if (message.channel !== 'inapp') {
+              throw new Error('Only in-app messages can be unsent');
+            }
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      // Mark message as unsent
+      // For guest users, extract the reservation UUID from the guest_<uuid> format
+      const unsentBy = isGuestUser ? userId.replace('guest_', '') : userId;
+      
+      const { error: updateError } = await this.supabase
+        .from('messages')
+        .update({
+          is_unsent: true,
+          unsent_at: new Date().toISOString(),
+          unsent_by: unsentBy,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', messageId);
+
+      if (updateError) {
+        console.error('Error updating message unsent status:', updateError);
+        throw new Error('Failed to unsend message');
+      }
+
+      // Update thread last message info if this was the latest message
+      await this.updateThreadLastMessageAfterUnsend(message.thread_id);
+
+      // Notify real-time subscribers about the unsent message
+      await this.notifyMessageUnsent(message.thread_id, messageId);
+
+      return {
+        success: true,
+        messageId,
+        threadId: message.thread_id,
+        unsentAt: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('Error in unsendMessage:', error);
+      throw error;
+    }
+  }
+
+  async updateThreadLastMessageAfterUnsend(threadId) {
+    try {
+      // Get the most recent non-unsent message in the thread
+      const { data: lastMessage, error } = await this.supabase
+        .from('messages')
+        .select('content, created_at')
+        .eq('thread_id', threadId)
+        .eq('is_unsent', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error getting last message after unsend:', error);
+        return;
+      }
+
+      if (lastMessage) {
+        // Update thread with last non-unsent message
+        const preview = lastMessage.content.length > 160 
+          ? lastMessage.content.substring(0, 157) + '...' 
+          : lastMessage.content;
+
+        await this.supabase
+          .from('message_threads')
+          .update({
+            last_message_at: lastMessage.created_at,
+            last_message_preview: preview,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', threadId);
+      } else {
+        // No messages left in thread, clear last message info
+        await this.supabase
+          .from('message_threads')
+          .update({
+            last_message_at: null,
+            last_message_preview: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', threadId);
+      }
+    } catch (error) {
+      console.error('Error updating thread after unsend:', error);
+      // Non-critical error, don't throw
+    }
+  }
+
+  async notifyMessageUnsent(threadId, messageId) {
+    try {
+      // Trigger real-time notification for unsent message
+      // Use the same channel name format as the frontend subscription: messages_thread_${threadId}
+      const { error } = await this.supabase
+        .channel(`messages_thread_${threadId}`)
+        .send({
+          type: 'broadcast',
+          event: 'message_unsent',
+          payload: { 
+            messageId, 
+            threadId,
+            timestamp: new Date().toISOString() 
+          }
+        });
+
+      if (error) console.error('Real-time unsend notification error:', error);
+    } catch (error) {
+      console.error('Error in notifyMessageUnsent:', error);
+      // Non-critical error, don't throw
+    }
+  }
+
   // ===== REAL-TIME EVENTS =====
 
   async notifyNewMessage(threadId, message) {

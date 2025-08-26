@@ -182,6 +182,9 @@ router.get('/threads/:threadId/messages', async (req, res) => {
         sent_at,
         created_at,
         updated_at,
+        is_unsent,
+        unsent_at,
+        unsent_by,
         message_deliveries (
           id,
           status,
@@ -220,6 +223,16 @@ router.post('/threads/:threadId/messages', async (req, res) => {
 
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    // For messages with images, allow longer content due to HTML image tags
+    const hasImages = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi.test(content);
+    const maxLength = hasImages ? 10000 : 1000; // Allow 10KB for messages with images
+    
+    if (content.trim().length > maxLength) {
+      return res.status(400).json({ 
+        error: `Message content too long (max ${hasImages ? '10000' : '1000'} characters)` 
+      });
     }
 
     // Use the communication service for proper status progression
@@ -467,6 +480,35 @@ router.post('/messages/:messageId/read', async (req, res) => {
   } catch (error) {
     console.error('Error marking message as read:', error);
     res.status(500).json({ error: 'Failed to mark message as read' });
+  }
+});
+
+// DELETE /api/communication/messages/:messageId/unsend - Unsend a specific message
+router.delete('/messages/:messageId/unsend', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const communicationService = require('../services/communicationService');
+    
+    // Unsend the message
+    const result = await communicationService.unsendMessage(messageId, userId);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Error unsending message:', error);
+    
+    // Return appropriate HTTP status codes based on error type
+    if (error.message.includes('cannot be unsent')) {
+      res.status(403).json({ error: error.message });
+    } else if (error.message.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else if (error.message.includes('already unsent')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to unsend message' });
+    }
   }
 });
 

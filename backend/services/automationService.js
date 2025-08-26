@@ -126,12 +126,18 @@ class AutomationService {
       if (runAt < fiveMinutesAgo) {
         // For backfill: Send with proper ordering if it's a valuable message
         if (this.shouldBackfillMessage(reservation, rule, runAt, now)) {
-          console.log(`Rule ${rule.name} scheduled time is past, but scheduling for backfill with proper order`);
-          // Maintain proper order by scheduling based on rule priority
           const orderDelayMinutes = this.getBackfillOrderDelay(rule);
-          runAt = new Date(now.getTime() + orderDelayMinutes * 60000);
+          const newRunAt = new Date(now.getTime() + orderDelayMinutes * 60000);
+          console.log(`BACKFILL: Rule ${rule.name} scheduled time is past, but scheduling for backfill:`, {
+            originalRunAt: runAt.toISOString(),
+            newRunAt: newRunAt.toISOString(),
+            delayMinutes: orderDelayMinutes,
+            checkInDate: reservation.check_in_date || reservation.checkInDate
+          });
+          // Maintain proper order by scheduling based on rule priority
+          runAt = newRunAt;
         } else {
-          console.log(`Rule ${rule.name} scheduled time is in the past (${runAt.toISOString()}), skipping`);
+          console.log(`Rule ${rule.name} scheduled time is in the past (${runAt.toISOString()}), skipping backfill`);
           return;
         }
       }
@@ -470,10 +476,19 @@ class AutomationService {
         
       case 'check_in':
         if (rule.name?.includes('Instructions')) {
-          // Send check-in instructions if check-in is today or in the future (using Asia/Tokyo timezone)
+          // Send check-in instructions if check-in is today or in the future
+          // Use proper timezone-aware date comparison
           const todayInTokyo = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
-          const todayStart = new Date(todayInTokyo + 'T00:00:00.000Z');
-          return checkIn >= todayStart;
+          const checkInDateOnly = checkInDate.split('T')[0]; // Get YYYY-MM-DD part only
+          
+          console.log(`Check-in instructions backfill check:`, {
+            checkInDateOnly,
+            todayInTokyo,
+            shouldBackfill: checkInDateOnly >= todayInTokyo
+          });
+          
+          // Send if check-in date is today or in the future
+          return checkInDateOnly >= todayInTokyo;
         }
         
         if (rule.name?.includes('Reminder')) {

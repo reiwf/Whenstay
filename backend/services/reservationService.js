@@ -1884,7 +1884,7 @@ class ReservationService {
         room: {
           // Room Type information
           room_type_id: reservationData.room_type_id,
-          room_name: reservationData.room_type_name || 'Standard Room',
+          room_name: reservationData.room_type_name,
           room_type_description: reservationData.room_type_description,
           max_guests: reservationData.room_type_max_guests || reservationData.max_guests,
           base_price: reservationData.base_price,
