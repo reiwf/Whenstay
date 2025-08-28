@@ -5,12 +5,12 @@ import PropertySelector from '../components/calendar/PropertySelector';
 import CalendarTimeline from '../components/calendar/CalendarTimeline';
 
 /**
- * CalendarPage - Main calendar page component
  * Integrates property selection with calendar timeline
  */
 export default function CalendarPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
+  
 
   // Initialize page
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function CalendarPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        {/* <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Calendar className="w-8 h-8 text-blue-600" />
             <div>
@@ -54,7 +54,7 @@ export default function CalendarPage() {
               <p className="text-gray-600">Manage reservations across rooms and dates</p>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Property Selector */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">

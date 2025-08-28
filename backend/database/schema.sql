@@ -484,26 +484,46 @@ $$;
 
 CREATE FUNCTION public.enforce_cleaner_role() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-declare
-    user_role text;
-begin
-    -- Skip if cleaner_id is null
-    if new.cleaner_id is null then
-        return new;
-    end if;
-
-    -- Check if this user has cleaner role
-    select role into user_role
-    from user_profiles
-    where id = new.cleaner_id;
-
-    if user_role is distinct from 'cleaner' then
-        raise exception 'User % is not a cleaner', new.cleaner_id;
-    end if;
-
-    return new;
-end;
+    AS $$
+
+declare
+
+    user_role text;
+
+begin
+
+    -- Skip if cleaner_id is null
+
+    if new.cleaner_id is null then
+
+        return new;
+
+    end if;
+
+
+
+    -- Check if this user has cleaner role
+
+    select role into user_role
+
+    from user_profiles
+
+    where id = new.cleaner_id;
+
+
+
+    if user_role is distinct from 'cleaner' then
+
+        raise exception 'User % is not a cleaner', new.cleaner_id;
+
+    end if;
+
+
+
+    return new;
+
+end;
+
 $$;
 
 
@@ -513,12 +533,18 @@ $$;
 
 CREATE FUNCTION public.execute(query text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-BEGIN
-  EXECUTE query;
-EXCEPTION WHEN OTHERS THEN
-  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
-END;
+    AS $$
+
+BEGIN
+
+  EXECUTE query;
+
+EXCEPTION WHEN OTHERS THEN
+
+  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
+
+END;
+
 $$;
 
 
@@ -528,19 +554,32 @@ $$;
 
 CREATE FUNCTION public.generate_checkin_token() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-DECLARE
-    token TEXT;
-BEGIN
-    LOOP
-        -- Generate random 8-digit number
-        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
-        -- Check if it exists
-        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
-    END LOOP;
-    NEW.check_in_token := token;
-    RETURN NEW;
-END;
+    AS $$
+
+DECLARE
+
+    token TEXT;
+
+BEGIN
+
+    LOOP
+
+        -- Generate random 8-digit number
+
+        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
+
+        -- Check if it exists
+
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
+
+    END LOOP;
+
+    NEW.check_in_token := token;
+
+    RETURN NEW;
+
+END;
+
 $$;
 
 
@@ -662,6 +701,37 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
     AND rs.end_date > p_start_date
     AND r.status::text <> 'cancelled'
     
+    UNION ALL
+    
+    -- Finally get unassigned reservations (room_unit_id IS NULL)
+    SELECT 
+        rt.id as room_type_id,
+        rt.name as room_type_name,
+        ROW_NUMBER() OVER (ORDER BY rt.sort_order) as room_type_order,
+        NULL::uuid as room_unit_id,
+        'UNASSIGNED' as room_unit_number,
+        r.id as reservation_id,
+        NULL::uuid as segment_id,
+        r.booking_name,
+        r.check_in_date as start_date,
+        r.check_out_date as end_date,
+        r.status::text,
+        '#f59e0b' as color, -- Orange color for unassigned
+        r.booking_name as label,
+        false as is_segment
+    FROM reservations r
+    JOIN room_types rt ON r.room_type_id = rt.id
+    WHERE rt.property_id = p_property_id
+    AND r.room_unit_id IS NULL
+    AND r.check_in_date <= p_end_date
+    AND r.check_out_date > p_start_date
+    AND r.status::text <> 'cancelled'
+    AND NOT EXISTS (
+        -- Exclude reservations that have been split into segments
+        SELECT 1 FROM reservation_segments rs 
+        WHERE rs.reservation_id = r.id
+    )
+    
     ORDER BY room_type_name, room_unit_number, start_date;$$;
 
 
@@ -671,26 +741,46 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
 
 CREATE FUNCTION public.get_dashboard_stats() RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-DECLARE
-    result JSON;
-BEGIN
-    SELECT json_build_object(
-        'totalReservations', (SELECT COUNT(*) FROM reservations),
-        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
-        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
-        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
-        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
-        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
-        'totalProperties', (SELECT COUNT(*) FROM properties),
-        'totalRooms', (SELECT COUNT(*) FROM rooms),
-        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
-        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
-        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
-    ) INTO result;
-    
-    RETURN result;
-END;
+    AS $$
+
+DECLARE
+
+    result JSON;
+
+BEGIN
+
+    SELECT json_build_object(
+
+        'totalReservations', (SELECT COUNT(*) FROM reservations),
+
+        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
+
+        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
+
+        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
+
+        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
+
+        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
+
+        'totalProperties', (SELECT COUNT(*) FROM properties),
+
+        'totalRooms', (SELECT COUNT(*) FROM rooms),
+
+        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
+
+        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
+
+        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
+
+    ) INTO result;
+
+    
+
+    RETURN result;
+
+END;
+
 $$;
 
 
@@ -734,51 +824,96 @@ COMMENT ON FUNCTION public.get_group_reservations(master_booking_id text) IS 'Re
 
 CREATE FUNCTION public.get_guest_dashboard_data(reservation_token uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-DECLARE
-    result JSON;
-BEGIN
-    SELECT json_build_object(
-        'reservation', json_build_object(
-            'id', r.id,
-            'guest_name', r.guest_name,
-            'check_in_date', r.check_in_date,
-            'check_out_date', r.check_out_date,
-            'num_guests', r.num_guests,
-            'status', r.status
-        ),
-        'property', json_build_object(
-            'name', p.name,
-            'address', p.address,
-            'wifi_name', p.wifi_name,
-            'wifi_password', p.wifi_password,
-            'house_rules', p.house_rules,
-            'check_in_instructions', p.check_in_instructions,
-            'emergency_contact', p.emergency_contact,
-            'amenities', p.property_amenities
-        ),
-        'room', json_build_object(
-            'room_number', rm.room_number,
-            'room_name', rm.room_name,
-            'access_code', rm.access_code,
-            'access_instructions', rm.access_instructions,
-            'amenities', rm.room_amenities,
-            'max_guests', rm.max_guests,
-            'bed_configuration', rm.bed_configuration
-        ),
-        'checkin_status', CASE 
-            WHEN gc.id IS NOT NULL THEN 'completed'
-            ELSE 'pending'
-        END
-    ) INTO result
-    FROM reservations r
-    LEFT JOIN rooms rm ON r.room_id = rm.id
-    LEFT JOIN properties p ON rm.property_id = p.id
-    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
-    WHERE r.check_in_token = reservation_token;
-    
-    RETURN result;
-END;
+    AS $$
+
+DECLARE
+
+    result JSON;
+
+BEGIN
+
+    SELECT json_build_object(
+
+        'reservation', json_build_object(
+
+            'id', r.id,
+
+            'guest_name', r.guest_name,
+
+            'check_in_date', r.check_in_date,
+
+            'check_out_date', r.check_out_date,
+
+            'num_guests', r.num_guests,
+
+            'status', r.status
+
+        ),
+
+        'property', json_build_object(
+
+            'name', p.name,
+
+            'address', p.address,
+
+            'wifi_name', p.wifi_name,
+
+            'wifi_password', p.wifi_password,
+
+            'house_rules', p.house_rules,
+
+            'check_in_instructions', p.check_in_instructions,
+
+            'emergency_contact', p.emergency_contact,
+
+            'amenities', p.property_amenities
+
+        ),
+
+        'room', json_build_object(
+
+            'room_number', rm.room_number,
+
+            'room_name', rm.room_name,
+
+            'access_code', rm.access_code,
+
+            'access_instructions', rm.access_instructions,
+
+            'amenities', rm.room_amenities,
+
+            'max_guests', rm.max_guests,
+
+            'bed_configuration', rm.bed_configuration
+
+        ),
+
+        'checkin_status', CASE 
+
+            WHEN gc.id IS NOT NULL THEN 'completed'
+
+            ELSE 'pending'
+
+        END
+
+    ) INTO result
+
+    FROM reservations r
+
+    LEFT JOIN rooms rm ON r.room_id = rm.id
+
+    LEFT JOIN properties p ON rm.property_id = p.id
+
+    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
+
+    WHERE r.check_in_token = reservation_token;
+
+    
+
+    RETURN result;
+
+END;
+
 $$;
 
 
@@ -788,52 +923,98 @@ $$;
 
 CREATE FUNCTION public.get_owner_stats(owner_uuid uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-DECLARE
-    result JSON;
-    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
-    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
-BEGIN
-    SELECT json_build_object(
-        'monthlyRevenue', COALESCE(SUM(CASE 
-            WHEN r.status = 'completed' 
-            AND r.check_in_date >= start_date 
-            AND r.check_in_date <= end_date 
-            THEN r.total_amount 
-        END), 0),
-        'occupancyRate', ROUND(
-            (COUNT(CASE 
-                WHEN r.check_in_date >= start_date 
-                AND r.check_in_date <= end_date 
-                THEN 1 
-            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
-        ),
-        'averageDailyRate', COALESCE(AVG(CASE 
-            WHEN r.status = 'completed' 
-            AND r.check_in_date >= start_date 
-            AND r.check_in_date <= end_date 
-            THEN r.total_amount 
-        END), 0),
-        'upcomingReservations', COUNT(CASE 
-            WHEN r.check_in_date > CURRENT_DATE 
-            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
-            THEN 1 
-        END),
-        'totalProperties', COUNT(DISTINCT p.id),
-        'totalRooms', COUNT(DISTINCT rm.id),
-        'pendingCleaningTasks', COUNT(CASE 
-            WHEN ct.status = 'pending' 
-            THEN 1 
-        END)
-    ) INTO result
-    FROM properties p
-    LEFT JOIN rooms rm ON p.id = rm.property_id
-    LEFT JOIN reservations r ON rm.id = r.room_id
-    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
-    WHERE p.owner_id = owner_uuid;
-    
-    RETURN result;
-END;
+    AS $$
+
+DECLARE
+
+    result JSON;
+
+    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
+
+    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
+
+BEGIN
+
+    SELECT json_build_object(
+
+        'monthlyRevenue', COALESCE(SUM(CASE 
+
+            WHEN r.status = 'completed' 
+
+            AND r.check_in_date >= start_date 
+
+            AND r.check_in_date <= end_date 
+
+            THEN r.total_amount 
+
+        END), 0),
+
+        'occupancyRate', ROUND(
+
+            (COUNT(CASE 
+
+                WHEN r.check_in_date >= start_date 
+
+                AND r.check_in_date <= end_date 
+
+                THEN 1 
+
+            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
+
+        ),
+
+        'averageDailyRate', COALESCE(AVG(CASE 
+
+            WHEN r.status = 'completed' 
+
+            AND r.check_in_date >= start_date 
+
+            AND r.check_in_date <= end_date 
+
+            THEN r.total_amount 
+
+        END), 0),
+
+        'upcomingReservations', COUNT(CASE 
+
+            WHEN r.check_in_date > CURRENT_DATE 
+
+            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
+
+            THEN 1 
+
+        END),
+
+        'totalProperties', COUNT(DISTINCT p.id),
+
+        'totalRooms', COUNT(DISTINCT rm.id),
+
+        'pendingCleaningTasks', COUNT(CASE 
+
+            WHEN ct.status = 'pending' 
+
+            THEN 1 
+
+        END)
+
+    ) INTO result
+
+    FROM properties p
+
+    LEFT JOIN rooms rm ON p.id = rm.property_id
+
+    LEFT JOIN reservations r ON rm.id = r.room_id
+
+    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
+
+    WHERE p.owner_id = owner_uuid;
+
+    
+
+    RETURN result;
+
+END;
+
 $$;
 
 
@@ -1149,56 +1330,106 @@ $$;
 
 CREATE FUNCTION public.manage_cleaning_task() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- 1. Delete old cleaning task if room or checkout date changed
-    DELETE FROM cleaning_tasks
-    WHERE reservation_id = NEW.id;
-
-    -- 2. Insert new cleaning task
-    INSERT INTO cleaning_tasks (
-        property_id,
-        room_unit_id,
-        reservation_id,
-        cleaner_id,
-        task_date,
-        task_type,
-        status,
-        priority,
-        created_at,
-        updated_at
-    )
-    VALUES (
-        NEW.property_id,
-        NEW.room_unit_id,
-        NEW.id,
-        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
-        NEW.check_out_date,
-        'checkout',
-        'pending',
-        'normal', -- temporary, will recalc below
-        now(),
-        now()
-    );
-
-    -- 3. Recalculate priority for all tasks of this room & date
-    UPDATE cleaning_tasks ct
-    SET priority = CASE
-        WHEN EXISTS (
-            SELECT 1 FROM reservations r
-            WHERE r.room_unit_id = ct.room_unit_id
-              AND r.check_in_date = ct.task_date
-              AND r.id <> ct.reservation_id
-        )
-        THEN 'high'
-        ELSE 'normal'
-    END,
-    updated_at = now()
-    WHERE ct.room_unit_id = NEW.room_unit_id
-      AND ct.task_date = NEW.check_out_date;
-
-    RETURN NEW;
-END;
+    AS $$
+
+BEGIN
+
+    -- 1. Delete old cleaning task if room or checkout date changed
+
+    DELETE FROM cleaning_tasks
+
+    WHERE reservation_id = NEW.id;
+
+
+
+    -- 2. Insert new cleaning task
+
+    INSERT INTO cleaning_tasks (
+
+        property_id,
+
+        room_unit_id,
+
+        reservation_id,
+
+        cleaner_id,
+
+        task_date,
+
+        task_type,
+
+        status,
+
+        priority,
+
+        created_at,
+
+        updated_at
+
+    )
+
+    VALUES (
+
+        NEW.property_id,
+
+        NEW.room_unit_id,
+
+        NEW.id,
+
+        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
+
+        NEW.check_out_date,
+
+        'checkout',
+
+        'pending',
+
+        'normal', -- temporary, will recalc below
+
+        now(),
+
+        now()
+
+    );
+
+
+
+    -- 3. Recalculate priority for all tasks of this room & date
+
+    UPDATE cleaning_tasks ct
+
+    SET priority = CASE
+
+        WHEN EXISTS (
+
+            SELECT 1 FROM reservations r
+
+            WHERE r.room_unit_id = ct.room_unit_id
+
+              AND r.check_in_date = ct.task_date
+
+              AND r.id <> ct.reservation_id
+
+        )
+
+        THEN 'high'
+
+        ELSE 'normal'
+
+    END,
+
+    updated_at = now()
+
+    WHERE ct.room_unit_id = NEW.room_unit_id
+
+      AND ct.task_date = NEW.check_out_date;
+
+
+
+    RETURN NEW;
+
+END;
+
 $$;
 
 
@@ -1337,20 +1568,34 @@ $$;
 
 CREATE FUNCTION public.match_documents(query_embedding public.vector, match_count integer DEFAULT NULL::integer, filter jsonb DEFAULT '{}'::jsonb) RETURNS TABLE(id bigint, content text, metadata jsonb, similarity double precision)
     LANGUAGE plpgsql
-    AS $$
-#variable_conflict use_column
-begin
-  return query
-  select
-    id,
-    content,
-    metadata,
-    1 - (documents.embedding <=> query_embedding) as similarity
-  from documents
-  where metadata @> filter
-  order by documents.embedding <=> query_embedding
-  limit match_count;
-end;
+    AS $$
+
+#variable_conflict use_column
+
+begin
+
+  return query
+
+  select
+
+    id,
+
+    content,
+
+    metadata,
+
+    1 - (documents.embedding <=> query_embedding) as similarity
+
+  from documents
+
+  where metadata @> filter
+
+  order by documents.embedding <=> query_embedding
+
+  limit match_count;
+
+end;
+
 $$;
 
 
@@ -1824,14 +2069,22 @@ $$;
 
 CREATE FUNCTION public.set_default_name_en() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-  -- If name_en is NULL, set it to the value of name
-  IF NEW.name_en IS NULL THEN
-    NEW.name_en := NEW.name;
-  END IF;
-  RETURN NEW;
-END;
+    AS $$
+
+BEGIN
+
+  -- If name_en is NULL, set it to the value of name
+
+  IF NEW.name_en IS NULL THEN
+
+    NEW.name_en := NEW.name;
+
+  END IF;
+
+  RETURN NEW;
+
+END;
+
 $$;
 
 
@@ -2288,11 +2541,16 @@ CREATE FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id u
 
 CREATE FUNCTION public.update_cleaning_task_updated_at() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-begin
-  new.updated_at = now();
-  return new;
-end;
+    AS $$
+
+begin
+
+  new.updated_at = now();
+
+  return new;
+
+end;
+
 $$;
 
 
@@ -8264,231 +8522,3 @@ ALTER TABLE auth.instances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.mfa_amr_claims ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: mfa_challenges; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.mfa_challenges ENABLE ROW LEVEL SECURITY;
-
---
--- Name: mfa_factors; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.mfa_factors ENABLE ROW LEVEL SECURITY;
-
---
--- Name: one_time_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.one_time_tokens ENABLE ROW LEVEL SECURITY;
-
---
--- Name: refresh_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.refresh_tokens ENABLE ROW LEVEL SECURITY;
-
---
--- Name: saml_providers; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.saml_providers ENABLE ROW LEVEL SECURITY;
-
---
--- Name: saml_relay_states; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.saml_relay_states ENABLE ROW LEVEL SECURITY;
-
---
--- Name: schema_migrations; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.schema_migrations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sessions; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.sessions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sso_domains; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.sso_domains ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sso_providers; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
-
---
--- Name: users; Type: ROW SECURITY; Schema: auth; Owner: -
---
-
-ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
-
---
--- Name: properties Service role can manage properties; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role can manage properties" ON public.properties USING ((auth.role() = 'service_role'::text));
-
-
---
--- Name: property_images Service role can manage property_images; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role can manage property_images" ON public.property_images USING ((auth.role() = 'service_role'::text));
-
-
---
--- Name: user_profiles Service role can manage user_profiles; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role can manage user_profiles" ON public.user_profiles USING ((auth.role() = 'service_role'::text));
-
-
---
--- Name: webhook_events Service role can manage webhook_events; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role can manage webhook_events" ON public.webhook_events USING ((auth.role() = 'service_role'::text));
-
-
---
--- Name: user_profiles Users can view own profile; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users can view own profile" ON public.user_profiles FOR SELECT USING ((auth.uid() = id));
-
-
---
--- Name: cleaning_tasks; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.cleaning_tasks ENABLE ROW LEVEL SECURITY;
-
---
--- Name: message_deliveries message_deliveries_policy; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY message_deliveries_policy ON public.message_deliveries USING ((EXISTS ( SELECT 1
-   FROM (((public.messages m
-     JOIN public.message_threads mt ON ((m.thread_id = mt.id)))
-     JOIN public.reservations r ON ((mt.reservation_id = r.id)))
-     JOIN public.properties p ON ((r.property_id = p.id)))
-  WHERE ((m.id = message_deliveries.message_id) AND ((p.owner_id = auth.uid()) OR (auth.uid() IN ( SELECT user_profiles.id
-           FROM public.user_profiles
-          WHERE (user_profiles.role = 'admin'::public.user_role))) OR (auth.uid() IS NULL))))));
-
-
---
--- Name: properties; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
-
---
--- Name: property_images; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.property_images ENABLE ROW LEVEL SECURITY;
-
---
--- Name: reservations; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: room_types; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.room_types ENABLE ROW LEVEL SECURITY;
-
---
--- Name: room_units; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.room_units ENABLE ROW LEVEL SECURITY;
-
---
--- Name: user_profiles; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-
---
--- Name: users; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
---
--- Name: webhook_events; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
-
---
--- Name: objects Service role can manage guest documents; Type: POLICY; Schema: storage; Owner: -
---
-
-CREATE POLICY "Service role can manage guest documents" ON storage.objects USING ((bucket_id = 'guest-documents'::text)) WITH CHECK ((bucket_id = 'guest-documents'::text));
-
-
---
--- Name: objects Service role can manage property images; Type: POLICY; Schema: storage; Owner: -
---
-
-CREATE POLICY "Service role can manage property images" ON storage.objects USING (((bucket_id = 'property-images'::text) AND (auth.role() = 'service_role'::text)));
-
-
---
--- Name: buckets; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
-
---
--- Name: buckets_analytics; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.buckets_analytics ENABLE ROW LEVEL SECURITY;
-
---
--- Name: migrations; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.migrations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: objects; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
---
--- Name: prefixes; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.prefixes ENABLE ROW LEVEL SECURITY;
-
---
--- Name: s3_multipart_uploads; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.s3_multipart_uploads ENABLE ROW LEVEL SECURITY;
-
---
--- Name: s3_multipart_uploads_parts; Type: ROW SECURITY; Schema: storage; Owner: -
---
-
-ALTER TABLE storage.s3_multipart_uploads_parts ENABLE ROW LEVEL SECURITY;
-
---
--- PostgreSQL database dump complete
---
-

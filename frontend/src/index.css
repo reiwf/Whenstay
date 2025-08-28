@@ -683,6 +683,56 @@
 .readable a { color: #2563eb; text-decoration: underline; }
 
 
+/* Glass tokens (light + dark) */
+:root {
+  --glass-bg: hsla(0,0%,100%,0.10);
+  --glass-bg-strong: hsla(0,0%,100%,0.14);
+  --glass-stroke: hsla(0,0%,100%,0.25);
+  --glass-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); /* slate-900/15 */
+  --glass-highlight: linear-gradient(180deg, hsla(0,0%,100%,0.25), hsla(0,0%,100%,0.05));
+}
+
+.dark:root {
+  --glass-bg: hsla(215,21%,16%,0.35);         /* slate-800-ish */
+  --glass-bg-strong: hsla(215,21%,12%,0.42); 
+  --glass-stroke: hsla(0,0%,100%,0.10);
+  --glass-shadow: 0 12px 28px rgba(0,0,0,0.35);
+}
+
+/* utility helpers */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--glass-shadow);
+  border: 1px solid var(--glass-stroke);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-stroke);
+}
+
+.glass-gradient {
+  background-image: var(--glass-highlight);
+}
+
+/* subtle scrollbars for the timeline track */
+.timeline-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+.timeline-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,.25); /* slate-400/25 */
+  border-radius: 999px;
+}
+.timeline-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,.45);
+}
 
 /* ────────────────────────────────────────────────────────────────
    Smartphone UI tokens – DROP THIS AT THE END OF index.css

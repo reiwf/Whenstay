@@ -3,6 +3,7 @@ import { Plus, Settings, AlertTriangle, Calendar } from 'lucide-react';
 import CalendarHeader from './CalendarHeader';
 import TimelineGrid from './TimelineGrid';
 import GapFillModal from './GapFillModal';
+import ErrorModal from '../modals/ErrorModal';
 import { DateUtils, PerformanceUtils } from './CalendarUtils';
 import api from '../../services/api';
 
@@ -20,14 +21,62 @@ export default function CalendarTimeline({
   const [roomHierarchy, setRoomHierarchy] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showStagingRow, setShowStagingRow] = useState(false);
 
   // UI state
   const [showGapFillModal, setShowGapFillModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isResizeMode, setIsResizeMode] = useState(false); // Move mode state
+  const [isResizeMode, setIsResizeMode] = useState(false); // Resize mode state
+  const [isHorizontalMode, setIsHorizontalMode] = useState(false); // Horizontal mode state
+
+  // Error modal state
+  const [errorModal, setErrorModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    details: null,
+    type: 'error'
+  });
 
   // Date range state
   const [dateRange, setDateRange] = useState(() => DateUtils.getDefaultDateRange());
+  
+  // Navigation transition state
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [cachedTimelineData, setCachedTimelineData] = useState(null);
+
+  /**
+   * Show error modal with specified message and details
+   */
+  const showErrorModal = (title, message, details = null, type = 'error') => {
+    setErrorModal({
+      isOpen: true,
+      title,
+      message,
+      details,
+      type
+    });
+  };
+
+  /**
+   * Close error modal
+   */
+  const closeErrorModal = () => {
+    setErrorModal({
+      isOpen: false,
+      title: '',
+      message: '',
+      details: null,
+      type: 'error'
+    });
+  };
+
+  /**
+   * Show success modal
+   */
+  const showSuccessModal = (title, message) => {
+    showErrorModal(title, message, null, 'success');
+  };
 
   /**
    * Load timeline data for the selected property
@@ -45,7 +94,7 @@ export default function CalendarTimeline({
 
       // Use provided start date or current range
       const targetStartDate = startDate || dateRange.startDate;
-      const targetEndDate = DateUtils.addDays(targetStartDate, 30);
+      const targetEndDate = DateUtils.addDays(targetStartDate, 31);
 
       const response = await api.get(`/calendar/timeline/${propertyId}`, {
         params: {
@@ -95,10 +144,26 @@ export default function CalendarTimeline({
   }, [propertyId, refreshKey, debouncedLoadTimelineData]);
 
   /**
-   * Handle date navigation
+   * Handle date navigation with transition state management
    */
-  const handleDateNavigation = (newStartDate) => {
-    loadTimelineData(newStartDate);
+  const handleDateNavigation = async (newStartDate) => {
+    // Start navigation transition
+    setIsNavigating(true);
+    
+    // Cache current timeline data to prevent position miscalculation during transition
+    if (timelineData) {
+      setCachedTimelineData(timelineData);
+    }
+    
+    try {
+      await loadTimelineData(newStartDate);
+    } catch (error) {
+      console.error('Navigation failed:', error);
+    } finally {
+      // Clear navigation state and cached data
+      setIsNavigating(false);
+      setCachedTimelineData(null);
+    }
   };
 
   /**
@@ -116,15 +181,36 @@ export default function CalendarTimeline({
   };
 
   /**
+   * Toggle horizontal mode
+   */
+  const handleHorizontalModeToggle = () => {
+    setIsHorizontalMode(!isHorizontalMode);
+  };
+
+
+  /**
    * Handle reservation move
    */
   const handleReservationMove = async (reservation) => {
     try {
-      await api.put(`/calendar/reservation/${reservation.id}/move`, {
-        newRoomUnitId: reservation.roomUnitId,
-        newStartDate: reservation.startDate,
-        newEndDate: reservation.endDate
-      });
+         // Move as usual
+   await api.put(`/calendar/reservation/${reservation.id}/move`, {
+     newRoomUnitId: reservation.roomUnitId,
+     newStartDate: reservation.startDate,
+     newEndDate: reservation.endDate
+   });
+
+   // SPECIAL CASE: if we moved to the Allocate row (unassigned), nuke any lingering segments
+   if (reservation.roomUnitId == null) {
+     try {
+
+     } catch (e) {
+       console.warn('Could not clear segments after unassign; will hard refresh.', e);
+     }
+     // Ensure the UI/availability state is truly clean before the next move
+     await loadTimelineData();
+     return; // we already refreshed; skip optimistic update below
+   }
 
       // Update the local state optimistically instead of full refresh
       setTimelineData(prevData => {
@@ -141,7 +227,11 @@ export default function CalendarTimeline({
       
     } catch (error) {
       console.error('Error moving reservation:', error);
-      alert(`Failed to move reservation: ${error.response?.data?.details || error.message}`);
+      showErrorModal(
+        'Failed to Move Reservation',
+        'The reservation could not be moved to the selected location. The calendar has been refreshed to show the current state.',
+        error.response?.data?.details || error.message
+      );
       // Only refresh on error to restore correct state
       await loadTimelineData();
     }
@@ -180,7 +270,11 @@ export default function CalendarTimeline({
       
     } catch (error) {
       console.error('Error resizing reservation:', error);
-      alert(`Failed to resize reservation: ${error.response?.data?.details || error.message}`);
+      showErrorModal(
+        'Failed to Resize Reservation',
+        'The reservation dates could not be adjusted. The calendar has been refreshed to show the current state.',
+        error.response?.data?.details || error.message
+      );
       // Only refresh on error to restore correct state
       await loadTimelineData();
     }
@@ -201,7 +295,11 @@ export default function CalendarTimeline({
       
     } catch (error) {
       console.error('Error splitting reservation:', error);
-      alert(`Failed to split reservation: ${error.response?.data?.details || error.message}`);
+      showErrorModal(
+        'Failed to Split Reservation',
+        'The reservation could not be split at the selected date. Please try again.',
+        error.response?.data?.details || error.message
+      );
     }
   };
 
@@ -253,7 +351,11 @@ export default function CalendarTimeline({
       
     } catch (error) {
       console.error('Error swapping reservations:', error);
-      alert(`Failed to swap reservations: ${error.response?.data?.details || error.message}`);
+      showErrorModal(
+        'Failed to Swap Reservations',
+        'The reservations could not be swapped between rooms. The calendar has been refreshed to show the current state.',
+        error.response?.data?.details || error.message
+      );
       // Only refresh on error to restore correct state
       await loadTimelineData();
     }
@@ -269,20 +371,21 @@ export default function CalendarTimeline({
       if (response.data.success) {
         // Success - refresh timeline
         await loadTimelineData();
-        alert(`Successfully allocated ${allocationData.guestName}!`);
+        showSuccessModal(
+          'Allocation Successful',
+          `Successfully allocated ${allocationData.guestName} to their room!`
+        );
       } else {
         // Allocation failed or requires swaps
         const hasSwaps = response.data.data?.swaps?.length > 0;
         
         if (hasSwaps) {
-          const swapMessage = `Allocation requires ${response.data.data.swaps.length} room swap(s). Apply swaps?`;
-          if (confirm(swapMessage)) {
-            await api.post('/calendar/swaps/apply', {
-              swaps: response.data.data.swaps
-            });
-            await loadTimelineData();
-            alert('Allocation completed with room swaps!');
-          }
+          showErrorModal(
+            'Room Swaps Required',
+            `Allocation requires ${response.data.data.swaps.length} room swap(s). This feature needs additional implementation.`,
+            'Room swap functionality is not yet fully implemented in the modal system.',
+            'warning'
+          );
         } else {
           throw new Error(response.data.error || 'Allocation failed');
         }
@@ -350,37 +453,11 @@ export default function CalendarTimeline({
   }
 
   return (
-    <div className={`bg-white rounded-lg shadow-lg overflow-hidden ${className}`}>
+    <div className={`px-6 py-2 bg-gray-100 rounded-lg shadow-lg overflow-hidden ${className}`}>
 
-      {/* Action Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            {timelineData ? (
-              <>
-                Showing {roomHierarchy.length} room type(s) with{' '}
-                {roomHierarchy.reduce((total, rt) => total + (rt.units?.length || 0), 0)} units
-              </>
-            ) : (
-              'Loading room data...'
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={handleOpenGapFill}
-              disabled={loading || !propertyId}
-              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add Reservation
-            </button>
-          </div>
-        </div>
-      </div>
-      
+         
       {/* Calendar Header */}
+  
       <CalendarHeader
         dates={dateRange.dates}
         startDate={dateRange.startDate}
@@ -390,6 +467,10 @@ export default function CalendarTimeline({
         selectedPropertyId={propertyId}
         isResizeMode={isResizeMode}
         onModeToggle={handleModeToggle}
+        isHorizontalMode={isHorizontalMode}
+        onHorizontalModeToggle={handleHorizontalModeToggle}
+        showStagingRow={showStagingRow}
+        onStagingToggle={() => setShowStagingRow(v => !v)}
       />
 
       {/* Timeline Grid */}
@@ -404,21 +485,15 @@ export default function CalendarTimeline({
           onReservationResize={handleReservationResize}
           onReservationSplit={handleReservationSplit}
           onReservationSwap={handleReservationSwap}
-          loading={loading}
+          loading={loading || isNavigating}
           isResizeMode={isResizeMode}
+          isHorizontalMode={isHorizontalMode}
+          showStagingRow={showStagingRow}
+          isNavigating={isNavigating}
+          cachedTimelineData={cachedTimelineData}
         />
 
-        {/* Loading Overlay */}
-        {loading && (
-          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-40">
-            <div className="flex items-center space-x-2 text-gray-600">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-              <span className="text-sm font-medium">Updating calendar...</span>
-            </div>
-          </div>
-        )}
       </div>
-
       {/* Gap Fill Modal */}
       <GapFillModal
         isOpen={showGapFillModal}
@@ -426,6 +501,16 @@ export default function CalendarTimeline({
         onAllocate={handleGapFillAllocate}
         availableRooms={roomHierarchy}
         loading={loading}
+      />
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={errorModal.isOpen}
+        onClose={closeErrorModal}
+        title={errorModal.title}
+        message={errorModal.message}
+        details={errorModal.details}
+        type={errorModal.type}
       />
     </div>
   );

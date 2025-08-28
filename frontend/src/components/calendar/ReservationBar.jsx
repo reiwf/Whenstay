@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Scissors } from 'lucide-react';
 import { DateUtils, StatusUtils, GridUtils } from './CalendarUtils';
 
 /**
@@ -9,6 +8,7 @@ import { DateUtils, StatusUtils, GridUtils } from './CalendarUtils';
 export default function ReservationBar({
   reservation,
   startDate,
+  dates = [], // Add dates array to know actual grid width
   onDragStart,
   onDragEnd,
   isDragging = false,
@@ -17,6 +17,7 @@ export default function ReservationBar({
   showHandles = true,
   enableSplit = true,
   isResizeMode = false, // Mode toggle state
+  isHorizontalMode = false, // Horizontal mode toggle state
   isSwapTarget = false, // Indicates this reservation is a swap target
   isSwapPreview = false, // Indicates this is a swap preview
   swapType = null, // 'dragged' or 'target' for different swap preview types
@@ -30,13 +31,30 @@ export default function ReservationBar({
   // Get responsive grid constants
   const gridConstants = GridUtils.getCurrentConstants();
   
+  // Position validation: ensure reservation dates are compatible with current date range
+  const isPositionValid = () => {
+    if (!startDate || !reservation.startDate || !reservation.endDate) return false;
+    
+    // Check if reservation is within reasonable bounds of the displayed date range
+    const daysBetween = DateUtils.daysBetween(startDate, reservation.startDate);
+    const maxReasonableOffset = 60; // Allow up to 60 days offset (covers most navigation scenarios)
+    
+    return Math.abs(daysBetween) <= maxReasonableOffset;
+  };
+  
+  // If position is invalid (during navigation transitions), hide the bar temporarily
+  if (!isPositionValid()) {
+    console.log('ReservationBar: Invalid position detected, hiding during navigation transition');
+    return null;
+  }
+  
   // Calculate position and size with half-day checkout/checkin positioning
   const rawDayOffset = DateUtils.daysBetween(startDate, reservation.startDate);
   const totalDuration = DateUtils.daysBetween(reservation.startDate, reservation.endDate);
   
   // Apply half-day positioning for professional hotel calendar visualization
   // Check-in: start from right half (afternoon), Check-out: end at left half (morning)
-  const checkinOffset = 0.4; // Start from afternoon of checkin day
+  const checkinOffset = 0.5; // Start from afternoon of checkin day
   const checkoutAdjustment = -0.1; // End at morning of checkout day (reduce duration)
   
   // Calculate adjusted position and duration using responsive cell width
@@ -46,14 +64,22 @@ export default function ReservationBar({
   // Duration: apply checkout adjustment (end at morning instead of end of day)  
   const adjustedDuration = totalDuration + checkoutAdjustment;
   
+  // Calculate the total available grid width based on actual visible dates
+  const totalGridWidth = dates.length * gridConstants.CELL_WIDTH;
+  
   // Adjust for reservations that start before the visible grid
   const leftPosition = Math.max(0, adjustedDayOffset * gridConstants.CELL_WIDTH);
   const visibleStartOffset = Math.max(0, -adjustedDayOffset); // Days cut off from the left
   const visibleDuration = adjustedDuration - visibleStartOffset;
-  const width = Math.max(gridConstants.CELL_WIDTH * 0.5, visibleDuration * gridConstants.CELL_WIDTH);
   
-  // Flag for truncated reservations (start before visible area)
+  // Calculate width and constrain to prevent right-side overflow
+  const calculatedWidth = Math.max(gridConstants.CELL_WIDTH * 0.5, visibleDuration * gridConstants.CELL_WIDTH);
+  const maxAllowedWidth = totalGridWidth - leftPosition;
+  const width = Math.min(calculatedWidth, maxAllowedWidth);
+  
+  // Flags for truncated reservations
   const isTruncatedLeft = adjustedDayOffset < 0;
+  const isTruncatedRight = calculatedWidth > maxAllowedWidth && maxAllowedWidth > 0;
 
   // Get reservation color
   const reservationColor =  StatusUtils.getStatusColor(reservation.status);
@@ -66,11 +92,14 @@ export default function ReservationBar({
         position: absolute;
         top: -1000px;
         left: -1000px;
-        background: ${reservationColor};
-        border: 2px solid ${reservationColor};
-        color: white;
+        background: 'rgba(255, 255, 255, 0.25';
+        border: 1px solid ;
+        color: black;
         padding: 4px 8px;
-        border-radius: 6px;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        border-bottom-left-radius: 6px;
+        border-bottom-right-radius: 6px;
         font-size: 12px;
         font-weight: 600;
         white-space: nowrap;
@@ -135,7 +164,8 @@ export default function ReservationBar({
     if (dragImageRef.current) {
       // Update drag image text based on operation type
       const operationText = {
-        'move-vertical': `Move ${reservation.bookingName || 'Reservation'} to different room`,
+        'move-vertical': `Move ${reservation.bookingName || 'Reservation'}`,
+        'move-horizontal': `Move ${reservation.bookingName || 'Reservation'} dates only`,
         'resize-left': `Adjust check-in date`,
         'resize-right': `Adjust check-out date`,
         'split': `Split ${reservation.bookingName || 'Reservation'}`
@@ -258,26 +288,33 @@ export default function ReservationBar({
       borderStyle = 'dashed';
     } else if (isPreview) {
       // Generic preview
-      backgroundColor = reservationColor + '20'; // Add transparency
-      borderColor = reservationColor;
-      textColor = reservationColor;
+      backgroundColor = '#f0fdf4'; // Add transparency
+      borderColor = '#f0fdf4';
+      textColor = '#f0fdf4';
       borderStyle = 'dashed';
     } else if (isSwapTarget) {
       // Swap target styling - highlight the target reservation with purple glow
-      backgroundColor = reservationColor;
+      backgroundColor = '#f0fdf4';
       borderColor = '#8b5cf6';
       textColor = '#ffffff';
       borderStyle = 'solid';
     } else {
       // Normal state with mode-specific styling
-      backgroundColor = reservationColor;
-      borderColor = reservationColor;
-      textColor = '#ffffff';
+      if (reservation.status === 'checked_in') {
+        // Orange color scheme for checked-in reservations
+        backgroundColor = 'rgba(250, 142, 40, 0.25)'; // orange-200
+        borderColor = '#f7d0b5ff'; // orange-500
+        textColor = '#ffb68fff'; // orange-600
+      } else {
+        backgroundColor = '#f0fdf4';
+        borderColor = '#f0fdf4';
+        textColor = '#ffffff';
+      }
       
       // Add subtle border for resize mode indication
       if (isResizeMode && !isPreview) {
         borderStyle = 'solid';
-        borderColor = isHovered ? '#3b82f6' : reservationColor;
+        borderColor = isHovered ? (reservation.status === 'checked_in' ? '#df9764ff' : '#f0fdf4') : (reservation.status === 'checked_in' ? '#f7d0b5ff' : '#f0fdf4');
       }
     }
 
@@ -308,36 +345,64 @@ export default function ReservationBar({
       }
     }
 
+    // Default border radius value
+    const defaultBorderRadius = gridConstants.BREAKPOINT === 'mobile' ? '6px' : '8px';
     
-
-    // Responsive styling with compact design
     const baseStyle = {
       position: 'absolute',
       left: `${leftPosition}px`,
-      width: `${Math.max(gridConstants.CELL_WIDTH, width)}px`,
-      top: `${Math.max(2, gridConstants.ROW_HEIGHT * 0.15)}px`, // Responsive top margin
-      height: `${gridConstants.ROW_HEIGHT - Math.max(4, gridConstants.ROW_HEIGHT * 0.3)}px`, // Responsive height with padding      
-      backgroundColor,
-      borderWidth: gridConstants.BREAKPOINT === 'mobile' ? '1px' : '2px', // Thinner border on mobile
-      borderColor: borderColor,
+      width: `${width}px`,
+      top: `${Math.max(2, gridConstants.ROW_HEIGHT * 0.1)}px`,
+      height: `${gridConstants.ROW_HEIGHT - Math.max(4, gridConstants.ROW_HEIGHT * 0.2)}px`,
+
+      // Glassy look
+      backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(240, 232, 122, 0.25)', 
+      backdropFilter: 'blur(8px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(8px) saturate(150%)', // Safari support
+
+      borderWidth: gridConstants.BREAKPOINT === 'mobile' ? '1px' : '1px',
+      borderColor: reservation.status === 'checked_in' && !isPreview ? borderColor : 'rgba(255, 187, 131, 0.15)',
       borderStyle: borderStyle,
+
       color: textColor,
-      borderRadius: gridConstants.BREAKPOINT === 'mobile' ? '12px' : '16px', // Smaller radius on mobile
+      // Use individual border radius properties to avoid conflicts with truncation logic
+      borderTopLeftRadius: defaultBorderRadius,
+      borderTopRightRadius: defaultBorderRadius,
+      borderBottomLeftRadius: defaultBorderRadius,
+      borderBottomRightRadius: defaultBorderRadius,
       cursor,
       userSelect: 'none',
       zIndex: isDragging ? 50 : isPreview ? 30 : isHovered ? 20 : 10,
-      opacity: isPreview ? (hasConflict || isInvalidResize ? 0.7 : 0.8) : 1,
+      opacity: isPreview ? (hasConflict || isInvalidResize ? 0.6 : 0.75) : 1,
+
       transform: isDragging ? 'scale(1.02)' : 'scale(1)',
       transition: isDragging ? 'none' : 'all 150ms ease-in-out',
-      boxShadow: isDragging ? '0 6px 20px rgba(0, 0, 0, 0.15)' : 
-                 isPreview ? '0 3px 12px rgba(0, 0, 0, 0.12)' :
-                 isHovered ? '0 2px 8px rgba(0, 0, 0, 0.1)' : '0 1px 3px rgba(0, 0, 0, 0.05)', // Smaller shadows
-      fontSize: gridConstants.BREAKPOINT === 'mobile' ? '10px' : '11px' // Smaller font on mobile
+
+      // Glassy shadow
+      boxShadow: isDragging
+        ? '0 6px 20px rgba(0, 0, 0, 0.25)'
+        : isPreview
+        ? '0 3px 12px rgba(0, 0, 0, 0.20)'
+        : isHovered
+        ? '0 4px 16px rgba(0, 0, 0, 0.22)'
+        : '0 1px 4px rgba(0, 0, 0, 0.12)',
+
+      fontSize: gridConstants.BREAKPOINT === 'mobile' ? '10px' : '11px'
     };
+
           // Size of the cut (px)
       const CUT_SIZE = 0;
 
-      if (isTruncatedLeft) {
+      // Handle truncation cases - use consistent property approach
+      if (isTruncatedLeft && isTruncatedRight) {
+        // Both sides truncated - combine clip paths
+        baseStyle.borderTopLeftRadius = 0;
+        baseStyle.borderTopRightRadius = 0;
+        baseStyle.borderBottomLeftRadius = 0;
+        baseStyle.borderBottomRightRadius = 0;
+        baseStyle.clipPath = `polygon(${CUT_SIZE}px 0, calc(100% - ${CUT_SIZE}px) 0, 100% ${CUT_SIZE}px, 100% 100%, 0 100%, 0 ${CUT_SIZE}px)`;
+        baseStyle.WebkitClipPath = baseStyle.clipPath; // Safari
+      } else if (isTruncatedLeft) {
         // Remove rounded left corners and cut the edge
         baseStyle.borderTopLeftRadius = 0;
         baseStyle.borderBottomLeftRadius = 0;
@@ -345,32 +410,19 @@ export default function ReservationBar({
         // Slanted / notched edge
         baseStyle.clipPath = `polygon(${CUT_SIZE}px 0, 100% 0, 100% 100%, 0 100%, 0 ${CUT_SIZE}px)`;
         baseStyle.WebkitClipPath = baseStyle.clipPath; // Safari
+      } else if (isTruncatedRight) {
+        // Remove rounded right corners and cut the edge
+        baseStyle.borderTopRightRadius = 0;
+        baseStyle.borderBottomRightRadius = 0;
+
+        // Slanted / notched edge for right side
+        const rightCutWidth = `calc(100% - ${CUT_SIZE}px)`;
+        baseStyle.clipPath = `polygon(0 0, ${rightCutWidth} 0, 100% ${CUT_SIZE}px, 100% 100%, 0 100%)`;
+        baseStyle.WebkitClipPath = baseStyle.clipPath; // Safari
       }
     return baseStyle;    
   };
 
-  
-  /**
-   * Get split handle style
-   */
-  const getSplitHandleStyle = () => ({
-    position: 'absolute',
-    top: 0,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '20px',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'col-resize',
-    opacity: isHovered || isDragging ? 1 : 0,
-    transition: 'opacity 150ms ease-in-out',
-    color: isPreview && hasConflict ? '#dc2626' : '#ffffff',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    textShadow: isPreview ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.25)'
-  });
 
   /**
    * Render reservation label with truncation and resize feedback
@@ -451,7 +503,17 @@ export default function ReservationBar({
       className={`group select-none ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onDragStart={(e) => handleDragStart(e, isResizeMode ? 'resize-horizontal' : 'move-vertical')}
+      onDragStart={(e) => {
+        let dragType = 'move-vertical'; // Default to vertical movement
+        
+        if (isResizeMode) {
+          dragType = 'resize-horizontal'; // Resize mode takes precedence
+        } else if (isHorizontalMode) {
+          dragType = 'move-horizontal'; // Horizontal mode for date-only changes
+        }
+        
+        handleDragStart(e, dragType);
+      }}
       onDragEnd={handleDragEnd}
       title={getTooltipText()}
     >
@@ -461,39 +523,75 @@ export default function ReservationBar({
           {/* Left resize indicator */}
           <div
             className="absolute left-0 top-0 bottom-0 w-1 bg-blue-400 opacity-60"
-            style={{ borderRadius: '6px 0 0 6px' }}
+            style={{ 
+              borderTopLeftRadius: '6px',
+              borderTopRightRadius: '0',
+              borderBottomLeftRadius: '6px',
+              borderBottomRightRadius: '0'
+            }}
           />
           {/* Right resize indicator */}
           <div
             className="absolute right-0 top-0 bottom-0 w-1 bg-blue-400 opacity-60"
-            style={{ borderRadius: '0 6px 6px 0' }}
+            style={{ 
+              borderTopLeftRadius: '0',
+              borderTopRightRadius: '6px',
+              borderBottomLeftRadius: '0',
+              borderBottomRightRadius: '6px'
+            }}
           />
         </>
       )}
 
-      {/* Split Handle */}
-      {showHandles && enableSplit && !isPreview && totalDuration > 1 && (
-        <div
-          draggable
-          style={getSplitHandleStyle()}
-          onDragStart={(e) => {
-            e.stopPropagation();
-            handleDragStart(e, 'split');
-          }}
-          onDragEnd={handleDragEnd}
-          title="Split reservation here"
-        >
-          <Scissors className="w-3 h-3" />
-        </div>
+      {/* Horizontal mode visual feedback - show horizontal movement indicators */}
+      {isHorizontalMode && !isPreview && (
+        <>
+          {/* Horizontal movement indicator - top border */}
+          <div
+            className="absolute left-2 right-2 top-0 h-1 bg-blue-300 opacity-70"
+            style={{
+              borderTopLeftRadius: '0',
+              borderTopRightRadius: '0',
+              borderBottomLeftRadius: '3px',
+              borderBottomRightRadius: '3px'
+            }}
+            title="Horizontal mode: Move dates only, room stays the same"
+          />
+          {/* Horizontal movement indicator - bottom border */}
+          <div
+            className="absolute left-2 right-2 bottom-0 h-1 bg-blue-300 opacity-70"
+            style={{
+              borderTopLeftRadius: '3px',
+              borderTopRightRadius: '3px',
+              borderBottomLeftRadius: '0',
+              borderBottomRightRadius: '0'
+            }}
+            title="Horizontal mode: Move dates only, room stays the same"
+          />
+          {/* Center horizontal arrows indicator */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div 
+              className="text-white/80 text-xs font-bold bg-green-100/20 px-2 py-1"
+              style={{
+                borderTopLeftRadius: '4px',
+                borderTopRightRadius: '4px',
+                borderBottomLeftRadius: '4px',
+                borderBottomRightRadius: '4px'
+              }}
+            >
+              ←→
+            </div>
+          </div>
+        </>
       )}
+
 
       {/* Reservation Label */}
       <div 
         className="flex items-center h-full px-2 pointer-events-none overflow-hidden"
         style={{ 
-          color: isPreview && hasConflict ? '#dc2626' : '#ffffff',
+          color: isPreview && hasConflict ? '#dc2626' : '#1d1b1bff',
           fontSize: '12px',
-          fontWeight: '600',
           lineHeight: '1.2'
         }}
       >
@@ -504,7 +602,15 @@ export default function ReservationBar({
 
       {/* Conflict Indicator */}
       {hasConflict && (
-        <div className="absolute inset-0 border-2 border-red-500 bg-red-100 bg-opacity-20 rounded border-dashed pointer-events-none">
+        <div 
+          className="absolute inset-0 border border-red-500 bg-red-100 bg-opacity-20 border-dashed pointer-events-none"
+          style={{
+            borderTopLeftRadius: '8px',
+            borderTopRightRadius: '8px',
+            borderBottomLeftRadius: '8px',
+            borderBottomRightRadius: '8px'
+          }}
+        >
           <div className="absolute top-1 left-1 text-xs font-bold text-red-600">
             ⚠
           </div>

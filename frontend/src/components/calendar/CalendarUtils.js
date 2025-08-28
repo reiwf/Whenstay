@@ -108,7 +108,7 @@ export class DateUtils {
    */
   static getDefaultDateRange() {
     const startDate = this.getYesterday();
-    const endDate = this.addDays(startDate, 30); // +30 to get 31 total days
+    const endDate = this.addDays(startDate, 31); // +30 to get 31 total days
     
     return {
       startDate,
@@ -257,12 +257,12 @@ export class StatusUtils {
    */
   static getStatusColor(status) {
     const colors = {
-      'confirmed': '#3b82f6',    // blue
+      'confirmed': '#ffffffff',    // blue
       'checked_in': '#10b981',   // green
       'checked_out': '#6b7280',  // gray
       'cancelled': '#ef4444',    // red
       'pending': '#f59e0b',      // yellow
-      'new': '#3b82f6',          // purple
+      'new': '#ffffffff',          // purple
       'no_show': '#f97316'       // orange
     };
     
@@ -297,69 +297,54 @@ export class StatusUtils {
 /**
  * Grid and layout utilities
  */
+// CalendarUtils.js
+// CalendarUtils.js
 export class GridUtils {
-  /**
-   * Responsive grid constants - much more compact design
-   */
   static CONSTANTS = {
-    // Responsive cell widths (reduced significantly for compactness)
-    CELL_WIDTH: {
-      mobile: 60,    // Very compact for mobile
-      tablet: 72,    // Slightly larger for tablet
-      desktop: 84    // Still compact but readable on desktop
-    },
-    
-    // Responsive row heights (much shorter)
-    ROW_HEIGHT: {
-      mobile: 32,    // Compact rows for mobile
-      tablet: 36,    // Medium for tablet
-      desktop: 40    // Larger for desktop but still compact
-    },
-    
-    // Responsive header heights
-    HEADER_HEIGHT: {
-      mobile: 40,    // Compact header
-      tablet: 44,    // Medium header
-      desktop: 48    // Standard header
-    },
-    
-    // Responsive sidebar widths
-    SIDEBAR_WIDTH: {
-      mobile: 140,   // Very narrow for mobile
-      tablet: 160,   // Medium for tablet
-      desktop: 180   // Wider but still compact
-    },
-    
-    MIN_DRAG_DISTANCE: 5, // minimum pixels to start drag
-    
-    // Breakpoints for responsive behavior
-    BREAKPOINTS: {
-      mobile: 768,   // <= 768px
-      tablet: 1024,  // <= 1024px
-      desktop: 1025  // > 1024px
-    }
+    // How small each cell is allowed to be (drop if you want even tighter)
+    MIN_CELL_WIDTH: 20,
+
+    // Remove inter-day gutter; we'll rely on border lines only
+    DAY_GUTTER: 0,
+
+    // Leaner heights
+    ROW_HEIGHT: { mobile: 24, tablet: 32, desktop: 40 },
+    HEADER_HEIGHT: { mobile: 34, tablet: 36, desktop: 38 },
+
+    // Slimmer sidebar
+    SIDEBAR_WIDTH: { mobile: 60, tablet: 120, desktop: 150 },
+
+    BREAKPOINTS: { mobile: 768, tablet: 1024, desktop: 1025 },
+
+    // Optional global density scaler (0.75–1.0). Lower = tighter.
+    DENSITY_SCALE: 0.85
   };
 
-  /**
-   * Get current responsive values based on window width
-   */
-  static getCurrentConstants(windowWidth = window?.innerWidth || 1200) {
-    let breakpoint = 'desktop';
-    if (windowWidth <= this.CONSTANTS.BREAKPOINTS.mobile) {
-      breakpoint = 'mobile';
-    } else if (windowWidth <= this.CONSTANTS.BREAKPOINTS.tablet) {
-      breakpoint = 'tablet';
-    }
+  static getCurrentConstants(windowWidth = window?.innerWidth || 1200, days = 30) {
+    const { BREAKPOINTS, SIDEBAR_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, MIN_CELL_WIDTH, DAY_GUTTER, DENSITY_SCALE } = this.CONSTANTS;
+
+    let bp = 'desktop';
+    if (windowWidth <= BREAKPOINTS.mobile) bp = 'mobile';
+    else if (windowWidth <= BREAKPOINTS.tablet) bp = 'tablet';
+
+    const sidebar = SIDEBAR_WIDTH[bp];
+    const available = Math.max(0, windowWidth - sidebar);
+    // auto-fit 31 columns + (days-1)*gutter into the available width
+    const raw = Math.floor((available - (days - 1) * DAY_GUTTER) / days);
+
+    // apply density scaling and enforce minimum
+    const cellWidth = Math.max(MIN_CELL_WIDTH, Math.floor(raw * DENSITY_SCALE));
 
     return {
-      CELL_WIDTH: this.CONSTANTS.CELL_WIDTH[breakpoint],
-      ROW_HEIGHT: this.CONSTANTS.ROW_HEIGHT[breakpoint],
-      HEADER_HEIGHT: this.CONSTANTS.HEADER_HEIGHT[breakpoint],
-      SIDEBAR_WIDTH: this.CONSTANTS.SIDEBAR_WIDTH[breakpoint],
-      MIN_DRAG_DISTANCE: this.CONSTANTS.MIN_DRAG_DISTANCE,
-      BREAKPOINT: breakpoint
+      CELL_WIDTH: cellWidth,
+      ROW_HEIGHT: ROW_HEIGHT[bp],
+      HEADER_HEIGHT: HEADER_HEIGHT[bp],
+      SIDEBAR_WIDTH: sidebar,
+      DAY_GUTTER,
+      BREAKPOINT: bp
     };
   }
+
 
   /**
    * Legacy support - returns desktop values by default
