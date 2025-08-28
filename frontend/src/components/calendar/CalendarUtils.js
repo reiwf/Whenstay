@@ -7,12 +7,13 @@
  */
 export class DateUtils {
   /**
-   * Get yesterday's date
+   * Get yesterday's date (in Japan timezone)
    */
   static getYesterday() {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+    const todayDate = new Date(today);
+    todayDate.setDate(todayDate.getDate() - 1);
+    return todayDate.toISOString().split('T')[0];
   }
 
   /**
@@ -41,18 +42,18 @@ export class DateUtils {
     const date = new Date(dateString);
     
     if (format === 'short') {
-      return date.toLocaleDateString('en-US', { 
+      return date.toLocaleDateString('en-CA', { 
         month: 'short', 
         day: 'numeric' 
       });
     } else if (format === 'long') {
-      return date.toLocaleDateString('en-US', {
+      return date.toLocaleDateString('en-CA', {
         weekday: 'short',
         month: 'short',
         day: 'numeric'
       });
     } else if (format === 'weekday') {
-      return date.toLocaleDateString('en-US', {
+      return date.toLocaleDateString('en-CA', {
         weekday: 'short'
       });
     } else if (format === 'iso') {
@@ -63,19 +64,18 @@ export class DateUtils {
   }
 
   /**
-   * Check if date is today
+   * Check if date is today (in Japan timezone)
    */
   static isToday(dateString) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
     return dateString === today;
   }
 
   /**
-   * Check if date is in the past
+   * Check if date is in the past (in Japan timezone)
    */
   static isPast(dateString) {
-    const today = new Date().toISOString().split('T')[0];
-    return dateString < today;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
   }
 
   /**

@@ -103,8 +103,8 @@
     "modificationMode": "Modification mode",
     "modificationModeDesc": "Any changes you make will overwrite your previously submitted data.",
     "cancelModification": "Cancel modification",
-    "groupBookingDetected": "Group booking detected",
-    "groupBookingDesc": "This reservation is part of a group. You can check in individually or use unified group check-in.",
+    "groupBookingDetected": "Group booking",
+    "groupBookingDesc": "This reservation has multiple rooms.",
     "totalRooms": "Total Rooms",
     "totalGuests": "Total Guests",
     "completedRooms": "Completed Rooms",
@@ -117,6 +117,7 @@
     "guests": "Guests",
     "property": "Property",
     "room": "Room",
+    "rooms": "Rooms",
     "duration": "Duration",
     "nights": "Nights",
     "night": "Night",
@@ -127,7 +128,8 @@
     "viewDetails": "View Details",
     "continueModification": "Continue Modification",
     "startCheckIn": "Start Check-in",
-    "masterRoom": "(Master)"
+    "masterRoom": "(Master)",
+    "completed":"Completed"
   },
   "step2": {
     "title": "Guest information",

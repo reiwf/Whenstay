@@ -32,6 +32,7 @@ export default function CheckinModal({
     nextStep,
     previousStep,
     submitCheckin,
+    submitGroupCheckin,
     enterModificationMode,
     exitModificationMode,
     // Group booking state and functions
@@ -42,7 +43,11 @@ export default function CheckinModal({
   } = useCheckinProcess(token)
 
   const handleSubmit = async () => {
-    const result = await submitCheckin()
+    // Use appropriate submit function based on mode
+    const result = groupCheckInMode 
+      ? await submitGroupCheckin()
+      : await submitCheckin()
+    
     if (result.success) {
       // Show success message
       toast.success(result.message || t('checkinModal.checkinCompletedSuccessfully'), {
@@ -190,6 +195,10 @@ export default function CheckinModal({
                   checkinCompleted={checkinCompleted}
                   isModificationMode={isModificationMode}
                   guestData={guestData}
+                  // Group booking props
+                  groupBooking={groupBooking}
+                  isGroupBooking={isGroupBooking}
+                  groupCheckInMode={groupCheckInMode}
                 />
               )}
               
@@ -203,6 +212,10 @@ export default function CheckinModal({
                   isModificationMode={isModificationMode}
                   guestData={guestData}
                   reservation={reservation}
+                  // Group booking props
+                  groupBooking={groupBooking}
+                  isGroupBooking={isGroupBooking}
+                  groupCheckInMode={groupCheckInMode}
                 />
               )}
               

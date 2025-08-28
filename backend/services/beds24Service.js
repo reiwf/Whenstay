@@ -121,53 +121,50 @@ class Beds24Service {
     return {
       'Content-Type': 'application/json',
       token: accessToken,
-      // propkey isn’t required for v2 endpoints per docs; include only if your endpoint expects it.
       // 'propkey': this.propKey,
     };
   }
 
-  // Fetch bookings from Beds24
-  async getBookings(params = {}) {
-    try {
-      const defaultParams = {
-        includeInvoice: false,
-        includeInfoItems: true,
-        checkIn: getTokyoToday(),
-        ...params
-      };
+  // Fetch bookings from Beds24 v2 API
+  async getBookings({ propertyId, arrivalFrom, arrivalTo, includeBookingGroup = true } = {}) {
+    // Always prepare params outside try/catch so they are available for retry
+    const params = {
+      propertyId,
+      arrivalFrom,
+      arrivalTo,
+      includeBookingGroup,   // needed if you want bookingGroup info
+      includeInfoItems: true // optional, includes booking notes/info
+    };
 
+    try {
       const headers = await this.getHeaders();
+
       const response = await axios.get(`${this.baseURL}/bookings`, {
-        headers: headers,
-        params: defaultParams
+        headers,
+        params
       });
 
       return response.data;
     } catch (error) {
-      // Handle authentication errors by attempting token refresh
+      // Handle authentication errors with refresh + retry
       if (error.response?.status === 401 || error.response?.status === 403) {
-        try {
-          console.log('🔄 Authentication failed, attempting token refresh...');
-          await this.refreshAccessToken();
-          
-          // Retry the request with new token
-          const headers = await this.getHeaders();
-          const response = await axios.get(`${this.baseURL}/bookings`, {
-            headers: headers,
-            params: defaultParams
-          });
+        console.log('🔄 Auth failed, refreshing token and retrying getBookings…');
+        await this.refreshAccessToken();
 
-          return response.data;
-        } catch (retryError) {
-          console.error('Failed to retry after token refresh:', retryError);
-          throw retryError;
-        }
+        const headers = await this.getHeaders();
+        const response = await axios.get(`${this.baseURL}/bookings`, {
+          headers,
+          params
+        });
+
+        return response.data;
       }
 
-      console.error('Error fetching bookings from Beds24:', error.response?.data || error.message);
+      console.error('❌ Error fetching bookings from Beds24:', error.response?.data || error.message);
       throw new Error('Failed to fetch bookings from Beds24');
     }
   }
+
 
   // Get a specific booking by ID. Return RAW or PROCESSED booking 
   async getBooking(bookingId, { process = false } = {}) {

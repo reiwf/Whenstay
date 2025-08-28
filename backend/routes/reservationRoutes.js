@@ -161,6 +161,148 @@ router.get('/', adminAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/reservations/beds24-bookings
+ * Get bookings from Beds24 API and process them to save reservations to database
+ * Query params: propertyId (required), arrival (required), arrivalTo (optional), processAndSave (optional)
+ */
+router.get('/beds24-bookings', adminAuth, async (req, res) => {
+  try {
+    const { propertyId, arrival, arrivalTo, processAndSave } = req.query;
+
+    if (!propertyId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Property ID is required'
+      });
+    }
+
+    if (!arrival) {
+      return res.status(400).json({
+        success: false,
+        error: 'Arrival date is required'
+      });
+    }
+
+    // Call beds24Service getBookings with the specified parameters
+    const response = await beds24Service.getBookings({
+      propertyId: parseInt(propertyId),
+      arrivalFrom: arrival,
+      arrivalTo: arrivalTo || arrival, // If no arrivalTo specified, use same as arrival
+      includeBookingGroup: true,
+      includeInfoItems: true
+    });
+
+    // Extract bookings from Beds24 API response structure
+    // Beds24 returns: { success: true, data: [...bookings] } 
+    const bookingsArray = response?.data ? (Array.isArray(response.data) ? response.data : [response.data]) : [];
+    let processedReservations = [];
+    let processingResults = [];
+
+    // If processAndSave is enabled, process each booking through processWebhookData
+    if (processAndSave === 'true' && bookingsArray.length > 0) {
+      console.log(`Processing ${bookingsArray.length} booking(s) from Beds24...`);
+      
+      for (const booking of bookingsArray) {
+        try {
+          // Process the booking data through the webhook processor
+          const processedData = await beds24Service.processWebhookData({
+            booking: booking,
+            body: { 
+              timeStamp: booking.modified || booking.bookingTime || new Date().toISOString() 
+            }
+          });
+
+          // Check if reservation already exists
+          const existingReservation = await reservationService.getReservationByBeds24Id(booking.id?.toString());
+
+          let savedReservation;
+          if (existingReservation) {
+            // Update existing reservation
+            console.log(`Updating existing reservation for Beds24 booking: ${booking.id}`);
+            savedReservation = await reservationService.updateReservation(existingReservation.id, processedData);
+            processingResults.push({
+              beds24BookingId: booking.id,
+              reservationId: savedReservation.id,
+              action: 'updated',
+              success: true,
+              guestName: `${processedData.bookingFirstname || ''} ${processedData.bookingLastname || ''}`.trim(),
+              checkIn: processedData.checkInDate,
+              checkOut: processedData.checkOutDate
+            });
+          } else {
+            // Create new reservation
+            console.log(`Creating new reservation for Beds24 booking: ${booking.id}`);
+            savedReservation = await reservationService.createReservation(processedData);
+            processingResults.push({
+              beds24BookingId: booking.id,
+              reservationId: savedReservation.id,
+              action: 'created',
+              success: true,
+              guestName: `${processedData.bookingFirstname || ''} ${processedData.bookingLastname || ''}`.trim(),
+              checkIn: processedData.checkInDate,
+              checkOut: processedData.checkOutDate
+            });
+          }
+
+          processedReservations.push({
+            ...savedReservation,
+            beds24Data: booking,
+            processedData: processedData
+          });
+
+        } catch (processingError) {
+          console.error(`Error processing booking ${booking.id}:`, processingError);
+          processingResults.push({
+            beds24BookingId: booking.id,
+            reservationId: null,
+            action: 'failed',
+            success: false,
+            error: processingError.message,
+            guestName: `${booking.firstName || ''} ${booking.lastName || ''}`.trim()
+          });
+        }
+      }
+    }
+
+    // Prepare response data
+    const responseData = {
+      beds24Response: response, // Include the full Beds24 response for debugging
+      rawBookings: bookingsArray,
+      processedReservations: processedReservations,
+      processingResults: processingResults,
+      summary: {
+        totalBookingsFetched: bookingsArray.length,
+        totalProcessed: processingResults.length,
+        successful: processingResults.filter(r => r.success).length,
+        failed: processingResults.filter(r => !r.success).length,
+        created: processingResults.filter(r => r.action === 'created').length,
+        updated: processingResults.filter(r => r.action === 'updated').length,
+        processAndSaveEnabled: processAndSave === 'true',
+        beds24Success: response?.success || false,
+        beds24Count: response?.count || 0
+      }
+    };
+    
+    const message = processAndSave === 'true' 
+      ? `Fetched ${bookingsArray.length} booking(s) and processed ${processingResults.filter(r => r.success).length} successfully`
+      : `Found ${bookingsArray.length} booking(s) from Beds24`;
+
+    res.status(200).json({
+      success: true,
+      data: responseData,
+      message: message
+    });
+  } catch (error) {
+    console.error('Error fetching/processing Beds24 bookings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch/process Beds24 bookings',
+      details: error.message
+    });
+  }
+});
+
 // Get specific reservation details
 router.get('/:id', adminAuth, async (req, res) => {
   try {
@@ -713,5 +855,6 @@ router.get('/services/all', adminAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
+
 
 module.exports = router;

@@ -13,7 +13,8 @@ import {
   Building,
   Home,
   Bed,
-  Mail
+  Mail,
+  Download
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
@@ -24,6 +25,7 @@ import ReservationModal from '../components/modals/ReservationModal'
 import useReservations from '../hooks/useReservations'
 import { useProperties } from '../hooks/useProperties'
 import { useNavigation } from '../hooks/useNavigation'
+import Beds24BookingsFetcher from '../components/reservation/Beds24BookingsFetcher'
 
 const tokyoTodayYMD = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
@@ -69,6 +71,7 @@ export default function ReservationPage() {
   const [editingReservation, setEditingReservation] = useState(null)
   const [copiedTokens, setCopiedTokens] = useState({})
   const filterTimeoutRef = useRef(null)
+  const [activeTab, setActiveTab] = useState('reservations') // 'reservations' or 'beds24'
 
   // Load initial data
   useEffect(() => {
@@ -465,59 +468,100 @@ export default function ReservationPage() {
       }
     >
       <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Date Range Filter */}
-        <div className="card">
-          
-
-          <div className="flex flex-col gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Date
-              </label>
-              <DateRangePicker
-                dateRange={dateRange}
-                onDateRangeChange={handleDateRangeChange}
-                placeholder="Select check-in date range"
-                className="w-full"
-                showClear={true}
-              />
-            </div>
-            
-            <div className="flex items-center space-x-3">
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-8 px-6" aria-label="Tabs">
               <button
-                onClick={applyDateFilter}
-                className="btn-ghost border text-sm"
-                disabled={!dateRange.from}
+                onClick={() => setActiveTab('reservations')}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  activeTab === 'reservations'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
-                Apply Filter
+                <Calendar className="h-4 w-4" />
+                Reservations
               </button>
-              
-              {(dateRange.from || dateRange.to) && (
-                <button
-                  onClick={clearDateFilter}
-                  className="btn-ghost border text-sm"
-                >
-                  Clear Filter
-                </button>
-              )}
-            </div>
+              <button
+                onClick={() => setActiveTab('beds24')}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  activeTab === 'beds24'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Download className="h-4 w-4" />
+                Beds24 Import
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'reservations' && (
+              <div className="space-y-6">
+                {/* Date Range Filter */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Search Date
+                      </label>
+                      <DateRangePicker
+                        dateRange={dateRange}
+                        onDateRangeChange={handleDateRangeChange}
+                        placeholder="Select check-in date range"
+                        className="w-full"
+                        showClear={true}
+                      />
+                    </div>
+                    
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={applyDateFilter}
+                        className="btn-ghost border text-sm"
+                        disabled={!dateRange.from}
+                      >
+                        Apply Filter
+                      </button>
+                      
+                      {(dateRange.from || dateRange.to) && (
+                        <button
+                          onClick={clearDateFilter}
+                          className="btn-ghost border text-sm"
+                        >
+                          Clear Filter
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reservations Table */}
+                <DataTableAdvanced
+                  data={filteredReservations || []}
+                  columns={columns}
+                  loading={loading}
+                  searchable={true}
+                  filterable={true}
+                  exportable={true}
+                  pageSize={10}
+                  emptyMessage="No reservations found. Try adjusting your filters or date range."
+                  emptyIcon={Calendar}
+                  className="w-full"
+                  searchableFields={searchableFields}
+                />
+              </div>
+            )}
+
+            {activeTab === 'beds24' && (
+              <div>
+                <Beds24BookingsFetcher />
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Reservations Table */}
-        <DataTableAdvanced
-          data={filteredReservations || []}
-          columns={columns}
-          loading={loading}
-          searchable={true}
-          filterable={true}
-          exportable={true}
-          pageSize={10}
-          emptyMessage="No reservations found. Try adjusting your filters or date range."
-          emptyIcon={Calendar}
-          className="w-full"
-          searchableFields={searchableFields}
-        />
 
         {/* Reservation Modal */}
         {showReservationModal && (

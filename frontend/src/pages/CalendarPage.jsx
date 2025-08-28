@@ -10,7 +10,6 @@ import CalendarTimeline from '../components/calendar/CalendarTimeline';
 export default function CalendarPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
-  
 
   // Initialize page
   useEffect(() => {
@@ -59,11 +58,6 @@ export default function CalendarPage() {
         {/* Property Selector */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Property Selection</h2>
-              <p className="text-sm text-gray-600">Choose a property to view its calendar timeline</p>
-            </div>
-            
             <div className="w-80">
               <PropertySelector
                 selectedPropertyId={selectedPropertyId}

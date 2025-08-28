@@ -4,7 +4,7 @@ import {
   ChevronRight, 
   Calendar,
   RotateCcw,
-  Move,
+  ArrowDownUp,
   Scaling,
   ArrowLeftRight
 } from 'lucide-react';
@@ -67,8 +67,16 @@ export default function CalendarHeader({
    */
   const handleToday = () => {
     if (onNavigate) {
-      const today = new Date().toISOString().split('T')[0];
-      const newStartDate = DateUtils.addDays(today, -1); // yesterday
+      // Get today's date in Japan/Osaka timezone (Asia/Tokyo)
+      const now = new Date();
+      const japanTime = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now);
+      
+      const newStartDate = DateUtils.addDays(japanTime, -1); // yesterday
       onNavigate(newStartDate);
     }
   };
@@ -157,6 +165,8 @@ export default function CalendarHeader({
                 </div>
               </div>
 
+              <div className="w-px h-6 bg-gray-300" />
+
               {/* Horizontal Mode Toggle */}
               <div className="flex items-center space-x-2">
                 <Switch
@@ -172,13 +182,18 @@ export default function CalendarHeader({
                 </div>
               </div>
 
+              <div className="w-px h-6 bg-gray-300" />
+
               {/* Allocate Mode Toggle */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 text-gray-700">
                 <Switch checked={showStagingRow} onCheckedChange={onStagingToggle} className="data-[state=checked]:bg-gray-600"/>
+                <ArrowDownUp className="w-4 h-4" />
                 <span className="text-sm text-slate-600">Allocate</span>
               </div>
             </div>
           )}
+
+          <div className="w-px h-6 bg-gray-300" />
 
           {/* Refresh Button */}
           <button
@@ -222,7 +237,8 @@ export default function CalendarHeader({
               let currentMonth = null;
               
               dates.forEach((date, index) => {
-                const dateObj = new Date(date);
+                // Create date object in Japan timezone
+                const dateObj = new Date(date + 'T00:00:00+09:00');
                 const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
                 
                 if (currentMonth !== monthKey) {
@@ -232,7 +248,7 @@ export default function CalendarHeader({
                     const monthPosition = currentMonthStart * gridConstants.CELL_WIDTH;
                     const prevDateObj = new Date(dates[currentMonthStart]);
                     const monthText = gridConstants.BREAKPOINT === 'mobile' 
-                      ? prevDateObj.toLocaleDateString('en-US', { month: 'short' })
+                      ? prevDateObj.toLocaleDateString('en-US', { timeZone: 'Asia/Tokyo' })
                       : prevDateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     
                     monthLabels.push(
@@ -285,8 +301,8 @@ export default function CalendarHeader({
             
             {/* Month boundary lines - only at month transitions */}
             {dates.map((date, index) => {
-              const currentDate = new Date(date);
-              const nextDate = index < dates.length - 1 ? new Date(dates[index + 1]) : null;
+              const currentDate = new Date(date + 'T00:00:00+09:00');
+              const nextDate = index < dates.length - 1 ? new Date(dates[index + 1] + 'T00:00:00+09:00') : null;
               const isMonthBoundary = nextDate && currentDate.getMonth() !== nextDate.getMonth();
               
               return (

@@ -40,6 +40,21 @@ export function useCheckinProcess(reservationId) {
     }
   }, [reservationId])
 
+  // Debug logging for group booking state
+  useEffect(() => {
+    console.log('🔍 useCheckinProcess Group Booking State:', {
+      isGroupBooking,
+      groupCheckInMode,
+      groupBooking: groupBooking ? {
+        isGroupBooking: groupBooking.isGroupBooking,
+        summary: groupBooking.summary,
+        rooms: groupBooking.rooms?.length || 0,
+        groupCheckInStatus: groupBooking.groupCheckInStatus
+      } : null,
+      reservationId
+    })
+  }, [isGroupBooking, groupCheckInMode, groupBooking, reservationId])
+
   const loadReservation = async () => {
     try {
       setLoading(true)
@@ -72,13 +87,23 @@ export function useCheckinProcess(reservationId) {
       if (isActuallyGroupBooking) {
         setIsGroupBooking(true)
         setGroupBooking(groupBookingData)
-        console.log('✓ Confirmed group booking detected:', {
+        setGroupCheckInMode(true) // Automatically enable group check-in mode
+        console.log('✓ Confirmed group booking detected - enabling group check-in mode:', {
           totalRooms: groupBookingData.summary?.totalRooms || groupBookingData.rooms?.length,
-          isGroupBooking: groupBookingData.isGroupBooking
+          isGroupBooking: groupBookingData.isGroupBooking,
+          groupBookingData: groupBookingData
         })
+        
+        // Load detailed group overview for UI rendering if rooms data is missing
+        if (!groupBookingData.rooms || groupBookingData.rooms.length === 0) {
+          console.log('🔄 Loading detailed group overview for UI rendering')
+          // We'll load this after the main loading is complete
+          setTimeout(() => loadGroupOverview(), 100)
+        }
       } else {
         setIsGroupBooking(false)
         setGroupBooking(null)
+        setGroupCheckInMode(false)
       }
       
       // Set guest data with multi-guest support

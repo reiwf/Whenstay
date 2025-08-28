@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const calendarService = require('../services/calendarService');
+const beds24Service = require('../services/beds24Service');
 const { adminAuth } = require('../middleware/auth');
 
 /**
@@ -494,5 +495,6 @@ router.get('/date-range', async (req, res) => {
     });
   }
 });
+
 
 module.exports = router;

@@ -1,3 +1,4 @@
+import React from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useCheckinProcess } from '../hooks/useCheckinProcess'
 import CheckinLayout from '../components/checkin/shared/CheckinLayout'
@@ -34,17 +35,41 @@ export default function CheckinPage() {
     isGroupBooking,
     groupCheckInMode,
     toggleGroupCheckInMode,
+    submitGroupCheckin,
   } = useCheckinProcess(token)
 
+  // Debug logging for CheckinPage props
+  React.useEffect(() => {
+    if (currentStep === 2) {
+      console.log('🔍 CheckinPage Debug (Step 2):', {
+        currentStep,
+        isGroupBooking,
+        groupCheckInMode,
+        groupBooking: groupBooking ? {
+          summary: groupBooking.summary,
+          totalRooms: groupBooking.summary?.totalRooms || groupBooking.rooms?.length,
+          hasRooms: !!groupBooking.rooms
+        } : null
+      })
+    }
+  }, [currentStep, isGroupBooking, groupCheckInMode, groupBooking])
+
   const handleSubmit = async () => {
-    const result = await submitCheckin()
+    // Use appropriate submission method based on mode
+    const result = groupCheckInMode 
+      ? await submitGroupCheckin() 
+      : await submitCheckin()
+      
     if (result.success) {
       // Navigate to guest dashboard after successful check-in
       navigate(`/guest/${token}`, { 
         state: { 
           checkinId: result.checkinId,
           message: result.message,
-          justCompleted: true
+          justCompleted: true,
+          isGroupBooking: groupCheckInMode,
+          allRoomsComplete: result.allRoomsComplete,
+          allGuestsComplete: result.allGuestsComplete
         } 
       })
     }
@@ -134,6 +159,10 @@ export default function CheckinPage() {
           checkinCompleted={checkinCompleted}
           isModificationMode={isModificationMode}
           guestData={guestData}
+          // Group booking props
+          groupBooking={groupBooking}
+          isGroupBooking={isGroupBooking}
+          groupCheckInMode={groupCheckInMode}
         />
       )}
       
@@ -147,6 +176,10 @@ export default function CheckinPage() {
           isModificationMode={isModificationMode}
           guestData={guestData}
           reservation={reservation}
+          // Group booking props
+          groupBooking={groupBooking}
+          isGroupBooking={isGroupBooking}
+          groupCheckInMode={groupCheckInMode}
         />
       )}
       

@@ -37,6 +37,22 @@ export default function Step1ReservationOverview({
   const { token } = useParams()
   const { t , i18n } = useTranslation('guest')
   const { loadRoomTypeTranslations, getCachedTranslation } = useRoomTypeTranslations(token, true)
+
+  // Debug logging for group booking props
+  React.useEffect(() => {
+    console.log('🔍 Step1ReservationOverview Debug:', {
+      isGroupBooking,
+      groupCheckInMode,
+      groupBooking: groupBooking ? {
+        summary: groupBooking.summary,
+        totalRooms: groupBooking.summary?.totalRooms || groupBooking.rooms?.length,
+        hasRooms: !!groupBooking.rooms,
+        roomsCount: groupBooking.rooms?.length,
+        isGroupBooking: groupBooking.isGroupBooking
+      } : null,
+      hasToggleFunction: !!onToggleGroupCheckInMode
+    })
+  }, [isGroupBooking, groupCheckInMode, groupBooking, onToggleGroupCheckInMode])
   
   // Load room type translations when component mounts
   React.useEffect(() => {
@@ -169,12 +185,11 @@ export default function Step1ReservationOverview({
 
       {/* Group booking (soft) */}
       {isGroupBooking && (
-        <div className="mx-3 sm:mx-0 rounded-2xl bg-gradient-to-tr from-amber-50 to-orange-50 ring-1 ring-amber-200 p-3 sm:p-4">
+        <div className="mx-3 sm:mx-0 rounded-2xl bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 ring-1 ring-slate-200/70 p-3 sm:p-4">
           <div className="flex items-start mb-3">
-            <Crown className="w-5 h-5 text-amber-600 mr-2 mt-0.5" />
             <div>
-              <div className="font-semibold text-amber-900">{t('step1.groupBookingDetected')}</div>
-              <p className="text-sm text-amber-800">
+              <div className="font-semibold text-slate-900">{t('step1.groupBookingDetected')}</div>
+              <p className="text-sm text-slate-700">
                 {t('step1.groupBookingDesc')}
               </p>
             </div>
@@ -198,19 +213,19 @@ export default function Step1ReservationOverview({
           )}
 
           {groupCheckInMode && groupBooking?.rooms && (
-            <div className="mt-3 rounded-xl ring-1 ring-amber-200 bg-white/70 p-2 divide-y divide-amber-100">
+            <div className="mt-3 rounded-xl ring-1 ring-slate-200/70 bg-white/80 p-2 divide-y divide-slate-200/50">
               {groupBooking.rooms.map((room) => (
                 <div key={room.reservationId} className="py-2 px-1 flex items-center justify-between">
                   <div className="flex items-center min-w-0">
-                    {room.isMaster && <Crown className="w-4 h-4 text-amber-600 mr-1.5" />}
-                    <Building className="w-4 h-4 text-amber-600 mr-1.5" />
+                    
+                    <Home className="w-4 h-4 text-slate-600 mr-1.5" />
                     <div className="truncate">
                       <div className="text-sm font-medium text-slate-900 truncate">
-                        Room {room.roomNumber} — {getTranslatedRoomType('name', room.roomType)}
+                        {getTranslatedRoomType('name', room.roomType)}
                       </div>
                       <div className="text-[11px] text-slate-500">
                         {room.numGuests} {room.numGuests === 1 ? t('guestApp.guest') : t('step1.guests')}
-                        {room.isMaster && <span className="ml-1 text-amber-600">{t('step1.masterRoom')}</span>}
+                        {room.isMaster && <span className="ml-1 text-slate-600">{t('step1.masterRoom')}</span>}
                       </div>
                     </div>
                   </div>
@@ -218,7 +233,7 @@ export default function Step1ReservationOverview({
                     {room.completionStatus?.isComplete ? (
                       <CheckCircle className="w-4 h-4 text-emerald-600" />
                     ) : (
-                      <span className="text-[11px] text-amber-700">
+                      <span className="text-xs text-slate-600">
                         {room.completionStatus?.completedGuests || 0}/{room.numGuests}
                       </span>
                     )}
@@ -226,31 +241,7 @@ export default function Step1ReservationOverview({
                 </div>
               ))}
             </div>
-          )}
-
-          {onToggleGroupCheckInMode && (
-            <div className="mt-3 text-center">
-              <button
-                onClick={onToggleGroupCheckInMode}
-                className={`inline-flex items-center px-3 py-2 rounded-xl text-sm
-                  ${groupCheckInMode
-                    ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200'
-                    : 'bg-amber-600 text-white hover:bg-amber-700'}`}
-              >
-                {groupCheckInMode ? (
-                  <>
-                    <Users className="w-4 h-4 mr-2" />
-                    {t('step1.singleRoomMode')}
-                  </>
-                ) : (
-                  <>
-                    <Crown className="w-4 h-4 mr-2" />
-                    {t('step1.unifiedGroupCheckIn')}
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+          )}          
         </div>
       )}
 
@@ -385,8 +376,8 @@ export default function Step1ReservationOverview({
 function Stat({ label, value, ok = false }) {
   return (
     <div>
-      <div className={`text-lg font-bold ${ok ? 'text-emerald-700' : 'text-amber-900'}`}>{value}</div>
-      <div className="text-[11px] text-amber-700">{label}</div>
+      <div className={`text-lg font-bold ${ok ? 'text-emerald-700' : 'text-slate-900'}`}>{value}</div>
+      <div className="text-[11px] text-slate-600">{label}</div>
     </div>
   )
 }
