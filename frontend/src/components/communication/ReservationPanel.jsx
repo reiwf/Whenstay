@@ -1,7 +1,8 @@
 import React from 'react';
 import { Calendar, MapPin, Phone, Mail, User, Home } from 'lucide-react';
+import UnlinkedThreadManager from './UnlinkedThreadManager';
 
-export default function ReservationPanel({ thread, reservation }) {
+export default function ReservationPanel({ thread, reservation, onThreadUpdate }) {
   // Debug logging (can be removed in production)
   if (process.env.NODE_ENV === 'development') {
   }
@@ -24,6 +25,18 @@ export default function ReservationPanel({ thread, reservation }) {
         <p className="text-sm sm:text-base">Select a conversation to view reservation details</p>
       </div>
     </div>
+    );
+  }
+
+  // Show unlinked thread manager if thread needs linking
+  if (thread.needs_linking) {
+    return (
+      <div className="h-full overflow-y-auto">
+        <UnlinkedThreadManager 
+          thread={thread}
+          onThreadLinked={onThreadUpdate}
+        />
+      </div>
     );
   }
 

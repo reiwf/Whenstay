@@ -356,7 +356,7 @@ export default function ReservationBar({
       height: `${gridConstants.ROW_HEIGHT - Math.max(4, gridConstants.ROW_HEIGHT * 0.2)}px`,
 
       // Glassy look
-      backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(255, 244, 89, 0.25)', 
+      backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(240, 226, 34, 0.3)', 
       backdropFilter: 'blur(8px) saturate(150%)',
       WebkitBackdropFilter: 'blur(8px) saturate(150%)', // Safari support
 

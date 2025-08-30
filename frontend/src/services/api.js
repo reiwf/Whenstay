@@ -281,6 +281,19 @@ export const adminAPI = {
   getGroupBookingInfo: (reservationId) => 
     api.get(`/communication/reservation/${reservationId}/group-info`),
   
+  // Unlinked thread management
+  linkThread: (threadId, reservationId) => 
+    api.put(`/communication/threads/${threadId}/link`, { reservation_id: reservationId }),
+  
+  mergeThreads: (sourceThreadId, targetThreadId) => 
+    api.post(`/communication/threads/${sourceThreadId}/merge`, { target_thread_id: targetThreadId }),
+  
+  rejectThread: (threadId, reason = 'spam') => 
+    api.put(`/communication/threads/${threadId}/reject`, { reason }),
+  
+  getThreadSuggestions: (threadId) => 
+    api.get(`/communication/threads/${threadId}/suggestions`),
+  
   // Automation Management
   getAutomationRules: (params = {}) => api.get('/automation/rules', { params }),
   

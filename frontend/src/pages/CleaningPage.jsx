@@ -24,6 +24,7 @@ import toast from 'react-hot-toast'
 import CleaningTaskModal from '../components/modals/CleaningTaskModal'
 import { adminAPI } from '../services/api'
 import { useNavigation } from '../hooks/useNavigation'
+import CleaningTaskList from '@/components/ui/CleaningTaskList'
 
 const tokyoTodayYMD = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
@@ -255,8 +256,7 @@ export default function CleaningPage() {
 
   const renderTaskDateAndBooking = (task) => {
     const bookingName = task.display_booking_name || task.booking_name || 'Unknown Guest'
-    const bookingLastname = task.booking_lastname || ''
-    const fullBookingName = bookingLastname ? `${bookingName} ${bookingLastname}` : bookingName
+
     
     return (
       <div className="space-y-1">
@@ -265,7 +265,7 @@ export default function CleaningPage() {
           {new Date(task.task_date).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
         </div>
         <div className="text-sm text-gray-600 ml-5">
-          {fullBookingName}
+          {bookingName}
         </div>
       </div>
     )
@@ -537,20 +537,35 @@ export default function CleaningPage() {
           </div>
         </div>
 
-        {/* Tasks Table */}
-        <DataTableAdvanced
-          data={filteredTasks || []}
-          columns={columns}
-          loading={loading}
-          searchable={true}
-          filterable={true}
-          exportable={true}
-          pageSize={10}
-          emptyMessage="No cleaning tasks found. Try adjusting your filters or date range."
-          emptyIcon={Calendar}
-          className="w-full"
-          searchableFields={searchableFields}
-        />
+          {/* Mobile: Card list */}
+          <div className="lg:hidden">
+            <CleaningTaskList
+              tasks={filteredTasks || []}
+              cleaners={cleaners}
+              onUpdateStatus={handleUpdateTaskStatus}
+              onAssignCleaner={handleAssignCleaner}
+              onEdit={handleEditTask}
+              onDelete={handleDeleteTask}
+              isAdmin={profile?.role !== 'cleaner'}
+            />
+          </div>
+
+          {/* Desktop: keep your DataTableAdvanced */}
+          <div className="hidden lg:block">
+            <DataTableAdvanced
+              data={filteredTasks || []}
+              columns={columns}
+              loading={loading}
+              searchable
+              filterable
+              exportable
+              pageSize={10}
+              emptyMessage="No cleaning tasks found. Try adjusting your filters or date range."
+              emptyIcon={Calendar}
+              className="w-full"
+              searchableFields={searchableFields}
+            />
+          </div>
 
         {/* Task Modal */}
         {showTaskModal && (

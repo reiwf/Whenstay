@@ -108,7 +108,6 @@ class ImageProcessingService {
       const signedUrls = imageUrls.filter(url => this.isSignedUrl(url));
 
       if (signedUrls.length === 0) {
-        console.log('No signed URLs found in message content');
         return content;
       }
 

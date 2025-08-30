@@ -131,6 +131,17 @@ export default function MessagePanel({
       });
     }
     
+    // Check if email should be available based on reservation data
+    if (reservation && !availableChannels.includes('email')) {
+      const hasEmail = reservation.booking_email || 
+                      reservation.guest_email || 
+                      reservation.email;
+      
+      if (hasEmail) {
+        availableChannels.push('email');
+      }
+    }
+    
     return availableChannels;
   };
 

@@ -1,5 +1,12 @@
 const { supabaseAdmin } = require('../config/supabase');
 const communicationService = require('./communicationService');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+
+// Configure dayjs plugins
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 class AutomationService {
   constructor() {
@@ -325,6 +332,7 @@ class AutomationService {
 
   /**
    * Calculate when to run the scheduled message based on rule offset
+   * FIXED: Now properly handles Asia/Tokyo timezone to prevent 10PM vs 4PM issue
    */
   async calculateRunTime(reservation, rule) {
     try {
@@ -341,46 +349,51 @@ class AutomationService {
 
       let baseDateTime;
 
-      // Determine base time based on event type
+      // Determine base time based on event type using timezone-aware dayjs
       switch (rule.event) {
         case 'booking_created':
-          // X minutes after booking creation
-          baseDateTime = new Date(reservation.created_at || reservation.createdAt || new Date());
+          // X minutes after booking creation - convert to property timezone
+          const createdAt = reservation.created_at || reservation.createdAt || new Date().toISOString();
+          baseDateTime = dayjs(createdAt).tz(propertyTimezone);
           break;
           
         case 'check_in':
-          // Relative to check-in date/time
+          // Relative to check-in date/time in property timezone
           const checkInDate = reservation.check_in_date || reservation.checkInDate;
           if (!checkInDate) {
             console.error('No check-in date found for reservation:', reservation.id);
             return null;
           }
-          baseDateTime = new Date(checkInDate);
-          // If check-in time is specified, use it; otherwise default to 3 PM
+          
+          // Create date in property timezone
           const checkInTime = reservation.check_in_time || reservation.checkInTime;
           if (checkInTime) {
+            // Use provided check-in time
             const [hours, minutes] = checkInTime.split(':');
-            baseDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            baseDateTime = dayjs.tz(`${checkInDate}T${hours}:${minutes}:00`, propertyTimezone);
           } else {
-            baseDateTime.setHours(16, 0, 0, 0); // Default 3 PM check-in
+            // Default to 4:00 PM (16:00) in property timezone
+            baseDateTime = dayjs.tz(`${checkInDate}T16:00:00`, propertyTimezone);
           }
           break;
           
         case 'check_out':
-          // Relative to check-out date/time
+          // Relative to check-out date/time in property timezone
           const checkOutDate = reservation.check_out_date || reservation.checkOutDate;
           if (!checkOutDate) {
             console.error('No check-out date found for reservation:', reservation.id);
             return null;
           }
-          baseDateTime = new Date(checkOutDate);
-          // If check-out time is specified, use it; otherwise default to 11 AM
+          
+          // Create date in property timezone
           const checkOutTime = reservation.check_out_time || reservation.checkOutTime;
           if (checkOutTime) {
+            // Use provided check-out time
             const [hours, minutes] = checkOutTime.split(':');
-            baseDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            baseDateTime = dayjs.tz(`${checkOutDate}T${hours}:${minutes}:00`, propertyTimezone);
           } else {
-            baseDateTime.setHours(10, 0, 0, 0); // Default 11 AM check-out
+            // Default to 10:00 AM in property timezone
+            baseDateTime = dayjs.tz(`${checkOutDate}T10:00:00`, propertyTimezone);
           }
           break;
           
@@ -390,37 +403,44 @@ class AutomationService {
       }
 
       // Validate the calculated base date
-      if (isNaN(baseDateTime.getTime())) {
-        console.error('Invalid base date time calculated:', baseDateTime, 'for reservation:', reservation.id);
+      if (!baseDateTime.isValid()) {
+        console.error('Invalid base date time calculated for reservation:', reservation.id);
         return null;
       }
 
-      // Apply offset
-      let runAt = new Date(baseDateTime);
+      // Apply offset using dayjs methods (maintains timezone)
+      let runAt = baseDateTime;
 
       // Apply time offset (before/after)
       if (offset.days) {
-        runAt.setDate(runAt.getDate() + (offset.direction === 'after' ? offset.days : -offset.days));
+        const dayOffset = offset.direction === 'after' ? offset.days : -offset.days;
+        runAt = runAt.add(dayOffset, 'day');
       }
       
       if (offset.hours) {
-        runAt.setHours(runAt.getHours() + (offset.direction === 'after' ? offset.hours : -offset.hours));
+        const hourOffset = offset.direction === 'after' ? offset.hours : -offset.hours;
+        runAt = runAt.add(hourOffset, 'hour');
       }
       
       if (offset.minutes) {
-        runAt.setMinutes(runAt.getMinutes() + (offset.direction === 'after' ? offset.minutes : -offset.minutes));
+        const minuteOffset = offset.direction === 'after' ? offset.minutes : -offset.minutes;
+        runAt = runAt.add(minuteOffset, 'minute');
       }
 
-      // Convert to property timezone if needed
-      // Note: For now using simple calculation, can be enhanced with proper timezone library
-      console.log(`Calculated run time for rule ${rule.name}:`, {
-        baseDateTime: baseDateTime.toISOString(),
-        runAt: runAt.toISOString(),
+      // Convert to JavaScript Date for database storage
+      const runAtDate = runAt.toDate();
+
+      console.log(`TIMEZONE-FIXED: Calculated run time for rule ${rule.name}:`, {
+        baseDateTime: baseDateTime.format(),
+        baseTimezone: baseDateTime.format('Z'),
+        runAt: runAt.format(),
+        runAtTimezone: runAt.format('Z'),
+        runAtISO: runAtDate.toISOString(),
         propertyTimezone,
         offset
       });
 
-      return runAt;
+      return runAtDate;
     } catch (error) {
       console.error('Error calculating run time:', error);
       return null;

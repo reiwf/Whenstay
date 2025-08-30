@@ -3,7 +3,7 @@ const { Resend } = require('resend');
 class EmailService {
   constructor() {
     this.resend = new Resend(process.env.RESEND_API_KEY);
-    this.fromEmail = process.env.ADMIN_EMAIL || 'noreply@yourhotel.com';
+    this.fromEmail = process.env.ADMIN_EMAIL || 'chat@staylabel.com';
     this.frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     
     if (!process.env.RESEND_API_KEY) {
@@ -239,6 +239,223 @@ class EmailService {
       </body>
       </html>
     `;
+  }
+
+  // Send generic message email through message panel
+  async sendGenericMessage(guestEmail, guestName, subject, messageContent, reservationData = {}, messageId = null) {
+    try {
+      // Generate email thread ID for threading
+      const emailThreadId = this.generateEmailThreadId(reservationData.reservationId, messageId);
+      
+      // Prepare email headers for threading
+      const headers = {
+        'Reply-To': this.fromEmail,
+        'Message-ID': `<${emailThreadId}@staylabel.com>`
+      };
+
+      // If this is a reply in an existing thread, add threading headers
+      if (reservationData.emailThreadId) {
+        headers['In-Reply-To'] = `<${reservationData.emailThreadId}@staylabel.com>`;
+        headers['References'] = `<${reservationData.emailThreadId}@staylabel.com>`;
+      }
+
+      const emailData = {
+        from: this.fromEmail,
+        to: guestEmail,
+        subject: subject || 'Message from Staylabel',
+        html: this.getGenericMessageTemplate(guestName, messageContent, reservationData),
+        headers
+      };
+
+      const result = await this.resend.emails.send(emailData);
+      console.log('Generic message email sent:', result.id);
+
+      // Store email metadata for threading if messageId is provided
+      if (messageId) {
+        await this.storeEmailMetadata(messageId, {
+          email_message_id: result.id,
+          email_thread_id: emailThreadId,
+          resend_message_id: result.id
+        });
+      }
+
+      return { ...result, emailThreadId };
+    } catch (error) {
+      console.error('Error sending generic message email:', error);
+      throw new Error('Failed to send message email');
+    }
+  }
+
+  // Generic message email template for message panel content
+  getGenericMessageTemplate(guestName, messageContent, reservationData = {}) {
+    const propertyName = reservationData.propertyName || 'Staylabel';
+    const checkInDate = reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString() : null;
+    const reservationId = reservationData.reservationId || null;
+    
+    // Convert plain text to HTML paragraphs
+    const formattedContent = this.formatMessageContent(messageContent);
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Message from ${propertyName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px 20px; }
+          .message-content { 
+            background: #f8f9fa; 
+            padding: 20px; 
+            border-left: 4px solid #2563eb; 
+            margin: 20px 0;
+            border-radius: 5px;
+          }
+          .reservation-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-size: 14px;
+          }
+          .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 14px; color: #666; }
+          .signature { margin-top: 20px; font-weight: 500; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Message from ${propertyName}</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${guestName},</h2>
+            
+            <div class="message-content">
+              ${formattedContent}
+            </div>
+            
+            ${checkInDate ? `
+            <div class="reservation-info">
+              <strong>Reservation Details:</strong><br>
+              ${reservationId ? `Reservation ID: ${reservationId}<br>` : ''}
+              ${checkInDate ? `Check-in Date: ${checkInDate}<br>` : ''}
+              Property: ${propertyName}
+            </div>
+            ` : ''}
+            
+            <p>If you have any questions or need assistance, please don't hesitate to reply to this email or contact us directly.</p>
+            
+            <div class="signature">
+              <p>Best regards,<br>
+              The ${propertyName} Team</p>
+            </div>
+          </div>
+          <div class="footer">
+            <p>This message was sent regarding your reservation with ${propertyName}. If you believe you received this in error, please contact us.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  // Helper method to format plain text message content to HTML
+  formatMessageContent(content) {
+    if (!content) return '';
+    
+    // Convert line breaks to paragraphs
+    const paragraphs = content
+      .split(/\n\s*\n/) // Split on double line breaks
+      .map(paragraph => paragraph.trim())
+      .filter(paragraph => paragraph.length > 0)
+      .map(paragraph => {
+        // Handle single line breaks within paragraphs
+        const formattedParagraph = paragraph.replace(/\n/g, '<br>');
+        return `<p>${formattedParagraph}</p>`;
+      });
+    
+    return paragraphs.join('');
+  }
+
+  // Helper method to get email service status for debugging
+  getServiceStatus() {
+    return {
+      configured: !!process.env.RESEND_API_KEY,
+      fromEmail: this.fromEmail,
+      frontendUrl: this.frontendUrl,
+      hasResendInstance: !!this.resend
+    };
+  }
+
+  // Helper method to validate email data before sending
+  validateEmailData(emailData) {
+    const errors = [];
+    
+    if (!emailData.to) {
+      errors.push('Recipient email address is required');
+    } else if (!/\S+@\S+\.\S+/.test(emailData.to)) {
+      errors.push('Invalid recipient email address format');
+    }
+    
+    if (!emailData.subject) {
+      errors.push('Email subject is required');
+    }
+    
+    if (!emailData.html && !emailData.text) {
+      errors.push('Email content (HTML or text) is required');
+    }
+    
+    if (!process.env.RESEND_API_KEY) {
+      errors.push('Resend API key not configured');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  // Generate unique email thread ID for threading
+  generateEmailThreadId(reservationId, messageId) {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    
+    if (reservationId && messageId) {
+      return `thread-${reservationId}-${messageId}-${timestamp}-${random}`;
+    } else if (reservationId) {
+      return `thread-${reservationId}-${timestamp}-${random}`;
+    } else {
+      return `thread-${timestamp}-${random}`;
+    }
+  }
+
+  // Store email metadata for threading
+  async storeEmailMetadata(messageId, metadata) {
+    try {
+      const { supabaseAdmin } = require('../config/supabase');
+      
+      const { error } = await supabaseAdmin
+        .from('messages')
+        .update({
+          email_message_id: metadata.email_message_id,
+          email_thread_id: metadata.email_thread_id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', messageId);
+
+      if (error) {
+        console.error('Error storing email metadata:', error);
+        throw error;
+      }
+
+      console.log(`Stored email metadata for message ${messageId}:`, metadata);
+    } catch (error) {
+      console.error('Failed to store email metadata:', error);
+      // Don't throw error to avoid breaking email sending
+    }
   }
 }
 

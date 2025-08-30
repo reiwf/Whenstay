@@ -1,6 +1,7 @@
 import { Menu, ChevronLeft, Bell } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import ProfileDropdown from '../ProfileDropdown'
+import staylabelLogo from '../../../shared/staylabellogo.png'
 
 const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
   const { profile } = useAuth()
@@ -20,9 +21,11 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
 
           {/* Mobile Logo (only show when sidebar is closed) */}
           <div className="lg:hidden flex items-center">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
-              <span className="text-white font-bold text-sm">S</span>
-            </div>
+            <img 
+              src={staylabelLogo} 
+              alt="Staylabel Logo" 
+              className="w-8 h-8 mr-3 rounded-lg"
+            />
             <h1 className="text-lg font-bold text-gray-900">Staylabel</h1>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Check, CheckCheck, AlertCircle, Clock, RotateCw, MoreHorizontal, Trash2 } from 'lucide-react';
 import airbnbLogo from '../../../shared/airbnblogo.png';
+import bookingLogo from '../../../shared/bookinglogo.png';
 import { createPortal } from 'react-dom';
 
 const CHANNEL_ICONS = {
@@ -10,7 +11,7 @@ const CHANNEL_ICONS = {
   email: '✉️',
   sms: '📱',
   airbnb: airbnbLogo,
-  bookingcom: '🏠'
+  'booking.com': bookingLogo
 };
 
 function getFileNameFromUrl(url) {
@@ -31,6 +32,10 @@ const renderChannelIcon = (channel) => {
   
   if (channel === 'airbnb') {
     return <img src={icon} alt="Airbnb" className="w-4 h-4 inline" />;
+  }
+  
+  if (channel === 'booking.com') {
+    return <img src={icon} alt="Booking.com" className="w-4 h-4 inline" />;
   }
   
   return icon;

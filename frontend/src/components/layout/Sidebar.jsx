@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import SidebarItem from './SidebarItem'
 import ProfileDropdown from '../ProfileDropdown'
 import { useGlobalCommunication } from '../../hooks/useGlobalCommunication'
+import staylabelLogo from '../../../shared/staylabellogo.png'
 
 const Sidebar = ({ 
   activeSection, 
@@ -125,16 +126,20 @@ const Sidebar = ({
         <div className="flex items-center">
           {(!collapsed || mobile) && (
             <>
-              <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-sm">S</span>
-              </div>
+              <img 
+                src={staylabelLogo} 
+                alt="Staylabel Logo" 
+                className="w-8 h-8 mr-3 rounded-lg"
+              />
               <h1 className="text-lg font-bold text-primary-900">{t('staylabel')}</h1>
             </>
           )}
           {collapsed && !mobile && (
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center mx-auto">
-              <span className="text-white font-bold text-sm">S</span>
-            </div>
+            <img 
+              src={staylabelLogo} 
+              alt="Staylabel Logo" 
+              className="w-6 h-6 mx-auto rounded-lg"
+            />
           )}
         </div>
 

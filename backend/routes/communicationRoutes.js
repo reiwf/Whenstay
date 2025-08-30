@@ -9,14 +9,14 @@ router.use(adminAuth);
 // GET /api/communication/threads - List message threads (inbox)
 router.get('/threads', async (req, res) => {
   try {
-    const { status = 'open', limit = 50, offset = 0 } = req.query;
+    const { status = 'open', limit = 50, offset = 0, needs_linking } = req.query;
     const userId = req.user.id;
 
-    // Get basic threads first - try with group columns, fall back if they don't exist
+    // Get basic threads first - try with group and email threading columns, fall back if they don't exist
     let threads, error;
     
     try {
-      const result = await supabaseAdmin
+      let query = supabaseAdmin
         .from('message_threads')
         .select(`
           id,
@@ -28,6 +28,8 @@ router.get('/threads', async (req, res) => {
           last_message_preview,
           created_at,
           updated_at,
+          needs_linking,
+          email_thread_id,
           thread_channels (
             channel,
             external_thread_id
@@ -47,18 +49,25 @@ router.get('/threads', async (req, res) => {
             )
           )
         `)
-        .eq('status', status)
+        .eq('status', status);
+      
+      // Add needs_linking filter if specified
+      if (needs_linking !== undefined) {
+        query = query.eq('needs_linking', needs_linking === 'true');
+      }
+      
+      const result = await query
         .order('last_message_at', { ascending: false, nullsFirst: false })
         .range(offset, offset + limit - 1);
       
       threads = result.data;
       error = result.error;
-    } catch (groupError) {
-      // If group columns don't exist, fall back to basic query
-      if (groupError.message && groupError.message.includes('does not exist')) {
-        console.warn('Group booking columns not found in threads query, falling back to basic query');
+    } catch (schemaError) {
+      // If email threading or group columns don't exist, fall back to basic query
+      if (schemaError.message && schemaError.message.includes('does not exist')) {
+        console.warn('Email threading or group booking columns not found, falling back to basic query');
         
-        const fallbackResult = await supabaseAdmin
+        let fallbackQuery = supabaseAdmin
           .from('message_threads')
           .select(`
             id,
@@ -86,14 +95,16 @@ router.get('/threads', async (req, res) => {
               )
             )
           `)
-          .eq('status', status)
+          .eq('status', status);
+        
+        const fallbackResult = await fallbackQuery
           .order('last_message_at', { ascending: false, nullsFirst: false })
           .range(offset, offset + limit - 1);
         
         threads = fallbackResult.data;
         error = fallbackResult.error;
       } else {
-        throw groupError;
+        throw schemaError;
       }
     }
 
@@ -659,6 +670,253 @@ router.get('/group/:masterReservationId/threads', async (req, res) => {
   } catch (error) {
     console.error('Error fetching group booking threads:', error);
     res.status(500).json({ error: 'Failed to fetch group booking threads' });
+  }
+});
+
+// PUT /api/communication/threads/:id/link - Link unlinked thread to reservation
+router.put('/threads/:threadId/link', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    const { reservation_id } = req.body;
+
+    if (!reservation_id) {
+      return res.status(400).json({ error: 'reservation_id is required' });
+    }
+
+    // Update thread to link it to the reservation
+    const { data: thread, error } = await supabaseAdmin
+      .from('message_threads')
+      .update({ 
+        reservation_id: reservation_id,
+        needs_linking: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', threadId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ thread, message: 'Thread linked successfully' });
+
+  } catch (error) {
+    console.error('Error linking thread:', error);
+    res.status(500).json({ error: 'Failed to link thread' });
+  }
+});
+
+// POST /api/communication/threads/:id/merge - Merge unlinked thread with existing thread
+router.post('/threads/:sourceThreadId/merge', async (req, res) => {
+  try {
+    const { sourceThreadId } = req.params;
+    const { target_thread_id } = req.body;
+
+    if (!target_thread_id) {
+      return res.status(400).json({ error: 'target_thread_id is required' });
+    }
+
+    // Move all messages from source thread to target thread
+    const { error: moveError } = await supabaseAdmin
+      .from('messages')
+      .update({ thread_id: target_thread_id })
+      .eq('thread_id', sourceThreadId);
+
+    if (moveError) throw moveError;
+
+    // Update target thread's last message info
+    const { data: lastMessage } = await supabaseAdmin
+      .from('messages')
+      .select('created_at, content')
+      .eq('thread_id', target_thread_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (lastMessage) {
+      await supabaseAdmin
+        .from('message_threads')
+        .update({
+          last_message_at: lastMessage.created_at,
+          last_message_preview: lastMessage.content.substring(0, 160),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', target_thread_id);
+    }
+
+    // Delete the source thread
+    const { error: deleteError } = await supabaseAdmin
+      .from('message_threads')
+      .delete()
+      .eq('id', sourceThreadId);
+
+    if (deleteError) throw deleteError;
+
+    res.json({ message: 'Threads merged successfully' });
+
+  } catch (error) {
+    console.error('Error merging threads:', error);
+    res.status(500).json({ error: 'Failed to merge threads' });
+  }
+});
+
+// PUT /api/communication/threads/:id/reject - Mark unlinked thread as spam/rejected
+router.put('/threads/:threadId/reject', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    const { reason = 'spam' } = req.body;
+
+    // Update thread status to archived and mark as resolved
+    const { data: thread, error } = await supabaseAdmin
+      .from('message_threads')
+      .update({ 
+        status: 'archived',
+        needs_linking: false,
+        subject: `[${reason.toUpperCase()}] ${thread?.subject || 'Unknown Thread'}`,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', threadId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ thread, message: `Thread marked as ${reason}` });
+
+  } catch (error) {
+    console.error('Error rejecting thread:', error);
+    res.status(500).json({ error: 'Failed to reject thread' });
+  }
+});
+
+// GET /api/communication/threads/:id/suggestions - Get matching suggestions for unlinked thread
+router.get('/threads/:threadId/suggestions', async (req, res) => {
+  try {
+    const { threadId } = req.params;
+
+    // Get the thread details
+    const { data: thread, error: threadError } = await supabaseAdmin
+      .from('message_threads')
+      .select(`
+        id,
+        subject,
+        email_thread_id,
+        created_at,
+        messages (
+          content,
+          created_at
+        )
+      `)
+      .eq('id', threadId)
+      .single();
+
+    if (threadError) throw threadError;
+
+    // Get guest email from first message if available
+    let guestEmail = null;
+    if (thread.messages && thread.messages.length > 0) {
+      // Extract email from message content or metadata
+      const firstMessage = thread.messages[0];
+      const emailMatch = firstMessage.content.match(/[\w\.-]+@[\w\.-]+\.\w+/);
+      if (emailMatch) {
+        guestEmail = emailMatch[0];
+      }
+    }
+
+    let suggestions = [];
+
+    // Strategy 1: Find reservations by guest email
+    if (guestEmail) {
+      const { data: emailMatches } = await supabaseAdmin
+        .from('reservations')
+        .select(`
+          id,
+          booking_name,
+          booking_email,
+          check_in_date,
+          check_out_date,
+          properties (name)
+        `)
+        .ilike('booking_email', `%${guestEmail}%`)
+        .order('check_in_date', { ascending: false })
+        .limit(5);
+
+      if (emailMatches) {
+        suggestions.push(...emailMatches.map(r => ({
+          ...r,
+          confidence: 'high',
+          match_reason: 'Email match'
+        })));
+      }
+    }
+
+    // Strategy 2: Find recent reservations by name similarity (if subject contains a name)
+    if (thread.subject && suggestions.length < 5) {
+      const nameMatch = thread.subject.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/);
+      if (nameMatch) {
+        const name = nameMatch[0];
+        const { data: nameMatches } = await supabaseAdmin
+          .from('reservations')
+          .select(`
+            id,
+            booking_name,
+            booking_email,
+            check_in_date,
+            check_out_date,
+            properties (name)
+          `)
+          .ilike('booking_name', `%${name}%`)
+          .gte('check_in_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // Last 30 days
+          .order('check_in_date', { ascending: false })
+          .limit(3);
+
+        if (nameMatches) {
+          suggestions.push(...nameMatches.map(r => ({
+            ...r,
+            confidence: 'medium',
+            match_reason: `Name similarity: ${name}`
+          })));
+        }
+      }
+    }
+
+    // Strategy 3: Find recent reservations without threads (if still need more suggestions)
+    if (suggestions.length < 5) {
+      const { data: recentMatches } = await supabaseAdmin
+        .from('reservations')
+        .select(`
+          id,
+          booking_name,
+          booking_email,
+          check_in_date,
+          check_out_date,
+          properties (name)
+        `)
+        .gte('check_in_date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // Last 7 days
+        .is('id', null) // This is a placeholder - we'd need a LEFT JOIN to find reservations without threads
+        .order('check_in_date', { ascending: false })
+        .limit(2);
+
+      if (recentMatches) {
+        suggestions.push(...recentMatches.map(r => ({
+          ...r,
+          confidence: 'low',
+          match_reason: 'Recent reservation'
+        })));
+      }
+    }
+
+    // Remove duplicates and limit to 5
+    const uniqueSuggestions = suggestions
+      .filter((suggestion, index, self) => 
+        index === self.findIndex(s => s.id === suggestion.id)
+      )
+      .slice(0, 5);
+
+    res.json({ suggestions: uniqueSuggestions });
+
+  } catch (error) {
+    console.error('Error getting thread suggestions:', error);
+    res.status(500).json({ error: 'Failed to get thread suggestions' });
   }
 });
 

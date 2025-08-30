@@ -340,13 +340,14 @@ class CommunicationService {
           await this.sendBeds24(messageId, content, data);
           break;
         case 'airbnb':
-          // Airbnb messages are sent via Beds24 API
-          await this.sendAirbnb(messageId, content, data);
+          await this.sendBeds24(messageId, content, data);
+          break;
+        case 'booking.com':
+          await this.sendBeds24(messageId, content, data);
           break;
         case 'inapp':
-          // In-app messages: queued → sent → delivered
           await this.updateDeliveryStatus(messageId, channel, 'sent');
-          // Simulate brief delay for sent → delivered transition
+
           setTimeout(async () => {
             await this.updateDeliveryStatus(messageId, channel, 'delivered');
           }, 1000);
@@ -369,9 +370,114 @@ class CommunicationService {
   }
 
   async sendEmail(messageId, content, data) {
-    // TODO: Implement email service integration
-    console.log('Email send:', { messageId, content });
-    await this.updateDeliveryStatus(messageId, 'email', 'sent');
+    try {
+      console.log('Sending email via EmailService:', { messageId, content });
+
+      // Get the message and thread information to find the guest and reservation details
+      const { data: message, error: msgError } = await this.supabase
+        .from('messages')
+        .select(`
+          *,
+          message_threads!inner(
+            reservation_id,
+            subject,
+            reservations!inner(
+              id,
+              booking_name,
+              booking_lastname,
+              booking_email,
+              guest_email,
+              check_in_date,
+              check_out_date,
+              properties!inner(name)
+            )
+          )
+        `)
+        .eq('id', messageId)
+        .single();
+
+      if (msgError || !message) {
+        throw new Error('Message not found');
+      }
+
+      const reservation = message.message_threads.reservations;
+      if (!reservation) {
+        throw new Error('No reservation found for this message thread');
+      }
+
+      // Determine guest details
+      const guestName = reservation.booking_lastname 
+        ? `${reservation.booking_name} ${reservation.booking_lastname}`
+        : reservation.booking_name || 'Guest';
+      
+      const guestEmail = reservation.guest_email || reservation.booking_email;
+      
+      if (!guestEmail) {
+        throw new Error('No guest email found for this reservation');
+      }
+
+      // Prepare reservation data for template
+      const reservationData = {
+        reservationId: reservation.id,
+        propertyName: reservation.properties?.name || 'Staylabel',
+        checkInDate: reservation.check_in_date,
+        checkOutDate: reservation.check_out_date
+      };
+
+      // Generate email subject if not provided
+      const emailSubject = message.message_threads.subject || 
+        `Message from ${reservationData.propertyName}`;
+
+      // Use EmailService to send the professional email
+      const emailService = require('./emailService');
+      await emailService.sendGenericMessage(
+        guestEmail,
+        guestName,
+        emailSubject,
+        content,
+        reservationData,
+        messageId // Pass messageId for threading metadata
+      );
+
+      // Update delivery status to sent
+      await this.updateDeliveryStatus(messageId, 'email', 'sent');
+
+      console.log(`Successfully sent email ${messageId} to ${guestEmail}`);
+
+    } catch (error) {
+      console.error('Error sending email via EmailService:', error);
+      
+      // Categorize the error type for appropriate handling
+      const isConfigError = error.message?.includes('Resend API key not configured') ||
+                           error.message?.includes('RESEND_API_KEY');
+      const isEmailError = error.message?.includes('No guest email found');
+      const isDataError = error.message?.includes('Message not found') ||
+                         error.message?.includes('No reservation found');
+      const isServiceError = error.message?.includes('Failed to send message email');
+
+      // Handle different error types appropriately
+      if (isConfigError) {
+        // Configuration errors: fail but indicate it's a setup issue
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Configuration error: ${error.message}`);
+        throw error;
+      } else if (isEmailError) {
+        // Missing email address: fail with clear message
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Email address missing: ${error.message}`);
+        throw error;
+      } else if (isDataError) {
+        // Data errors: fail immediately, don't retry
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', error.message);
+        throw error;
+      } else if (isServiceError) {
+        // Email service errors: could be temporary
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Email service error: ${error.message}`);
+        throw error;
+      } else {
+        // Unknown errors: fail safely
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Unknown error: ${error.message}`);
+        throw error;
+      }
+    }
   }
 
   async sendSMS(messageId, content, data) {
@@ -381,14 +487,8 @@ class CommunicationService {
   }
 
   async sendBeds24(messageId, content, data) {
-    // TODO: Implement Beds24 API integration
-    console.log('Beds24 send:', { messageId, content });
-    await this.updateDeliveryStatus(messageId, 'beds24', 'sent');
-  }
-
-  async sendAirbnb(messageId, content, data) {
     try {
-      console.log('Sending Airbnb message via Beds24:', { messageId, content });
+      console.log('Sending message via Beds24 (supports Airbnb, Booking.com, and Beds24):', { messageId, content });
 
       // Get the message and thread information to find the booking ID
       const { data: message, error: msgError } = await this.supabase
@@ -419,13 +519,13 @@ class CommunicationService {
         threadId: message.thread_id
       });
 
-      // Update delivery status to sent
-      await this.updateDeliveryStatus(messageId, 'airbnb', 'sent');
+      // Update delivery status to sent - use the actual channel from the message
+      await this.updateDeliveryStatus(messageId, message.channel, 'sent');
 
-      console.log(`Successfully sent Airbnb message ${messageId} for booking ${beds24BookingId}`);
+      console.log(`Successfully sent message ${messageId} via Beds24 for booking ${beds24BookingId}`);
 
     } catch (error) {
-      console.error('Error sending Airbnb message:', error);
+      console.error('Error sending message via Beds24:', error);
       
       // Categorize the error type to determine appropriate handling
       const isSystemError = error.message?.includes('Message not found') || 
@@ -445,33 +545,34 @@ class CommunicationService {
       // Handle different error types appropriately
       if (isSystemError) {
         // System/data errors: fail immediately, don't retry
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', error.message);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', error.message);
         throw error;
       } else if (isAuthError) {
         // Authentication errors: fail but could potentially be retried after token refresh
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', `Authentication error: ${error.message}`);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', `Authentication error: ${error.message}`);
         throw error;
       } else if (isNotFoundError) {
         // Booking not found: fail, this booking may not exist in Beds24
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', `Booking not found in Beds24: ${error.message}`);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', `Booking not found in Beds24: ${error.message}`);
         throw error;
       } else if (isRateLimited) {
         // Rate limiting: mark as failed but could be retried later
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', `Rate limited: ${error.message}`);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', `Rate limited: ${error.message}`);
         throw error;
       } else if (isServerError) {
         // Server errors (5xx): These are temporary external service issues
         console.log('Beds24 API server error detected - this is a temporary external service issue');
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', `Beds24 server error (temporary): ${error.message}`);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', `Beds24 server error (temporary): ${error.message}`);
         // Still throw error - don't hide server errors by marking as sent
         throw new Error(`Beds24 server temporarily unavailable: ${error.message}`);
       } else {
         // Unknown errors: fail safely
-        await this.updateDeliveryStatus(messageId, 'airbnb', 'failed', `Unknown error: ${error.message}`);
+        await this.updateDeliveryStatus(messageId, data.channel || 'beds24', 'failed', `Unknown error: ${error.message}`);
         throw error;
       }
     }
   }
+
 
   async updateDeliveryStatus(messageId, channel, status, errorMessage = null) {
     try {

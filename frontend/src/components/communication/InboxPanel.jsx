@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, MessageCircle, Clock, Users, Crown } from 'lucide-react';
+import { Search, MessageCircle, Clock, Users, Crown, AlertTriangle } from 'lucide-react';
 import airbnbLogo from '../../../shared/airbnblogo.png';
 
 const CHANNEL_ICONS = {
@@ -35,6 +35,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
 
       const matchesFilter = filter === 'all' || 
         (filter === 'unread' && thread.unread_count > 0) ||
+        (filter === 'unlinked' && thread.needs_linking) ||
         (filter === 'closed' && thread.status === 'closed');
 
       return matchesSearch && matchesFilter;
@@ -95,6 +96,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
           {[
             { key: 'all', label: 'All', count: threads.length },
             { key: 'unread', label: 'Unread', count: threads.filter(t => t.unread_count > 0).length },
+            { key: 'unlinked', label: 'Unlinked', count: threads.filter(t => t.needs_linking).length },
             { key: 'closed', label: 'Closed', count: threads.filter(t => t.status === 'closed').length }
           ].map(({ key, label, count }) => (
             <button
@@ -150,6 +152,10 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
                   <p className="text-sm font-medium text-primary-900 truncate">
                     {thread.subject || 'No subject'}
                   </p>
+                  {/* Unlinked thread indicator */}
+                  {thread.needs_linking && (
+                    <AlertTriangle className="w-3 h-3 text-orange-500 flex-shrink-0" title="Needs Manual Linking" />
+                  )}
                   {/* Group booking indicators */}
                   {thread.reservations?.is_group_master && (
                     <Crown className="w-3 h-3 text-purple-600 flex-shrink-0" title="Group Master" />

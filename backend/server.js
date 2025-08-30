@@ -20,7 +20,10 @@ app.use(helmet({
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://staylabel.fly.dev', 
+    'https://staylabel.fly.dev',
+    'https://app.staylabel.com',
+    'https://www.staylabel.com',
+    'https://staylabel.com'
   ],
   credentials: true
 }));
@@ -96,32 +99,83 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/upsell', upsellRoutes);
 app.use('/api/translations', translationRoutes);
 
-// Serve static files from frontend build
-// In development: frontend is at ../frontend/dist
-// In production (Docker): frontend is at ./frontend/dist
+// Domain-based routing setup
 const frontendPath = process.env.NODE_ENV === 'production' 
   ? path.resolve(__dirname, 'frontend', 'dist')
   : path.resolve(__dirname, '../frontend', 'dist');
-console.log('Serving SPA from:', frontendPath);
+const landingPath = path.resolve(__dirname, 'public', 'landing');
 
-app.use(express.static(frontendPath, {
+console.log('Serving SPA from:', frontendPath);
+console.log('Serving Landing Page from:', landingPath);
+
+// Static file serving for landing page assets
+app.use('/landing', express.static(landingPath, {
   maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
   etag: true,
   lastModified: true,
-  // Set correct MIME types
-  setHeaders: (res, path) => {
-    if (path.endsWith('.js')) {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    } else if (path.endsWith('.css')) {
+    } else if (filePath.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css; charset=utf-8');
     }
   }
 }));
 
-// SPA fallback - serve index.html for all non-API routes that don't match static assets
+// Static file serving for React app assets (excluding index.html)
+app.use(express.static(frontendPath, {
+  maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
+  etag: true,
+  lastModified: true,
+  index: false, // Don't serve index.html automatically
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+  }
+}));
+
+// Development routes for landing pages
+app.get('/landing-dev', (req, res) => {
+  console.log('🚀 Serving landing page via /landing-dev route');
+  res.sendFile(path.join(landingPath, 'index.html'));
+});
+
+// Development route for privacy page
+app.get('/privacy', (req, res) => {
+  console.log('🚀 Serving privacy page via /privacy route');
+  res.sendFile(path.join(landingPath, 'privacy.html'));
+});
+
+// Development route for commerce page
+app.get('/commerce', (req, res) => {
+  console.log('🚀 Serving commerce page via /commerce route');
+  res.sendFile(path.join(landingPath, 'commerce.html'));
+});
+
+// Specific route for landing HTML files
+app.get('/landing/*.html', (req, res) => {
+  const requestedFile = req.params[0] + '.html';
+  const filePath = path.join(landingPath, requestedFile);
+  
+  console.log(`🚀 Serving landing HTML file: ${requestedFile}`);
+  
+  // Check if file exists
+  const fs = require('fs');
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'HTML file not found' });
+  }
+});
+
+// Domain-based routing for HTML pages
 app.get('*', (req, res, next) => {
-  // Don't serve index.html for asset requests
+  // Don't serve HTML for asset requests (excluding landing HTML files)
   if (req.path.startsWith('/assets/') || 
+      (req.path.startsWith('/landing/') && !req.path.endsWith('.html')) ||
       req.path.endsWith('.js') || 
       req.path.endsWith('.css') || 
       req.path.endsWith('.png') || 
@@ -131,7 +185,26 @@ app.get('*', (req, res, next) => {
     return res.status(404).json({ error: 'Asset not found' });
   }
   
-  res.sendFile(path.join(frontendPath, 'index.html'));
+  const host = req.get('host') || '';
+  const originalUrl = req.originalUrl || '';
+  
+  // Debug logging
+  console.log(`🔍 Domain routing debug - Host: "${host}", URL: "${originalUrl}"`);
+  
+  // Check for landing page domains (more flexible matching)
+  const isLandingDomain = host.includes('staylabel.com') && !host.includes('app.staylabel.com');
+  
+  console.log(`🎯 Landing domain check: ${isLandingDomain ? 'YES' : 'NO'}`);
+  
+  if (isLandingDomain) {
+    // Serve landing page
+    console.log(`🚀 Serving landing page for domain: ${host}`);
+    res.sendFile(path.join(landingPath, 'index.html'));
+  } else {
+    // Serve React SPA
+    console.log(`⚛️  Serving React app for domain: ${host}`);
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  }
 });
 
 app.use('/api/*', (_req, res) => res.status(404).json({ error: 'API route not found' }));

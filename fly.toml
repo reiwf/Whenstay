@@ -15,6 +15,10 @@ primary_region = 'nrt'
   auto_start_machines = true
   min_machines_running = 1
 
+# Support multiple domains
+[[http_service.http_options.headers]]
+  X-Forwarded-Host = "true"
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'

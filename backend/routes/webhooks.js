@@ -543,6 +543,218 @@ router.post('/stripe', async (req, res) => {
   }
 });
 
+
+// Process inbound email (designed for n8n calls)
+async function processInboundEmail(emailData) {
+  try {
+    // Extract sender email address from "Name <email@domain.com>" format
+    const senderEmail = extractEmailAddress(emailData.from);
+    
+    // Skip if this is an outbound message from our system
+    if (senderEmail && senderEmail.split('@')[1] === 'staylabel.com') {
+      console.log(`Skipping outbound message from: ${emailData.from}`);
+      return;
+    }
+
+    // Clean email content - try multiple field names that n8n might use
+    const rawContent = emailData.content || emailData.text || emailData.body || '';
+    const content = cleanEmailContent(rawContent);
+
+    // Find or create thread using email matching logic
+    const matchResult = await matchEmailToThread({
+      from: emailData.from,
+      senderEmail,
+      subject: emailData.subject,
+      content
+    });
+
+    // Create the message in our communication system
+    const messageResult = await communicationService.receiveMessage({
+      thread_id: matchResult.thread.id,
+      channel: 'email',
+      content,
+      origin_role: 'guest',
+      provider_message_id: emailData.messageId || `n8n-${Date.now()}`
+    });
+
+    console.log(`Email processed successfully - Thread: ${matchResult.thread.id}`);
+
+  } catch (error) {
+    console.error('Error processing inbound email:', error);
+    throw error;
+  }
+}
+
+// Extract email address from "Name <email@domain.com>" format
+function extractEmailAddress(fromHeader) {
+  if (!fromHeader) return null;
+  
+  const match = fromHeader.match(/<([^>]+)>/);
+  if (match) {
+    return match[1].toLowerCase();
+  }
+  
+  // If no angle brackets, assume the whole thing is an email
+  return fromHeader.trim().toLowerCase();
+}
+
+// Clean email content (remove signatures, previous messages, etc.)
+function cleanEmailContent(content) {
+  if (!content) return '';
+
+  // Remove quoted text (lines starting with >)
+  const lines = content.split('\n');
+  const cleanLines = [];
+  let inQuotedText = false;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    
+    // Skip quoted lines
+    if (trimmedLine.startsWith('>')) {
+      inQuotedText = true;
+      continue;
+    }
+    
+    // Skip common email signature separators
+    if (trimmedLine === '--' || trimmedLine.match(/^-{2,}$/)) {
+      break;
+    }
+    
+    // Skip lines that indicate forwarded/replied messages
+    if (trimmedLine.match(/^(From:|Sent:|To:|Subject:|Date:)/i)) {
+      break;
+    }
+    
+    // Skip "On ... wrote:" patterns
+    if (trimmedLine.match(/^On .* wrote:$/i)) {
+      break;
+    }
+    
+    // If we were in quoted text and hit a non-quoted line, we might be back to original content
+    if (inQuotedText && !trimmedLine.startsWith('>') && trimmedLine.length > 0) {
+      inQuotedText = false;
+    }
+    
+    if (!inQuotedText) {
+      cleanLines.push(line);
+    }
+  }
+
+  return cleanLines.join('\n').trim();
+}
+
+// Email-to-thread matching logic
+async function matchEmailToThread(parsedEmail) {
+  // Strategy 1: Match by guest email to recent active thread
+  if (parsedEmail.senderEmail) {
+    const emailMatch = await findMostRecentActiveThread(parsedEmail.senderEmail);
+    if (emailMatch) {
+      return {
+        thread: emailMatch,
+        method: 'guest_email',
+        confidence: 'medium'
+      };
+    }
+  }
+
+  // Strategy 2: Create unlinked thread for manual processing
+  const unlinkedThread = await createUnlinkedThread(parsedEmail);
+  return {
+    thread: unlinkedThread,
+    method: 'unlinked',
+    confidence: 'low'
+  };
+}
+
+// Find most recent active thread for guest email
+async function findMostRecentActiveThread(guestEmail) {
+  try {
+    const { supabaseAdmin } = require('../config/supabase');
+    
+    const { data: threads } = await supabaseAdmin
+      .from('message_threads')
+      .select(`
+        *,
+        reservations!inner(
+          guest_email,
+          booking_email,
+          check_in_date,
+          check_out_date
+        )
+      `)
+      .or(`reservations.guest_email.eq.${guestEmail},reservations.booking_email.eq.${guestEmail}`)
+      .in('status', ['open', 'closed'])
+      .gte('reservations.check_out_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // Within last 30 days
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (threads && threads.length > 0) {
+      return threads[0];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error finding thread by guest email:', error);
+    return null;
+  }
+}
+
+// Create unlinked thread for unknown senders
+async function createUnlinkedThread(parsedEmail) {
+  try {
+    const threadData = {
+      subject: `[Email] ${parsedEmail.subject || 'Message from ' + parsedEmail.senderEmail}`,
+      status: 'open',
+      participants: [
+        {
+          type: 'guest',
+          external_address: parsedEmail.senderEmail,
+          display_name: parsedEmail.from
+        }
+      ],
+      channels: [
+        {
+          channel: 'email',
+          external_thread_id: `email-${Date.now()}`
+        }
+      ]
+    };
+
+    const thread = await communicationService.createThread(threadData);
+    
+    console.log(`Created unlinked thread ${thread.id} for unknown sender: ${parsedEmail.senderEmail}`);
+    
+    return thread;
+  } catch (error) {
+    console.error('Error creating unlinked thread:', error);
+    throw error;
+  }
+}
+
+// Email webhook endpoint for n8n integration
+router.post('/test-email', async (req, res) => {
+  try {
+    console.log('Email webhook received from n8n');
+    
+    // Validate required fields
+    if (!req.body.from || !req.body.subject) {
+      return res.status(400).json({ error: 'Missing required email fields (from, subject)' });
+    }
+
+    // Process the email
+    await processInboundEmail(req.body);
+    
+    res.status(200).json({ 
+      message: 'Email processed successfully',
+      processed_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Email webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Test endpoint for webhook testing
 router.post('/test', async (req, res) => {
   try {

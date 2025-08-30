@@ -237,6 +237,7 @@ export default function CommunicationPage() {
                   <ReservationPanel
                     thread={selectedThread}
                     reservation={reservation}
+                    onThreadUpdate={loadThreads}
                   />
                 </div>
               </div>
