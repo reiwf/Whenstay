@@ -544,46 +544,224 @@ router.post('/stripe', async (req, res) => {
 });
 
 
-// Process inbound email (designed for n8n calls)
-async function processInboundEmail(emailData) {
+// Process Gmail inbound email with Gmail threadId-based threading
+async function processGmailInboundEmail(emailData) {
   try {
-    // Extract sender email address from "Name <email@domain.com>" format
+    console.log('Processing Gmail email:', {
+      threadId: emailData.threadId,
+      messageId: emailData.messageId,
+      from: emailData.from,
+      name: emailData.name,
+      subject: emailData.subject
+    });
+
     const senderEmail = extractEmailAddress(emailData.from);
-    
-    // Skip if this is an outbound message from our system
-    if (senderEmail && senderEmail.split('@')[1] === 'staylabel.com') {
+
+    // Skip our own outbound emails
+    if (senderEmail && senderEmail.endsWith('@staylabel.com')) {
       console.log(`Skipping outbound message from: ${emailData.from}`);
       return;
     }
 
-    // Clean email content - try multiple field names that n8n might use
-    const rawContent = emailData.content || emailData.text || emailData.body || '';
+    // Extract Gmail threading data from payload
+    const threadingData = extractGmailThreadingData(emailData);
+    const rawContent = emailData.textAsHtml || emailData.text || emailData.html || emailData.content || '';
     const content = cleanEmailContent(rawContent);
 
-    // Find or create thread using email matching logic
-    const matchResult = await matchEmailToThread({
-      from: emailData.from,
-      senderEmail,
-      subject: emailData.subject,
-      content
-    });
+    // Find or create thread using Gmail threadId
+    const thread = await findOrCreateGmailThread(emailData, senderEmail);
 
-    // Create the message in our communication system
+    // Check for duplicate messages using Gmail messageId in email_metadata table
+    if (threadingData.email_message_id) {
+      const { data: existingMessage } = await require('../config/supabase').supabaseAdmin
+        .from('email_metadata')
+        .select('message_id')
+        .eq('email_message_id', threadingData.email_message_id)
+        .single();
+
+      if (existingMessage) {
+        console.log(`Duplicate Gmail message ${threadingData.email_message_id}, skipping`);
+        return;
+      }
+    }
+
+    // Create message in communication system
     const messageResult = await communicationService.receiveMessage({
-      thread_id: matchResult.thread.id,
+      thread_id: thread.id,
       channel: 'email',
       content,
       origin_role: 'guest',
-      provider_message_id: emailData.messageId || `n8n-${Date.now()}`
+      provider_message_id: threadingData.email_message_id || `gmail-${Date.now()}`,
+      sent_at: emailData.date ? new Date(emailData.date).toISOString() : new Date().toISOString()
     });
 
-    console.log(`Email processed successfully - Thread: ${matchResult.thread.id}`);
+    // Store Gmail threading metadata
+    if (messageResult?.id && !messageResult.duplicate) {
+      await storeGmailThreadingData(messageResult.id, threadingData);
+    }
 
-  } catch (error) {
-    console.error('Error processing inbound email:', error);
-    throw error;
+    console.log(
+      `Gmail email processed — Thread:${thread.id} | Message:${messageResult.id} | ThreadId:${emailData.threadId}`
+    );
+
+  } catch (err) {
+    console.error('Error processing Gmail inbound email:', err);
+    throw err;
   }
 }
+
+
+// Extract Gmail threading data from n8n webhook payload (updated for Gmail)
+function extractGmailThreadingData(email) {
+  // Gmail specific fields from n8n payload
+  const threadId = email.threadId || null;
+  const messageId = email.messageId || null;
+  const inReplyTo = email.inReplyTo || null;
+  const senderName = email.name || null; // Extract sender display name
+  
+  // Handle references array - fix for PostgreSQL array field
+  let referencesStr = null;
+  if (Array.isArray(email.references) && email.references.length > 0) {
+    referencesStr = email.references.join(' ');
+  } else if (typeof email.references === 'string' && email.references.trim() !== '') {
+    referencesStr = email.references.trim();
+  }
+  // If empty or undefined, leave as null for PostgreSQL compatibility
+
+  // Keep full Gmail payload for debugging
+  const providerData = {
+    provider: 'gmail-n8n',
+    processed_at: new Date().toISOString(),
+    raw_payload: {
+      id: email.id,
+      threadId: email.threadId,
+      messageId: email.messageId,
+      inReplyTo: email.inReplyTo,
+      references: email.references,
+      date: email.date,
+      from: email.from,
+      to: email.to,
+      subject: email.subject,
+      name: email.name,
+      labelIds: email.labelIds,
+      sizeEstimate: email.sizeEstimate
+    }
+  };
+
+  return {
+    email_thread_id: threadId,
+    email_message_id: messageId,
+    email_in_reply_to: inReplyTo,
+    email_references: referencesStr,
+    email_name: senderName,
+    email_provider_data: providerData
+  };
+}
+
+// Find or create Gmail thread based on Gmail threadId
+async function findOrCreateGmailThread(emailData, senderEmail) {
+  const supabase = require('../config/supabase').supabaseAdmin;
+  
+  // First try to find existing thread by Gmail threadId
+  if (emailData.threadId) {
+    const { data: existingChannel } = await supabase
+      .from('thread_channels')
+      .select(`
+        thread_id,
+        message_threads(*)
+      `)
+      .eq('channel', 'email')
+      .eq('external_thread_id', emailData.threadId)
+      .single();
+
+    if (existingChannel?.message_threads) {
+      console.log(`Found existing thread ${existingChannel.thread_id} for Gmail threadId ${emailData.threadId}`);
+      return existingChannel.message_threads;
+    }
+  }
+
+  // Try to match to existing reservation by sender email
+  const { data: reservation } = await supabase
+    .from('reservations')
+    .select('id, booking_name, check_out_date')
+    .or(`booking_email.eq.${senderEmail},guest_email.eq.${senderEmail}`)
+    .gte('check_out_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) // Last 30 days
+    .order('check_out_date', { ascending: false })
+    .limit(1)
+    .single();
+
+  let threadData;
+  if (reservation) {
+    // Create thread linked to reservation
+    console.log(`Creating Gmail thread linked to reservation ${reservation.id} for ${senderEmail}`);
+    threadData = {
+      reservation_id: reservation.id,
+      subject: emailData.subject || `Email from ${senderEmail}`,
+      status: 'open'
+    };
+  } else {
+    // Create standalone thread for unknown sender
+    console.log(`Creating standalone Gmail thread for unknown sender ${senderEmail}`);
+    threadData = {
+      subject: emailData.subject || `Email from ${senderEmail}`,
+      status: 'open'
+    };
+  }
+
+  // Create thread using communication service
+  const thread = await communicationService.createThread(threadData);
+
+  // Add participants
+  if (senderEmail) {
+    await communicationService.addParticipants(thread.id, [
+      {
+        type: 'guest',
+        external_address: senderEmail,
+        display_name: emailData.from?.value?.[0]?.name || senderEmail
+      }
+    ]);
+  }
+
+  // Create channel mapping with Gmail threadId
+  const channelData = {
+    channel: 'email',
+    external_thread_id: emailData.threadId || `gmail-${Date.now()}`
+  };
+
+  await communicationService.addThreadChannels(thread.id, [channelData]);
+
+  console.log(`Created new Gmail thread ${thread.id} with threadId ${channelData.external_thread_id}`);
+  return thread;
+}
+
+// Store Gmail threading metadata in email_metadata table
+async function storeGmailThreadingData(messageId, threadingData) {
+  const supabase = require('../config/supabase').supabaseAdmin;
+  
+  const { error } = await supabase
+    .from('email_metadata')
+    .upsert({
+      message_id: messageId,
+      email_message_id: threadingData.email_message_id,
+      email_thread_id: threadingData.email_thread_id,
+      email_in_reply_to: threadingData.email_in_reply_to,
+      email_references: threadingData.email_references,
+      email_name: threadingData.email_name,
+      email_provider_data: threadingData.email_provider_data,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'message_id'
+    });
+
+  if (error) {
+    console.error('Error storing Gmail threading data:', error);
+    throw error;
+  }
+
+  console.log(`Stored Gmail threading data for message ${messageId}`);
+}
+
+
 
 // Extract email address from "Name <email@domain.com>" format
 function extractEmailAddress(fromHeader) {
@@ -644,116 +822,89 @@ function cleanEmailContent(content) {
   return cleanLines.join('\n').trim();
 }
 
-// Email-to-thread matching logic
-async function matchEmailToThread(parsedEmail) {
-  // Strategy 1: Match by guest email to recent active thread
-  if (parsedEmail.senderEmail) {
-    const emailMatch = await findMostRecentActiveThread(parsedEmail.senderEmail);
-    if (emailMatch) {
-      return {
-        thread: emailMatch,
-        method: 'guest_email',
-        confidence: 'medium'
-      };
-    }
-  }
 
-  // Strategy 2: Create unlinked thread for manual processing
-  const unlinkedThread = await createUnlinkedThread(parsedEmail);
-  return {
-    thread: unlinkedThread,
-    method: 'unlinked',
-    confidence: 'low'
-  };
-}
-
-// Find most recent active thread for guest email
-async function findMostRecentActiveThread(guestEmail) {
+// Gmail metadata webhook endpoint for N8N async response
+router.post('/gmail-metadata', async (req, res) => {
   try {
-    const { supabaseAdmin } = require('../config/supabase');
+    console.log('Gmail metadata webhook received from N8N:', req.body);
     
-    const { data: threads } = await supabaseAdmin
-      .from('message_threads')
-      .select(`
-        *,
-        reservations!inner(
-          guest_email,
-          booking_email,
-          check_in_date,
-          check_out_date
-        )
-      `)
-      .or(`reservations.guest_email.eq.${guestEmail},reservations.booking_email.eq.${guestEmail}`)
-      .in('status', ['open', 'closed'])
-      .gte('reservations.check_out_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // Within last 30 days
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .limit(1);
-
-    if (threads && threads.length > 0) {
-      return threads[0];
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error finding thread by guest email:', error);
-    return null;
-  }
-}
-
-// Create unlinked thread for unknown senders
-async function createUnlinkedThread(parsedEmail) {
-  try {
-    const threadData = {
-      subject: `[Email] ${parsedEmail.subject || 'Message from ' + parsedEmail.senderEmail}`,
-      status: 'open',
-      participants: [
-        {
-          type: 'guest',
-          external_address: parsedEmail.senderEmail,
-          display_name: parsedEmail.from
-        }
-      ],
-      channels: [
-        {
-          channel: 'email',
-          external_thread_id: `email-${Date.now()}`
-        }
-      ]
-    };
-
-    const thread = await communicationService.createThread(threadData);
-    
-    console.log(`Created unlinked thread ${thread.id} for unknown sender: ${parsedEmail.senderEmail}`);
-    
-    return thread;
-  } catch (error) {
-    console.error('Error creating unlinked thread:', error);
-    throw error;
-  }
-}
-
-// Email webhook endpoint for n8n integration
-router.post('/test-email', async (req, res) => {
-  try {
-    console.log('Email webhook received from n8n');
+    const { trackingData, gmailData } = req.body;
     
     // Validate required fields
-    if (!req.body.from || !req.body.subject) {
-      return res.status(400).json({ error: 'Missing required email fields (from, subject)' });
+    if (!trackingData || !trackingData.messageId) {
+      return res.status(400).json({ error: 'Missing trackingData.messageId' });
     }
 
-    // Process the email
-    await processInboundEmail(req.body);
+    if (!gmailData || !gmailData.messageId) {
+      return res.status(400).json({ error: 'Missing gmailData.messageId' });
+    }
+
+    // Update the message delivery record with Gmail threading data
+    const n8nEmailService = require('../services/n8nEmailService');
+    
+    // Handle references properly for PostgreSQL array field
+    let emailReferences = null;
+    if (Array.isArray(gmailData.references) && gmailData.references.length > 0) {
+      emailReferences = gmailData.references.join(' ');
+    } else if (typeof gmailData.references === 'string' && gmailData.references.trim() !== '') {
+      emailReferences = gmailData.references.trim();
+    }
+    
+    await n8nEmailService.storeEmailMetadata(trackingData.messageId, {
+      email_message_id: gmailData.messageId,
+      email_thread_id: gmailData.threadId || null,
+      email_in_reply_to: gmailData.inReplyTo || null,
+      email_references: emailReferences,
+      n8n_response: {
+        provider: 'gmail-n8n-async',
+        gmailData: gmailData,
+        trackingData: trackingData,
+        processed_at: new Date().toISOString()
+      }
+    });
+
+    console.log(`Successfully updated Gmail metadata for message ${trackingData.messageId}:`, {
+      gmail_message_id: gmailData.messageId,
+      gmail_thread_id: gmailData.threadId,
+      has_references: !!(gmailData.references)
+    });
     
     res.status(200).json({ 
-      message: 'Email processed successfully',
+      message: 'Gmail metadata updated successfully',
+      messageId: trackingData.messageId,
       processed_at: new Date().toISOString()
     });
+    
   } catch (error) {
-    console.error('Email webhook error:', error);
+    console.error('Gmail metadata webhook error:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Email webhook endpoint for n8n integration with Gmail threading
+router.post('/test-email', async (req, res) => {
+  try {
+    console.log('Gmail email webhook received from n8n');
+
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+
+    for (const email of items) {
+      if (!email.from || !email.subject) {
+        return res.status(400).json({ error: 'Missing required email fields (from, subject)' });
+      }
+      await processGmailInboundEmail(email);
+    }
+
+    res.status(200).json({
+      message: `Processed ${items.length} Gmail email(s) successfully`,
+      processed_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Gmail email webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Test endpoint for webhook testing
 router.post('/test', async (req, res) => {

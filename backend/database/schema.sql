@@ -255,6 +255,93 @@ COMMENT ON FUNCTION auth.uid() IS 'Deprecated. Use auth.jwt() -> ''sub'' instead
 
 
 --
+-- Name: can_unsend_message(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_unsend_message(message_id uuid, user_id uuid) RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+    message_record RECORD;
+    time_limit_hours INTEGER := 24;
+BEGIN
+    -- Get message details
+    SELECT 
+        m.id,
+        m.origin_role,
+        m.channel,
+        m.created_at,
+        m.is_unsent,
+        m.direction,
+        mt.reservation_id,
+        r.property_id,
+        p.owner_id
+    INTO message_record
+    FROM public.messages m
+    LEFT JOIN public.message_threads mt ON m.thread_id = mt.id
+    LEFT JOIN public.reservations r ON mt.reservation_id = r.id
+    LEFT JOIN public.properties p ON r.property_id = p.id
+    WHERE m.id = message_id;
+    
+    -- Message must exist
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    
+    -- Message must not already be unsent
+    IF message_record.is_unsent THEN
+        RETURN false;
+    END IF;
+    
+    -- Must be in-app channel only
+    IF message_record.channel != 'inapp' THEN
+        RETURN false;
+    END IF;
+    
+    -- Must be within 24 hour time limit
+    IF message_record.created_at < NOW() - INTERVAL '24 hours' THEN
+        RETURN false;
+    END IF;
+    
+    -- Must be outgoing message (only sender can unsend)
+    IF message_record.direction != 'outgoing' THEN
+        RETURN false;
+    END IF;
+    
+    -- User must be the sender (host/admin who sent the message) or property owner
+    -- For host messages, check if user is admin or property owner
+    IF message_record.origin_role = 'host' THEN
+        -- Check if user is admin (can unsend any message) or property owner
+        IF EXISTS (
+            SELECT 1 FROM public.user_profiles up 
+            WHERE up.id = user_id 
+            AND (up.role = 'admin' OR up.id = message_record.owner_id)
+        ) THEN
+            RETURN true;
+        END IF;
+    END IF;
+    
+    -- For other roles, only allow if user is admin
+    IF EXISTS (
+        SELECT 1 FROM public.user_profiles up 
+        WHERE up.id = user_id AND up.role = 'admin'
+    ) THEN
+        RETURN true;
+    END IF;
+    
+    RETURN false;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION can_unsend_message(message_id uuid, user_id uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.can_unsend_message(message_id uuid, user_id uuid) IS 'Checks if a message can be unsent by a specific user based on time limits, channel, and permissions';
+
+
+--
 -- Name: cancel_cleaning_task_if_res_cancelled(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -278,19 +365,17 @@ $$;
 
 CREATE FUNCTION public.check_same_day_checkin(checkout_date date, unit_id uuid) RETURNS boolean
     LANGUAGE plpgsql
-    AS $$
-       DECLARE
+    AS $$DECLARE
          same_day_checkin_count integer;
        BEGIN
          SELECT COUNT(*) INTO same_day_checkin_count
          FROM reservations 
          WHERE room_unit_id = unit_id 
            AND check_in_date = checkout_date
-           AND status IN ('confirmed', 'checked_in');
+           AND status IN ('confirmed', 'new', 'checked_in');
            
          RETURN same_day_checkin_count > 0;
-       END;
-       $$;
+       END;$$;
 
 
 SET default_tablespace = '';
@@ -484,46 +569,26 @@ $$;
 
 CREATE FUNCTION public.enforce_cleaner_role() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-declare
-
-    user_role text;
-
-begin
-
-    -- Skip if cleaner_id is null
-
-    if new.cleaner_id is null then
-
-        return new;
-
-    end if;
-
-
-
-    -- Check if this user has cleaner role
-
-    select role into user_role
-
-    from user_profiles
-
-    where id = new.cleaner_id;
-
-
-
-    if user_role is distinct from 'cleaner' then
-
-        raise exception 'User % is not a cleaner', new.cleaner_id;
-
-    end if;
-
-
-
-    return new;
-
-end;
-
+    AS $$
+declare
+    user_role text;
+begin
+    -- Skip if cleaner_id is null
+    if new.cleaner_id is null then
+        return new;
+    end if;
+
+    -- Check if this user has cleaner role
+    select role into user_role
+    from user_profiles
+    where id = new.cleaner_id;
+
+    if user_role is distinct from 'cleaner' then
+        raise exception 'User % is not a cleaner', new.cleaner_id;
+    end if;
+
+    return new;
+end;
 $$;
 
 
@@ -533,18 +598,86 @@ $$;
 
 CREATE FUNCTION public.execute(query text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  EXECUTE query;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
+END;
+$$;
+
+
+--
+-- Name: extract_email_threading_info(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.extract_email_threading_info(webhook_data jsonb) RETURNS jsonb
+    LANGUAGE plpgsql
     AS $$
-
 BEGIN
-
-  EXECUTE query;
-
-EXCEPTION WHEN OTHERS THEN
-
-  RAISE EXCEPTION 'Error executing query: %', SQLERRM;
-
+  RETURN jsonb_build_object(
+    'messageId', COALESCE(webhook_data->>'messageId', webhook_data->'message-id'->>'value'),
+    'inReplyTo', COALESCE(webhook_data->>'inReplyTo', webhook_data->'in-reply-to'->>'value'),
+    'references', COALESCE(webhook_data->>'references', webhook_data->'references'->>'value'),
+    'threadId', webhook_data->>'threadId',
+    'subject', webhook_data->>'subject'
+  );
 END;
+$$;
 
+
+--
+-- Name: find_thread_by_email_data(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.find_thread_by_email_data(email_message_id text DEFAULT NULL::text, email_in_reply_to text DEFAULT NULL::text, email_thread_id text DEFAULT NULL::text, sender_email text DEFAULT NULL::text) RETURNS TABLE(thread_id uuid, match_method text, confidence text)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Priority 1: Match by In-Reply-To (highest confidence)
+  IF email_in_reply_to IS NOT NULL THEN
+    RETURN QUERY
+    SELECT mt.id, 'in_reply_to'::TEXT, 'high'::TEXT
+    FROM message_threads mt
+    INNER JOIN messages m ON m.thread_id = mt.id
+    INNER JOIN email_metadata em ON em.message_id = m.id
+    WHERE em.email_message_id = email_in_reply_to
+    LIMIT 1;
+    
+    IF FOUND THEN RETURN; END IF;
+  END IF;
+
+  -- Priority 2: Match by Gmail Thread ID (high confidence)
+  IF email_thread_id IS NOT NULL THEN
+    RETURN QUERY
+    SELECT mt.id, 'email_thread_id'::TEXT, 'high'::TEXT
+    FROM message_threads mt
+    INNER JOIN messages m ON m.thread_id = mt.id
+    INNER JOIN email_metadata em ON em.message_id = m.id
+    WHERE em.email_thread_id = email_thread_id
+    LIMIT 1;
+    
+    IF FOUND THEN RETURN; END IF;
+  END IF;
+
+  -- Priority 3: Match by sender email to recent active thread (medium confidence)
+  IF sender_email IS NOT NULL THEN
+    RETURN QUERY
+    SELECT mt.id, 'sender_email'::TEXT, 'medium'::TEXT
+    FROM message_threads mt
+    INNER JOIN reservations r ON r.id = mt.reservation_id
+    WHERE (r.guest_email = sender_email OR r.booking_email = sender_email)
+      AND mt.status IN ('open', 'closed')
+      AND r.check_out_date >= (CURRENT_DATE - INTERVAL '30 days')
+    ORDER BY mt.last_message_at DESC NULLS LAST
+    LIMIT 1;
+    
+    IF FOUND THEN RETURN; END IF;
+  END IF;
+
+  -- No match found
+  RETURN;
+END;
 $$;
 
 
@@ -554,32 +687,19 @@ $$;
 
 CREATE FUNCTION public.generate_checkin_token() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-DECLARE
-
-    token TEXT;
-
-BEGIN
-
-    LOOP
-
-        -- Generate random 8-digit number
-
-        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
-
-        -- Check if it exists
-
-        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
-
-    END LOOP;
-
-    NEW.check_in_token := token;
-
-    RETURN NEW;
-
-END;
-
+    AS $$
+DECLARE
+    token TEXT;
+BEGIN
+    LOOP
+        -- Generate random 8-digit number
+        token := lpad((trunc(random() * 90000000) + 10000000)::text, 8, '0');
+        -- Check if it exists
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM reservations WHERE check_in_token = token);
+    END LOOP;
+    NEW.check_in_token := token;
+    RETURN NEW;
+END;
 $$;
 
 
@@ -741,46 +861,48 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
 
 CREATE FUNCTION public.get_dashboard_stats() RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'totalReservations', (SELECT COUNT(*) FROM reservations),
+        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
+        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
+        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
+        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
+        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
+        'totalProperties', (SELECT COUNT(*) FROM properties),
+        'totalRooms', (SELECT COUNT(*) FROM rooms),
+        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
+        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
+        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
+    ) INTO result;
+    
+    RETURN result;
+END;
+$$;
+
+
+--
+-- Name: get_email_metadata(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_email_metadata(p_message_id uuid) RETURNS TABLE(email_message_id text, email_thread_id text, email_in_reply_to text, email_references text, email_name text, email_provider_data jsonb)
+    LANGUAGE plpgsql
     AS $$
-
-DECLARE
-
-    result JSON;
-
 BEGIN
-
-    SELECT json_build_object(
-
-        'totalReservations', (SELECT COUNT(*) FROM reservations),
-
-        'completedCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'completed'),
-
-        'pendingCheckins', (SELECT COUNT(*) FROM reservations WHERE status = 'invited'),
-
-        'verifiedCheckins', (SELECT COUNT(*) FROM guest_checkins WHERE admin_verified = true),
-
-        'todayCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date = CURRENT_DATE),
-
-        'upcomingCheckins', (SELECT COUNT(*) FROM reservations WHERE check_in_date > CURRENT_DATE AND check_in_date <= CURRENT_DATE + INTERVAL '7 days'),
-
-        'totalProperties', (SELECT COUNT(*) FROM properties),
-
-        'totalRooms', (SELECT COUNT(*) FROM rooms),
-
-        'totalUsers', (SELECT COUNT(*) FROM user_profiles),
-
-        'pendingCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'pending'),
-
-        'completedCleaningTasks', (SELECT COUNT(*) FROM cleaning_tasks WHERE status = 'completed')
-
-    ) INTO result;
-
-    
-
-    RETURN result;
-
+  RETURN QUERY
+  SELECT 
+    em.email_message_id,
+    em.email_thread_id,
+    em.email_in_reply_to,
+    em.email_references,
+    em.email_name,
+    em.email_provider_data
+  FROM email_metadata em
+  WHERE em.message_id = p_message_id;
 END;
-
 $$;
 
 
@@ -824,96 +946,51 @@ COMMENT ON FUNCTION public.get_group_reservations(master_booking_id text) IS 'Re
 
 CREATE FUNCTION public.get_guest_dashboard_data(reservation_token uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-DECLARE
-
-    result JSON;
-
-BEGIN
-
-    SELECT json_build_object(
-
-        'reservation', json_build_object(
-
-            'id', r.id,
-
-            'guest_name', r.guest_name,
-
-            'check_in_date', r.check_in_date,
-
-            'check_out_date', r.check_out_date,
-
-            'num_guests', r.num_guests,
-
-            'status', r.status
-
-        ),
-
-        'property', json_build_object(
-
-            'name', p.name,
-
-            'address', p.address,
-
-            'wifi_name', p.wifi_name,
-
-            'wifi_password', p.wifi_password,
-
-            'house_rules', p.house_rules,
-
-            'check_in_instructions', p.check_in_instructions,
-
-            'emergency_contact', p.emergency_contact,
-
-            'amenities', p.property_amenities
-
-        ),
-
-        'room', json_build_object(
-
-            'room_number', rm.room_number,
-
-            'room_name', rm.room_name,
-
-            'access_code', rm.access_code,
-
-            'access_instructions', rm.access_instructions,
-
-            'amenities', rm.room_amenities,
-
-            'max_guests', rm.max_guests,
-
-            'bed_configuration', rm.bed_configuration
-
-        ),
-
-        'checkin_status', CASE 
-
-            WHEN gc.id IS NOT NULL THEN 'completed'
-
-            ELSE 'pending'
-
-        END
-
-    ) INTO result
-
-    FROM reservations r
-
-    LEFT JOIN rooms rm ON r.room_id = rm.id
-
-    LEFT JOIN properties p ON rm.property_id = p.id
-
-    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
-
-    WHERE r.check_in_token = reservation_token;
-
-    
-
-    RETURN result;
-
-END;
-
+    AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'reservation', json_build_object(
+            'id', r.id,
+            'guest_name', r.guest_name,
+            'check_in_date', r.check_in_date,
+            'check_out_date', r.check_out_date,
+            'num_guests', r.num_guests,
+            'status', r.status
+        ),
+        'property', json_build_object(
+            'name', p.name,
+            'address', p.address,
+            'wifi_name', p.wifi_name,
+            'wifi_password', p.wifi_password,
+            'house_rules', p.house_rules,
+            'check_in_instructions', p.check_in_instructions,
+            'emergency_contact', p.emergency_contact,
+            'amenities', p.property_amenities
+        ),
+        'room', json_build_object(
+            'room_number', rm.room_number,
+            'room_name', rm.room_name,
+            'access_code', rm.access_code,
+            'access_instructions', rm.access_instructions,
+            'amenities', rm.room_amenities,
+            'max_guests', rm.max_guests,
+            'bed_configuration', rm.bed_configuration
+        ),
+        'checkin_status', CASE 
+            WHEN gc.id IS NOT NULL THEN 'completed'
+            ELSE 'pending'
+        END
+    ) INTO result
+    FROM reservations r
+    LEFT JOIN rooms rm ON r.room_id = rm.id
+    LEFT JOIN properties p ON rm.property_id = p.id
+    LEFT JOIN guest_checkins gc ON r.id = gc.reservation_id
+    WHERE r.check_in_token = reservation_token;
+    
+    RETURN result;
+END;
 $$;
 
 
@@ -923,98 +1000,52 @@ $$;
 
 CREATE FUNCTION public.get_owner_stats(owner_uuid uuid) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-
-DECLARE
-
-    result JSON;
-
-    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
-
-    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
-
-BEGIN
-
-    SELECT json_build_object(
-
-        'monthlyRevenue', COALESCE(SUM(CASE 
-
-            WHEN r.status = 'completed' 
-
-            AND r.check_in_date >= start_date 
-
-            AND r.check_in_date <= end_date 
-
-            THEN r.total_amount 
-
-        END), 0),
-
-        'occupancyRate', ROUND(
-
-            (COUNT(CASE 
-
-                WHEN r.check_in_date >= start_date 
-
-                AND r.check_in_date <= end_date 
-
-                THEN 1 
-
-            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
-
-        ),
-
-        'averageDailyRate', COALESCE(AVG(CASE 
-
-            WHEN r.status = 'completed' 
-
-            AND r.check_in_date >= start_date 
-
-            AND r.check_in_date <= end_date 
-
-            THEN r.total_amount 
-
-        END), 0),
-
-        'upcomingReservations', COUNT(CASE 
-
-            WHEN r.check_in_date > CURRENT_DATE 
-
-            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
-
-            THEN 1 
-
-        END),
-
-        'totalProperties', COUNT(DISTINCT p.id),
-
-        'totalRooms', COUNT(DISTINCT rm.id),
-
-        'pendingCleaningTasks', COUNT(CASE 
-
-            WHEN ct.status = 'pending' 
-
-            THEN 1 
-
-        END)
-
-    ) INTO result
-
-    FROM properties p
-
-    LEFT JOIN rooms rm ON p.id = rm.property_id
-
-    LEFT JOIN reservations r ON rm.id = r.room_id
-
-    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
-
-    WHERE p.owner_id = owner_uuid;
-
-    
-
-    RETURN result;
-
-END;
-
+    AS $$
+DECLARE
+    result JSON;
+    start_date DATE := DATE_TRUNC('month', CURRENT_DATE);
+    end_date DATE := DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day';
+BEGIN
+    SELECT json_build_object(
+        'monthlyRevenue', COALESCE(SUM(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'occupancyRate', ROUND(
+            (COUNT(CASE 
+                WHEN r.check_in_date >= start_date 
+                AND r.check_in_date <= end_date 
+                THEN 1 
+            END)::DECIMAL / EXTRACT(DAY FROM end_date)) * 100, 2
+        ),
+        'averageDailyRate', COALESCE(AVG(CASE 
+            WHEN r.status = 'completed' 
+            AND r.check_in_date >= start_date 
+            AND r.check_in_date <= end_date 
+            THEN r.total_amount 
+        END), 0),
+        'upcomingReservations', COUNT(CASE 
+            WHEN r.check_in_date > CURRENT_DATE 
+            AND r.check_in_date <= CURRENT_DATE + INTERVAL '7 days' 
+            THEN 1 
+        END),
+        'totalProperties', COUNT(DISTINCT p.id),
+        'totalRooms', COUNT(DISTINCT rm.id),
+        'pendingCleaningTasks', COUNT(CASE 
+            WHEN ct.status = 'pending' 
+            THEN 1 
+        END)
+    ) INTO result
+    FROM properties p
+    LEFT JOIN rooms rm ON p.id = rm.property_id
+    LEFT JOIN reservations r ON rm.id = r.room_id
+    LEFT JOIN cleaning_tasks ct ON rm.id = ct.room_id
+    WHERE p.owner_id = owner_uuid;
+    
+    RETURN result;
+END;
 $$;
 
 
@@ -1122,6 +1153,31 @@ $$;
 --
 
 COMMENT ON FUNCTION public.get_room_type_translated_text(p_room_type_id uuid, p_field_name character varying, p_language_code character varying) IS 'Helper function to retrieve translated room type text with fallback logic';
+
+
+--
+-- Name: get_thread_gmail_context(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_thread_gmail_context(p_thread_id uuid) RETURNS TABLE(latest_gmail_message_id text, gmail_thread_id text, in_reply_to text, email_references text)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    em.email_message_id,
+    em.email_thread_id,
+    em.email_in_reply_to,
+    em.email_references
+  FROM messages m
+  INNER JOIN email_metadata em ON em.message_id = m.id
+  WHERE m.thread_id = p_thread_id
+    AND m.channel = 'email'
+    AND em.email_message_id IS NOT NULL
+  ORDER BY m.created_at DESC
+  LIMIT 1;
+END;
+$$;
 
 
 --
@@ -1330,106 +1386,56 @@ $$;
 
 CREATE FUNCTION public.manage_cleaning_task() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-BEGIN
-
-    -- 1. Delete old cleaning task if room or checkout date changed
-
-    DELETE FROM cleaning_tasks
-
-    WHERE reservation_id = NEW.id;
-
-
-
-    -- 2. Insert new cleaning task
-
-    INSERT INTO cleaning_tasks (
-
-        property_id,
-
-        room_unit_id,
-
-        reservation_id,
-
-        cleaner_id,
-
-        task_date,
-
-        task_type,
-
-        status,
-
-        priority,
-
-        created_at,
-
-        updated_at
-
-    )
-
-    VALUES (
-
-        NEW.property_id,
-
-        NEW.room_unit_id,
-
-        NEW.id,
-
-        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
-
-        NEW.check_out_date,
-
-        'checkout',
-
-        'pending',
-
-        'normal', -- temporary, will recalc below
-
-        now(),
-
-        now()
-
-    );
-
-
-
-    -- 3. Recalculate priority for all tasks of this room & date
-
-    UPDATE cleaning_tasks ct
-
-    SET priority = CASE
-
-        WHEN EXISTS (
-
-            SELECT 1 FROM reservations r
-
-            WHERE r.room_unit_id = ct.room_unit_id
-
-              AND r.check_in_date = ct.task_date
-
-              AND r.id <> ct.reservation_id
-
-        )
-
-        THEN 'high'
-
-        ELSE 'normal'
-
-    END,
-
-    updated_at = now()
-
-    WHERE ct.room_unit_id = NEW.room_unit_id
-
-      AND ct.task_date = NEW.check_out_date;
-
-
-
-    RETURN NEW;
-
-END;
-
+    AS $$
+BEGIN
+    -- 1. Delete old cleaning task if room or checkout date changed
+    DELETE FROM cleaning_tasks
+    WHERE reservation_id = NEW.id;
+
+    -- 2. Insert new cleaning task
+    INSERT INTO cleaning_tasks (
+        property_id,
+        room_unit_id,
+        reservation_id,
+        cleaner_id,
+        task_date,
+        task_type,
+        status,
+        priority,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        NEW.property_id,
+        NEW.room_unit_id,
+        NEW.id,
+        (SELECT default_cleaner_id FROM properties WHERE id = NEW.property_id),
+        NEW.check_out_date,
+        'checkout',
+        'pending',
+        'normal', -- temporary, will recalc below
+        now(),
+        now()
+    );
+
+    -- 3. Recalculate priority for all tasks of this room & date
+    UPDATE cleaning_tasks ct
+    SET priority = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM reservations r
+            WHERE r.room_unit_id = ct.room_unit_id
+              AND r.check_in_date = ct.task_date
+              AND r.id <> ct.reservation_id
+        )
+        THEN 'high'
+        ELSE 'normal'
+    END,
+    updated_at = now()
+    WHERE ct.room_unit_id = NEW.room_unit_id
+      AND ct.task_date = NEW.check_out_date;
+
+    RETURN NEW;
+END;
 $$;
 
 
@@ -1568,34 +1574,20 @@ $$;
 
 CREATE FUNCTION public.match_documents(query_embedding public.vector, match_count integer DEFAULT NULL::integer, filter jsonb DEFAULT '{}'::jsonb) RETURNS TABLE(id bigint, content text, metadata jsonb, similarity double precision)
     LANGUAGE plpgsql
-    AS $$
-
-#variable_conflict use_column
-
-begin
-
-  return query
-
-  select
-
-    id,
-
-    content,
-
-    metadata,
-
-    1 - (documents.embedding <=> query_embedding) as similarity
-
-  from documents
-
-  where metadata @> filter
-
-  order by documents.embedding <=> query_embedding
-
-  limit match_count;
-
-end;
-
+    AS $$
+#variable_conflict use_column
+begin
+  return query
+  select
+    id,
+    content,
+    metadata,
+    1 - (documents.embedding <=> query_embedding) as similarity
+  from documents
+  where metadata @> filter
+  order by documents.embedding <=> query_embedding
+  limit match_count;
+end;
 $$;
 
 
@@ -1734,8 +1726,7 @@ $$;
 
 CREATE FUNCTION public.move_reservation(p_reservation_id uuid, p_new_room_unit_id uuid DEFAULT NULL::uuid, p_new_start_date date DEFAULT NULL::date, p_new_end_date date DEFAULT NULL::date) RETURNS TABLE(success boolean, error_message text)
     LANGUAGE plpgsql
-    AS $$
-DECLARE
+    AS $$DECLARE
     v_reservation record;
     v_target_start date;
     v_target_end date;
@@ -1752,7 +1743,7 @@ BEGIN
     END IF;
     
     -- Use provided values or keep existing ones
-    v_target_room := COALESCE(p_new_room_unit_id, v_reservation.room_unit_id);
+    v_target_room  := p_new_room_unit_id; 
     v_target_start := COALESCE(p_new_start_date, v_reservation.check_in_date);
     v_target_end := COALESCE(p_new_end_date, v_reservation.check_out_date);
     
@@ -1786,8 +1777,7 @@ BEGIN
     WHERE reservation_id = p_reservation_id;
     
     RETURN QUERY SELECT true, NULL::text;
-END;
-$$;
+END;$$;
 
 
 --
@@ -2069,22 +2059,14 @@ $$;
 
 CREATE FUNCTION public.set_default_name_en() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-
-BEGIN
-
-  -- If name_en is NULL, set it to the value of name
-
-  IF NEW.name_en IS NULL THEN
-
-    NEW.name_en := NEW.name;
-
-  END IF;
-
-  RETURN NEW;
-
-END;
-
+    AS $$
+BEGIN
+  -- If name_en is NULL, set it to the value of name
+  IF NEW.name_en IS NULL THEN
+    NEW.name_en := NEW.name;
+  END IF;
+  RETURN NEW;
+END;
 $$;
 
 
@@ -2094,13 +2076,12 @@ $$;
 
 CREATE FUNCTION public.set_default_thread_subject() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-DECLARE
+    AS $$DECLARE
   v_subject text;
 BEGIN
   -- Only fill when subject is empty/null AND we have a reservation_id
   IF (coalesce(trim(NEW.subject), '') = '' AND NEW.reservation_id IS NOT NULL) THEN
-    SELECT nullif(trim(concat_ws(' ', r.booking_name, r.booking_lastname)), '')
+    SELECT nullif(trim(concat_ws(' ', r.booking_name)), '')
       INTO v_subject
     FROM public.reservations r
     WHERE r.id = NEW.reservation_id;
@@ -2111,8 +2092,7 @@ BEGIN
   END IF;
 
   RETURN NEW;
-END;
-$$;
+END;$$;
 
 
 --
@@ -2214,6 +2194,42 @@ BEGIN
     v_segments := ARRAY[v_segment1_id, v_segment2_id];
     
     RETURN QUERY SELECT true, v_segments, NULL::text;
+END;
+$$;
+
+
+--
+-- Name: store_email_threading_data(uuid, text, text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_email_threading_data(message_id uuid, email_msg_id text, email_thread_id text, email_in_reply_to text, email_references text, provider_data jsonb DEFAULT NULL::jsonb) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO email_metadata (
+    message_id,
+    email_message_id,
+    email_thread_id,
+    email_in_reply_to,
+    email_references,
+    email_provider_data,
+    updated_at
+  ) VALUES (
+    message_id,
+    email_msg_id,
+    email_thread_id,
+    email_in_reply_to,
+    email_references,
+    provider_data,
+    NOW()
+  )
+  ON CONFLICT (message_id) DO UPDATE SET
+    email_message_id = EXCLUDED.email_message_id,
+    email_thread_id = EXCLUDED.email_thread_id,
+    email_in_reply_to = EXCLUDED.email_in_reply_to,
+    email_references = EXCLUDED.email_references,
+    email_provider_data = COALESCE(EXCLUDED.email_provider_data, email_metadata.email_provider_data),
+    updated_at = NOW();
 END;
 $$;
 
@@ -2523,16 +2539,16 @@ $$;
 CREATE FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
-       DECLARE
-         is_priority boolean;
-       BEGIN
-         SELECT check_same_day_checkin(task_date, unit_id) INTO is_priority;
-         
-         UPDATE cleaning_tasks 
-         SET priority = is_priority
-         WHERE task_date = task_date AND room_unit_id = unit_id;
-       END;
-       $$;
+DECLARE
+  is_priority boolean;
+BEGIN
+  SELECT check_same_day_checkin(task_date, unit_id) INTO is_priority;
+  
+  UPDATE cleaning_tasks 
+  SET priority = CASE WHEN is_priority THEN 'high' ELSE 'normal' END
+  WHERE task_date = task_date AND room_unit_id = unit_id;
+END;
+$$;
 
 
 --
@@ -2541,16 +2557,25 @@ CREATE FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id u
 
 CREATE FUNCTION public.update_cleaning_task_updated_at() RETURNS trigger
     LANGUAGE plpgsql
+    AS $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+
+--
+-- Name: update_email_metadata_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_email_metadata_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
     AS $$
-
-begin
-
-  new.updated_at = now();
-
-  return new;
-
-end;
-
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
 $$;
 
 
@@ -4177,6 +4202,193 @@ COMMENT ON TABLE public.comp_sets IS 'Competitor groupings by location or market
 
 
 --
+-- Name: email_metadata; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_metadata (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    message_id uuid NOT NULL,
+    email_message_id text,
+    email_thread_id text,
+    email_in_reply_to text,
+    email_references text,
+    email_provider_data jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    email_name text
+);
+
+
+--
+-- Name: TABLE email_metadata; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.email_metadata IS 'Dedicated table for email threading metadata, separated from messages for better performance';
+
+
+--
+-- Name: COLUMN email_metadata.email_message_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.email_metadata.email_message_id IS 'Gmail Message-ID header for threading';
+
+
+--
+-- Name: COLUMN email_metadata.email_thread_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.email_metadata.email_thread_id IS 'Gmail thread ID for conversation grouping';
+
+
+--
+-- Name: COLUMN email_metadata.email_in_reply_to; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.email_metadata.email_in_reply_to IS 'Gmail In-Reply-To header for reply threading';
+
+
+--
+-- Name: COLUMN email_metadata.email_references; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.email_metadata.email_references IS 'Gmail References header chain';
+
+
+--
+-- Name: COLUMN email_metadata.email_provider_data; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.email_metadata.email_provider_data IS 'Provider-specific data (n8n response, delivery info, etc.)';
+
+
+--
+-- Name: email_thread_matches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_thread_matches (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    thread_id uuid,
+    gmail_message_id character varying(255) NOT NULL,
+    match_method character varying(50) NOT NULL,
+    confidence_level character varying(20) NOT NULL,
+    match_details jsonb,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+--
+-- Name: message_threads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_threads (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    reservation_id uuid,
+    subject text,
+    status text DEFAULT 'open'::text NOT NULL,
+    assignee_user_id uuid,
+    priority text DEFAULT 'normal'::text,
+    last_message_at timestamp with time zone,
+    last_message_preview text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    email_thread_id character varying(255),
+    needs_linking boolean DEFAULT false,
+    CONSTRAINT message_threads_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]))),
+    CONSTRAINT message_threads_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text, 'archived'::text])))
+);
+
+
+--
+-- Name: COLUMN message_threads.email_thread_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_threads.email_thread_id IS 'Email thread ID for grouping related email messages';
+
+
+--
+-- Name: COLUMN message_threads.needs_linking; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_threads.needs_linking IS 'Flag for threads that need manual linking to reservations';
+
+
+--
+-- Name: messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.messages (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    thread_id uuid NOT NULL,
+    parent_message_id uuid,
+    origin_role text NOT NULL,
+    direction text NOT NULL,
+    channel text NOT NULL,
+    content text NOT NULL,
+    sent_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, COALESCE(content, ''::text))) STORED,
+    unsent_at timestamp with time zone,
+    unsent_by uuid,
+    is_unsent boolean DEFAULT false NOT NULL,
+    CONSTRAINT messages_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
+    CONSTRAINT messages_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text]))),
+    CONSTRAINT messages_origin_role_check CHECK ((origin_role = ANY (ARRAY['guest'::text, 'host'::text, 'assistant'::text, 'system'::text])))
+);
+
+
+--
+-- Name: COLUMN messages.unsent_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.messages.unsent_at IS 'Timestamp when the message was unsent';
+
+
+--
+-- Name: COLUMN messages.unsent_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.messages.unsent_by IS 'ID of the user who unsent the message';
+
+
+--
+-- Name: COLUMN messages.is_unsent; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.messages.is_unsent IS 'Flag to quickly identify unsent messages';
+
+
+--
+-- Name: email_threading_debug; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.email_threading_debug AS
+ SELECT m.id AS message_id,
+    m.thread_id,
+    mt.subject AS thread_subject,
+    m.content AS message_preview,
+    em.email_message_id,
+    em.email_thread_id,
+    em.email_in_reply_to,
+    em.email_references,
+    em.email_name,
+    em.email_provider_data,
+    m.origin_role,
+    m.direction,
+    m.channel,
+    m.created_at AS message_created_at,
+    r.id AS reservation_id,
+    r.booking_name,
+    r.booking_email
+   FROM (((public.messages m
+     LEFT JOIN public.email_metadata em ON ((em.message_id = m.id)))
+     LEFT JOIN public.message_threads mt ON ((mt.id = m.thread_id)))
+     LEFT JOIN public.reservations r ON ((r.id = mt.reservation_id)))
+  WHERE (m.channel = 'email'::text)
+  ORDER BY m.created_at DESC;
+
+
+--
 -- Name: events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4200,6 +4412,20 @@ CREATE TABLE public.events (
 --
 
 COMMENT ON TABLE public.events IS 'Conferences, festivals, and local events affecting demand';
+
+
+--
+-- Name: gmail_processed_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.gmail_processed_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    gmail_message_id character varying(255) NOT NULL,
+    thread_id uuid,
+    message_id uuid,
+    processed_at timestamp without time zone DEFAULT now(),
+    created_at timestamp without time zone DEFAULT now()
+);
 
 
 --
@@ -4561,6 +4787,7 @@ CREATE TABLE public.message_participants (
     last_read_message_id uuid,
     last_read_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    guest_id uuid,
     CONSTRAINT message_participants_participant_type_check CHECK ((participant_type = ANY (ARRAY['guest'::text, 'host'::text, 'assistant'::text, 'cleaner'::text, 'support'::text, 'system'::text])))
 );
 
@@ -4581,6 +4808,7 @@ CREATE TABLE public.message_templates (
     created_by uuid,
     created_at timestamp with time zone DEFAULT now(),
     enabled boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone DEFAULT now(),
     CONSTRAINT message_templates_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text])))
 );
 
@@ -4590,48 +4818,6 @@ CREATE TABLE public.message_templates (
 --
 
 COMMENT ON COLUMN public.message_templates.enabled IS 'Controls whether this template is active for automation scheduling. When false, templates are completely skipped during automation processing.';
-
-
---
--- Name: message_threads; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.message_threads (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    reservation_id uuid,
-    subject text,
-    status text DEFAULT 'open'::text NOT NULL,
-    assignee_user_id uuid,
-    priority text DEFAULT 'normal'::text,
-    last_message_at timestamp with time zone,
-    last_message_preview text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT message_threads_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]))),
-    CONSTRAINT message_threads_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text, 'archived'::text])))
-);
-
-
---
--- Name: messages; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.messages (
-    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    thread_id uuid NOT NULL,
-    parent_message_id uuid,
-    origin_role text NOT NULL,
-    direction text NOT NULL,
-    channel text NOT NULL,
-    content text NOT NULL,
-    sent_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, COALESCE(content, ''::text))) STORED,
-    CONSTRAINT messages_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
-    CONSTRAINT messages_direction_check CHECK ((direction = ANY (ARRAY['incoming'::text, 'outgoing'::text]))),
-    CONSTRAINT messages_origin_role_check CHECK ((origin_role = ANY (ARRAY['guest'::text, 'host'::text, 'assistant'::text, 'system'::text])))
-);
 
 
 --
@@ -5780,11 +5966,51 @@ ALTER TABLE ONLY public.comp_sets
 
 
 --
+-- Name: email_metadata email_metadata_message_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_metadata
+    ADD CONSTRAINT email_metadata_message_id_key UNIQUE (message_id);
+
+
+--
+-- Name: email_metadata email_metadata_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_metadata
+    ADD CONSTRAINT email_metadata_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: email_thread_matches email_thread_matches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_thread_matches
+    ADD CONSTRAINT email_thread_matches_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: gmail_processed_messages gmail_processed_messages_gmail_message_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gmail_processed_messages
+    ADD CONSTRAINT gmail_processed_messages_gmail_message_id_key UNIQUE (gmail_message_id);
+
+
+--
+-- Name: gmail_processed_messages gmail_processed_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gmail_processed_messages
+    ADD CONSTRAINT gmail_processed_messages_pkey PRIMARY KEY (id);
 
 
 --
@@ -6787,6 +7013,62 @@ CREATE INDEX idx_comp_sets_location ON public.comp_sets USING btree (location_id
 
 
 --
+-- Name: idx_email_matches_confidence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_matches_confidence ON public.email_thread_matches USING btree (confidence_level);
+
+
+--
+-- Name: idx_email_matches_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_matches_thread_id ON public.email_thread_matches USING btree (thread_id);
+
+
+--
+-- Name: idx_email_metadata_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_created_at ON public.email_metadata USING btree (created_at);
+
+
+--
+-- Name: idx_email_metadata_email_in_reply_to; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_email_in_reply_to ON public.email_metadata USING btree (email_in_reply_to);
+
+
+--
+-- Name: idx_email_metadata_email_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_email_message_id ON public.email_metadata USING btree (email_message_id);
+
+
+--
+-- Name: idx_email_metadata_email_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_email_name ON public.email_metadata USING btree (email_name);
+
+
+--
+-- Name: idx_email_metadata_email_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_email_thread_id ON public.email_metadata USING btree (email_thread_id);
+
+
+--
+-- Name: idx_email_metadata_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_metadata_message_id ON public.email_metadata USING btree (message_id);
+
+
+--
 -- Name: idx_events_daterange; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6798,6 +7080,13 @@ CREATE INDEX idx_events_daterange ON public.events USING btree (start_date, end_
 --
 
 CREATE INDEX idx_events_location_daterange ON public.events USING btree (location_id, start_date, end_date) WHERE is_active;
+
+
+--
+-- Name: idx_gmail_processed_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_gmail_processed_message_id ON public.gmail_processed_messages USING btree (gmail_message_id);
 
 
 --
@@ -6948,6 +7237,13 @@ CREATE INDEX idx_messages_channel ON public.messages USING btree (channel);
 
 
 --
+-- Name: idx_messages_is_unsent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_is_unsent ON public.messages USING btree (is_unsent);
+
+
+--
 -- Name: idx_messages_origin_role; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6959,6 +7255,13 @@ CREATE INDEX idx_messages_origin_role ON public.messages USING btree (origin_rol
 --
 
 CREATE INDEX idx_messages_thread_created ON public.messages USING btree (thread_id, created_at DESC);
+
+
+--
+-- Name: idx_messages_unsent_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_unsent_at ON public.messages USING btree (unsent_at) WHERE (unsent_at IS NOT NULL);
 
 
 --
@@ -7396,6 +7699,20 @@ CREATE INDEX idx_thread_channels_thread_id ON public.thread_channels USING btree
 
 
 --
+-- Name: idx_threads_email_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_threads_email_thread_id ON public.message_threads USING btree (email_thread_id) WHERE (email_thread_id IS NOT NULL);
+
+
+--
+-- Name: idx_threads_needs_linking; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_threads_needs_linking ON public.message_threads USING btree (needs_linking) WHERE (needs_linking = true);
+
+
+--
 -- Name: idx_user_profiles_active; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7708,6 +8025,13 @@ CREATE TRIGGER trg_update_thread_on_message_insert AFTER INSERT ON public.messag
 --
 
 CREATE TRIGGER trg_update_thread_on_message_update AFTER UPDATE ON public.messages FOR EACH ROW WHEN (((old.content IS DISTINCT FROM new.content) OR (old.created_at IS DISTINCT FROM new.created_at))) EXECUTE FUNCTION public.update_thread_metadata();
+
+
+--
+-- Name: email_metadata trigger_email_metadata_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_email_metadata_updated_at BEFORE UPDATE ON public.email_metadata FOR EACH ROW EXECUTE FUNCTION public.update_email_metadata_updated_at();
 
 
 --
@@ -8044,6 +8368,22 @@ ALTER TABLE ONLY public.comp_members
 
 
 --
+-- Name: email_metadata email_metadata_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_metadata
+    ADD CONSTRAINT email_metadata_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+
+--
+-- Name: email_thread_matches email_thread_matches_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_thread_matches
+    ADD CONSTRAINT email_thread_matches_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id);
+
+
+--
 -- Name: cleaning_tasks fk_cleaning_task_property; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8073,6 +8413,22 @@ ALTER TABLE ONLY public.cleaning_tasks
 
 ALTER TABLE ONLY public.scheduled_messages
     ADD CONSTRAINT fk_scheduled_messages_rule_id FOREIGN KEY (rule_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
+
+
+--
+-- Name: gmail_processed_messages gmail_processed_messages_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gmail_processed_messages
+    ADD CONSTRAINT gmail_processed_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id);
+
+
+--
+-- Name: gmail_processed_messages gmail_processed_messages_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gmail_processed_messages
+    ADD CONSTRAINT gmail_processed_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id);
 
 
 --
@@ -8522,3 +8878,238 @@ ALTER TABLE auth.instances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.mfa_amr_claims ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: mfa_challenges; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_challenges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mfa_factors; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.mfa_factors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: one_time_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.one_time_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: refresh_tokens; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.refresh_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_relay_states; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.saml_relay_states ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schema_migrations; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sessions; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_domains; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_domains ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sso_providers; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.sso_providers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: auth; Owner: -
+--
+
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: properties Service role can manage properties; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage properties" ON public.properties USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: property_images Service role can manage property_images; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage property_images" ON public.property_images USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Service role can manage user_profiles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage user_profiles" ON public.user_profiles USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: webhook_events Service role can manage webhook_events; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can manage webhook_events" ON public.webhook_events USING ((auth.role() = 'service_role'::text));
+
+
+--
+-- Name: user_profiles Users can view own profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own profile" ON public.user_profiles FOR SELECT USING ((auth.uid() = id));
+
+
+--
+-- Name: cleaning_tasks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cleaning_tasks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_deliveries message_deliveries_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY message_deliveries_policy ON public.message_deliveries USING ((EXISTS ( SELECT 1
+   FROM (((public.messages m
+     JOIN public.message_threads mt ON ((m.thread_id = mt.id)))
+     JOIN public.reservations r ON ((mt.reservation_id = r.id)))
+     JOIN public.properties p ON ((r.property_id = p.id)))
+  WHERE ((m.id = message_deliveries.message_id) AND ((p.owner_id = auth.uid()) OR (auth.uid() IN ( SELECT user_profiles.id
+           FROM public.user_profiles
+          WHERE (user_profiles.role = 'admin'::public.user_role))) OR (auth.uid() IS NULL))))));
+
+
+--
+-- Name: properties; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: property_images; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.property_images ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: reservations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_types; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_types ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: room_units; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.room_units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: webhook_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects Allow message attachments uploads; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Allow message attachments uploads" ON storage.objects USING ((bucket_id = 'message-attachments'::text)) WITH CHECK ((bucket_id = 'message-attachments'::text));
+
+
+--
+-- Name: objects Service role can manage guest documents; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage guest documents" ON storage.objects USING ((bucket_id = 'guest-documents'::text)) WITH CHECK ((bucket_id = 'guest-documents'::text));
+
+
+--
+-- Name: objects Service role can manage property images; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY "Service role can manage property images" ON storage.objects USING (((bucket_id = 'property-images'::text) AND (auth.role() = 'service_role'::text)));
+
+
+--
+-- Name: buckets; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: buckets_analytics; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.buckets_analytics ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: migrations; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: objects; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: prefixes; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.prefixes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: s3_multipart_uploads_parts; Type: ROW SECURITY; Schema: storage; Owner: -
+--
+
+ALTER TABLE storage.s3_multipart_uploads_parts ENABLE ROW LEVEL SECURITY;
+
+--
+-- PostgreSQL database dump complete
+--
+

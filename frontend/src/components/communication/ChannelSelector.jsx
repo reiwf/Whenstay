@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import airbnbLogo from '../../../shared/airbnblogo.png';
 import bookingLogo from '../../../shared/bookinglogo.png';
+import staylabelLogo from'../../../shared/staylabellogo.png';
 
 const CHANNEL_CONFIG = {
   beds24:    { label: 'Beds24',      icon: '🛏️',  color: 'bg-orange-100 text-orange-800' },
   whatsapp:  { label: 'WhatsApp',    icon: '🟢',  color: 'bg-green-100 text-green-800'   },
-  inapp:     { label: 'In-App',      icon: '💬',  color: 'bg-blue-100 text-blue-800'     },
+  inapp:     { label: 'In-App',      icon: null,  color: 'bg-blue-100 text-blue-800', logo: 'staylabel'     },
   email:     { label: 'Email',       icon: '✉️',  color: 'bg-purple-100 text-purple-800' },
   sms:       { label: 'SMS',         icon: '📱',  color: 'bg-yellow-100 text-yellow-800' },
   airbnb:    { label: 'Airbnb',      icon: null,  color: 'bg-orange-100 text-orange-800',  logo: 'airbnb' },
@@ -41,7 +42,9 @@ function ChannelRow({ channel, isActive, isHighlighted, onClick, onMouseEnter })
           <img src={airbnbLogo} alt="" className="h-4 w-4 object-contain" />
         ) : cfg.logo === 'booking' ? (
           <img src={bookingLogo} alt="" className="h-4 w-4 object-contain" />
-        ) : cfg.icon ? (
+        ) : cfg.logo === 'staylabel' ? (
+          <img src={staylabelLogo} alt="" className="h-4 w-4 object-contain" />
+        ) :cfg.icon ? (
           <span className="text-base leading-none">{cfg.icon}</span>
         ) : (
           <span className="inline-block h-4 w-4 rounded bg-slate-300/60" />
@@ -173,6 +176,8 @@ export default function ChannelSelector({
             <img src={airbnbLogo} alt="" className="h-4 w-4 object-contain" />
           ) : selectedCfg.logo === 'booking' ? (
             <img src={bookingLogo} alt="" className="h-4 w-4 object-contain" />
+          ) : selectedCfg.logo === 'staylabel' ? (
+            <img src={staylabelLogo} alt="" className="h-4 w-4 object-contain" />
           ) : selectedCfg.icon ? (
             <span className="text-sm">{selectedCfg.icon}</span>
           ) : (

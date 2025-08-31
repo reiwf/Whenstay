@@ -920,6 +920,211 @@ router.get('/threads/:threadId/suggestions', async (req, res) => {
   }
 });
 
+// GET /api/communication/test/n8n - Test N8N webhook connectivity
+router.get('/test/n8n', async (req, res) => {
+  try {
+    const n8nEmailService = require('../services/n8nEmailService');
+    
+    console.log('Testing N8N webhook connectivity...');
+    const testResult = await n8nEmailService.testWebhookConnectivity();
+    
+    res.json({
+      service: 'N8N Email Webhook',
+      ...testResult
+    });
+
+  } catch (error) {
+    console.error('Error testing N8N connectivity:', error);
+    res.status(500).json({ 
+      service: 'N8N Email Webhook',
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
+// GET /api/communication/test/email-threading - Test complete Gmail email threading flow
+router.get('/test/email-threading', async (req, res) => {
+  try {
+    console.log('🔄 Testing complete Gmail email threading flow...');
+    
+    const communicationService = require('../services/communicationService');
+    const n8nEmailService = require('../services/n8nEmailService');
+    
+    const testResults = {
+      success: false,
+      steps: [],
+      errors: []
+    };
+
+    // Step 1: Test database schema
+    try {
+      console.log('📋 Step 1: Testing database schema...');
+      const { data: schemaTest } = await supabaseAdmin
+        .from('message_deliveries')
+        .select('email_message_id, email_thread_id, email_in_reply_to, email_references')
+        .limit(1);
+      
+      testResults.steps.push({
+        step: 1,
+        name: 'Database Schema Check',
+        success: true,
+        message: 'Gmail threading columns exist in message_deliveries table'
+      });
+    } catch (schemaError) {
+      testResults.steps.push({
+        step: 1,
+        name: 'Database Schema Check',
+        success: false,
+        error: schemaError.message
+      });
+      testResults.errors.push(`Schema Error: ${schemaError.message}`);
+    }
+
+    // Step 2: Test N8N service configuration
+    console.log('🔧 Step 2: Testing N8N service configuration...');
+    const n8nStatus = n8nEmailService.getServiceStatus();
+    testResults.steps.push({
+      step: 2,
+      name: 'N8N Service Configuration',
+      success: n8nStatus.enabled,
+      message: n8nStatus.enabled ? 'N8N service is configured' : 'N8N service not configured',
+      details: n8nStatus
+    });
+
+    if (!n8nStatus.enabled) {
+      testResults.errors.push('N8N email service is not configured (missing N8N_EMAIL_WEBHOOK_URL)');
+    }
+
+    // Step 3: Create a test thread for threading context testing
+    console.log('🧵 Step 3: Creating test thread for threading context...');
+    try {
+      const testThread = await communicationService.createThread({
+        subject: 'Test Gmail Threading Flow',
+        participants: [{
+          type: 'guest',
+          external_address: 'test@example.com',
+          display_name: 'Test Guest'
+        }],
+        channels: [{
+          channel: 'email',
+          external_thread_id: null
+        }]
+      });
+
+      testResults.steps.push({
+        step: 3,
+        name: 'Test Thread Creation',
+        success: true,
+        message: 'Test thread created successfully',
+        details: { threadId: testThread.id }
+      });
+
+      // Step 4: Test Gmail threading context retrieval
+      console.log('📧 Step 4: Testing Gmail threading context retrieval...');
+      const threadingContext = await communicationService.getThreadGmailContext(testThread.id);
+      
+      testResults.steps.push({
+        step: 4,
+        name: 'Gmail Threading Context',
+        success: true,
+        message: 'Gmail threading context retrieved (null values expected for new thread)',
+        details: threadingContext
+      });
+
+      // Step 5: Test email metadata storage simulation
+      console.log('💾 Step 5: Simulating email metadata storage...');
+      
+      // Create a test message first
+      const testMessage = await communicationService.sendMessage({
+        thread_id: testThread.id,
+        channel: 'inapp', // Use inapp to avoid actual email sending
+        content: 'Test message for threading metadata',
+        origin_role: 'host'
+      });
+
+      // Simulate storing email metadata as if N8N returned Gmail data
+      const simulatedGmailData = {
+        email_message_id: `<test-${Date.now()}@gmail.com>`,
+        email_thread_id: `thread_${Date.now()}`,
+        email_in_reply_to: null,
+        email_references: null,
+        n8n_response: { test: true, timestamp: new Date().toISOString() }
+      };
+
+      await n8nEmailService.storeEmailMetadata(testMessage.id, simulatedGmailData);
+
+      testResults.steps.push({
+        step: 5,
+        name: 'Email Metadata Storage',
+        success: true,
+        message: 'Simulated Gmail metadata stored successfully',
+        details: { messageId: testMessage.id, gmailData: simulatedGmailData }
+      });
+
+      // Step 6: Test threading context retrieval with stored data
+      console.log('🔄 Step 6: Testing threading context with stored data...');
+      const updatedContext = await communicationService.getThreadGmailContext(testThread.id);
+      
+      const hasStoredData = updatedContext.latestGmailMessageId !== null;
+      testResults.steps.push({
+        step: 6,
+        name: 'Threading Context with Stored Data',
+        success: hasStoredData,
+        message: hasStoredData ? 'Gmail threading context retrieved with stored data' : 'No stored threading data found',
+        details: updatedContext
+      });
+
+      if (!hasStoredData) {
+        testResults.errors.push('Gmail threading data was not properly stored or retrieved');
+      }
+
+      // Cleanup test data
+      console.log('🧹 Cleaning up test data...');
+      await supabaseAdmin.from('message_deliveries').delete().eq('message_id', testMessage.id);
+      await supabaseAdmin.from('messages').delete().eq('id', testMessage.id);
+      await supabaseAdmin.from('message_threads').delete().eq('id', testThread.id);
+
+    } catch (testError) {
+      testResults.steps.push({
+        step: 3,
+        name: 'Threading Flow Test',
+        success: false,
+        error: testError.message
+      });
+      testResults.errors.push(`Threading Test Error: ${testError.message}`);
+    }
+
+    // Overall success determination
+    const successfulSteps = testResults.steps.filter(s => s.success).length;
+    const totalSteps = testResults.steps.length;
+    testResults.success = successfulSteps === totalSteps && testResults.errors.length === 0;
+
+    // Summary
+    testResults.summary = {
+      totalSteps: totalSteps,
+      successfulSteps: successfulSteps,
+      failedSteps: totalSteps - successfulSteps,
+      overallSuccess: testResults.success,
+      recommendation: testResults.success 
+        ? 'Gmail email threading is properly configured and should work correctly'
+        : 'Some issues detected - check errors and failed steps above'
+    };
+
+    console.log('✅ Gmail threading flow test completed:', testResults.summary);
+
+    res.json(testResults);
+
+  } catch (error) {
+    console.error('❌ Error testing Gmail threading flow:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      message: 'Failed to complete Gmail threading flow test'
+    });
+  }
+});
+
 // GET /api/communication/reservation/:reservationId/group-info - Get group booking info for a reservation
 router.get('/reservation/:reservationId/group-info', async (req, res) => {
   try {

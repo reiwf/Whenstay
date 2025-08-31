@@ -369,30 +369,67 @@ class CommunicationService {
     await this.updateDeliveryStatus(messageId, 'whatsapp', 'sent');
   }
 
-  async sendEmail(messageId, content, data) {
+  // Helper method to get Gmail threading context for a thread
+  async getThreadGmailContext(threadId) {
     try {
-      console.log('Sending email via EmailService:', { messageId, content });
-
-      // Get the message and thread information to find the guest and reservation details
-      const { data: message, error: msgError } = await this.supabase
+      // Get the latest Gmail message data from this thread using email_metadata table
+      const { data: latestGmailMessage } = await this.supabase
         .from('messages')
         .select(`
-          *,
-          message_threads!inner(
-            reservation_id,
-            subject,
-            reservations!inner(
-              id,
-              booking_name,
-              booking_lastname,
-              booking_email,
-              guest_email,
-              check_in_date,
-              check_out_date,
-              properties!inner(name)
-            )
+          id,
+          created_at,
+          email_metadata!inner(
+            email_message_id,
+            email_thread_id,
+            email_in_reply_to,
+            email_references
           )
         `)
+        .eq('thread_id', threadId)
+        .eq('channel', 'email')
+        .not('email_metadata.email_message_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestGmailMessage?.email_metadata) {
+        const metadata = latestGmailMessage.email_metadata;
+        return {
+          latestGmailMessageId: metadata.email_message_id,
+          gmailThreadId: metadata.email_thread_id,
+          inReplyTo: metadata.email_in_reply_to,
+          references: metadata.email_references
+        };
+      }
+
+      // No Gmail threading data found
+      return {
+        latestGmailMessageId: null,
+        gmailThreadId: null,
+        inReplyTo: null,
+        references: null
+      };
+
+    } catch (error) {
+      console.error('Error getting Gmail threading context:', error);
+      return {
+        latestGmailMessageId: null,
+        gmailThreadId: null,
+        inReplyTo: null,
+        references: null
+      };
+    }
+  }
+
+  async sendEmail(messageId, content, data) {
+    try {
+      console.log('Sending email via n8n with HTML template:', { messageId, content });
+
+      // FIXED: Use resilient separate queries instead of complex inner joins
+      // Step 1: Get the basic message data
+      const { data: message, error: msgError } = await this.supabase
+        .from('messages')
+        .select('*')
         .eq('id', messageId)
         .single();
 
@@ -400,80 +437,196 @@ class CommunicationService {
         throw new Error('Message not found');
       }
 
-      const reservation = message.message_threads.reservations;
-      if (!reservation) {
-        throw new Error('No reservation found for this message thread');
+      // Step 2: Get thread information (fixed column names)
+      const { data: thread, error: threadError } = await this.supabase
+        .from('message_threads')
+        .select(`
+          id,
+          reservation_id,
+          subject,
+          reservations(
+            id,
+            booking_name,
+            booking_lastname,
+            booking_email,
+            check_in_date,
+            check_out_date,
+            properties(name)
+          )
+        `)
+        .eq('id', message.thread_id)
+        .single();
+
+      if (threadError) {
+        throw new Error(`Thread not found for message ${messageId}: ${threadError.message}`);
       }
 
-      // Determine guest details
-      const guestName = reservation.booking_lastname 
-        ? `${reservation.booking_name} ${reservation.booking_lastname}`
-        : reservation.booking_name || 'Guest';
+      // Step 3: Get channel mapping (use left join, don't fail if missing)
+      const { data: emailChannels } = await this.supabase
+        .from('thread_channels')
+        .select('channel, external_thread_id')
+        .eq('thread_id', thread.id)
+        .eq('channel', 'email');
+
+      // Step 4: Get Gmail threading context
+      const gmailContext = await this.getThreadGmailContext(thread.id);
+      console.log('Gmail threading context:', gmailContext);
+
+      // Get Gmail threadId from channel mapping (may be null for new conversations)
+      const emailChannel = emailChannels?.find(tc => tc.channel === 'email');
+      const externalThreadId = emailChannel?.external_thread_id;
       
-      const guestEmail = reservation.guest_email || reservation.booking_email;
-      
-      if (!guestEmail) {
-        throw new Error('No guest email found for this reservation');
+      // Use Gmail threading context or fallback to external thread ID
+      const gmailThreadId = gmailContext.gmailThreadId || externalThreadId;
+
+      // ENHANCEMENT: If no email channel mapping exists, create one for future use
+      if (!emailChannel && gmailContext.gmailThreadId) {
+        try {
+          console.log(`Creating missing email channel mapping for thread ${thread.id} with Gmail threadId ${gmailContext.gmailThreadId}`);
+          await this.addThreadChannels(thread.id, [{
+            channel: 'email',
+            external_thread_id: gmailContext.gmailThreadId
+          }]);
+        } catch (channelError) {
+          console.warn('Could not create email channel mapping (non-critical):', channelError.message);
+          // Continue - this is not critical for sending emails
+        }
       }
 
-      // Prepare reservation data for template
-      const reservationData = {
-        reservationId: reservation.id,
-        propertyName: reservation.properties?.name || 'Staylabel',
-        checkInDate: reservation.check_in_date,
-        checkOutDate: reservation.check_out_date
+      // Determine recipient email and name
+      let recipientEmail, recipientName;
+      
+      if (thread.reservations) {
+        // Thread linked to reservation - use booking_email
+        const reservation = thread.reservations;
+        recipientName = reservation.booking_lastname 
+          ? `${reservation.booking_name} ${reservation.booking_lastname}`
+          : reservation.booking_name || 'Guest';
+        recipientEmail = reservation.booking_email;
+      } else {
+        // Standalone thread - get recipient from participants
+        const { data: participant } = await this.supabase
+          .from('message_participants')
+          .select('external_address, display_name')
+          .eq('thread_id', thread.id)
+          .eq('participant_type', 'guest')
+          .single();
+        
+        if (participant) {
+          recipientEmail = participant.external_address;
+          recipientName = participant.display_name || participant.external_address;
+        }
+      }
+
+      // ENHANCEMENT: If no recipient found, try to get it from thread participants
+      if (!recipientEmail) {
+        const { data: guestParticipant } = await this.supabase
+          .from('message_participants')
+          .select('external_address, display_name')
+          .eq('thread_id', thread.id)
+          .eq('participant_type', 'guest')
+          .not('external_address', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (guestParticipant?.external_address) {
+          recipientEmail = guestParticipant.external_address;
+          recipientName = guestParticipant.display_name || recipientEmail;
+          console.log(`Using email from thread participants: ${recipientEmail}`);
+        }
+      }
+      
+      if (!recipientEmail) {
+        throw new Error('No recipient email found for this thread');
+      }
+
+      // Prepare Gmail threading headers using the retrieved context
+      const threadingHeaders = {};
+      if (gmailContext.latestGmailMessageId) {
+        threadingHeaders['In-Reply-To'] = gmailContext.latestGmailMessageId;
+        
+        // Build References header from existing references chain
+        const references = [];
+        if (gmailContext.references) {
+          references.push(gmailContext.references);
+        }
+        references.push(gmailContext.latestGmailMessageId);
+        threadingHeaders['References'] = references.join(' ');
+      }
+
+      // Prepare reservation data for HTML template
+      const reservationData = thread.reservations ? {
+        reservationId: thread.reservations.id,
+        propertyName: thread.reservations.properties?.name || 'Staylabel',
+        checkInDate: thread.reservations.check_in_date,
+        checkOutDate: thread.reservations.check_out_date
+      } : {};
+
+      // Use n8nEmailService with HTML template functionality
+      const n8nEmailService = require('./n8nEmailService');
+      
+      // Prepare threading data for Gmail threading
+      const threadingData = {
+        messageId: gmailContext.latestGmailMessageId,
+        inReplyTo: gmailContext.latestGmailMessageId,
+        references: gmailContext.references,
+        threadId: gmailThreadId
       };
 
-      // Generate email subject if not provided
-      const emailSubject = message.message_threads.subject || 
-        `Message from ${reservationData.propertyName}`;
+      console.log('Sending HTML templated email via n8nEmailService:', {
+        to: recipientEmail,
+        threadId: gmailThreadId,
+        hasThreadingData: Object.keys(threadingData).length > 0,
+        hasReservationData: Object.keys(reservationData).length > 0
+      });
 
-      // Use EmailService to send the professional email
-      const emailService = require('./emailService');
-      await emailService.sendGenericMessage(
-        guestEmail,
-        guestName,
-        emailSubject,
+      // Send using n8nEmailService with HTML template
+      const result = await n8nEmailService.sendGenericMessage(
+        recipientEmail,
+        recipientName,
+        `Re: ${thread.subject || 'Message from Staylabel'}`,
         content,
-        reservationData,
-        messageId // Pass messageId for threading metadata
+        {
+          ...reservationData,
+          threadId: message.thread_id,
+          emailThreadId: gmailThreadId,
+          emailInReplyTo: gmailContext.latestGmailMessageId,
+          emailReferences: gmailContext.references
+        },
+        messageId
       );
+
+      console.log('N8N email service response:', result);
 
       // Update delivery status to sent
       await this.updateDeliveryStatus(messageId, 'email', 'sent');
 
-      console.log(`Successfully sent email ${messageId} to ${guestEmail}`);
+      console.log(`Successfully sent email ${messageId} to ${recipientEmail} via n8n`);
 
     } catch (error) {
-      console.error('Error sending email via EmailService:', error);
+      console.error('Error sending email via n8n:', error);
       
       // Categorize the error type for appropriate handling
-      const isConfigError = error.message?.includes('Resend API key not configured') ||
-                           error.message?.includes('RESEND_API_KEY');
-      const isEmailError = error.message?.includes('No guest email found');
-      const isDataError = error.message?.includes('Message not found') ||
-                         error.message?.includes('No reservation found');
-      const isServiceError = error.message?.includes('Failed to send message email');
+      const isConfigError = error.message?.includes('N8N_EMAIL_WEBHOOK_URL not configured');
+      const isEmailError = error.message?.includes('No recipient email found');
+      const isDataError = error.message?.includes('Message not found');
+      const isWebhookError = error.message?.includes('N8N webhook failed');
 
       // Handle different error types appropriately
       if (isConfigError) {
-        // Configuration errors: fail but indicate it's a setup issue
         await this.updateDeliveryStatus(messageId, 'email', 'failed', `Configuration error: ${error.message}`);
         throw error;
       } else if (isEmailError) {
-        // Missing email address: fail with clear message
         await this.updateDeliveryStatus(messageId, 'email', 'failed', `Email address missing: ${error.message}`);
         throw error;
       } else if (isDataError) {
-        // Data errors: fail immediately, don't retry
         await this.updateDeliveryStatus(messageId, 'email', 'failed', error.message);
         throw error;
-      } else if (isServiceError) {
-        // Email service errors: could be temporary
-        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Email service error: ${error.message}`);
+      } else if (isWebhookError) {
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Webhook error: ${error.message}`);
         throw error;
       } else {
-        // Unknown errors: fail safely
         await this.updateDeliveryStatus(messageId, 'email', 'failed', `Unknown error: ${error.message}`);
         throw error;
       }
