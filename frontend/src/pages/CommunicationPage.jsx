@@ -20,6 +20,7 @@ export default function CommunicationPage() {
     unsendMessage,
     loadThreads,
     updateThreadStatus,
+    bulkUpdateThreadStatus,
     selectThread,
     markMessageAsRead,
     reservation,
@@ -82,6 +83,15 @@ export default function CommunicationPage() {
     }
   };
 
+  const handleBulkClose = async (threadIds) => {
+    try {
+      await bulkUpdateThreadStatus(threadIds, 'closed');
+    } catch (error) {
+      console.error('Bulk close failed:', error);
+      throw error;
+    }
+  };
+
   return (
     <DashboardLayout
       activeSection="communication"
@@ -119,46 +129,7 @@ export default function CommunicationPage() {
                   </>
                 )}
               </div>
-
-              <div>
-                <h1 className="text-xl lg:text-2xl font-bold text-primary-900">Communication</h1>
-                <p className="text-sm text-primary-600 mt-1 hidden sm:block">
-                  {activeTab === 'messages' 
-                    ? 'Manage guest conversations across all channels'
-                    : 'Control automated message templates'
-                  }
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {activeTab === 'messages' && (
-                <div className={`flex items-center gap-2 px-2 lg:px-3 py-1 rounded-full text-xs font-medium ${
-                  connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-100 text-leaf-700' : 
-                  connectionStatus === 'CONNECTING' ? 'bg-yellow-100 text-yellow-700' : 
-                  'bg-gray-100 text-gray-600'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${
-                    connectionStatus === 'SUBSCRIBED' ? 'bg-leaf-500' : 
-                    connectionStatus === 'CONNECTING' ? 'bg-yellow-500' : 'bg-gray-400'
-                  }`}></div>
-                  <span className="hidden sm:inline">
-                    {connectionStatus === 'SUBSCRIBED' ? 'Connected' : 
-                     connectionStatus === 'CONNECTING' ? 'Connecting' : 'Disconnected'}
-                  </span>
-                </div>
-              )}
-              <button
-                onClick={activeTab === 'messages' ? loadThreads : () => window.location.reload()}
-                disabled={loading}
-                className="px-3 lg:px-4 py-2 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 disabled:opacity-50 transition-colors"
-              >
-                <span className="hidden sm:inline">{loading ? 'Refreshing...' : 'Refresh'}</span>
-                <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
+            </div>           
           </div>
           
           {/* Tab Navigation */}
@@ -211,6 +182,7 @@ export default function CommunicationPage() {
                     selectedThread={selectedThread}
                     onThreadSelect={handleThreadSelect}
                     loading={loading}
+                    onBulkClose={handleBulkClose}
                   />
                 </div>
 
@@ -292,6 +264,7 @@ export default function CommunicationPage() {
                       setShowInboxOverlay(false);
                     }}
                     loading={loading}
+                    onBulkClose={handleBulkClose}
                   />
                 </div>
               </div>

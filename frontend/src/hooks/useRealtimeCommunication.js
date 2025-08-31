@@ -552,6 +552,71 @@ export function useRealtimeCommunication() {
     }
   }, [selectedThread])
 
+  // Bulk update thread status
+  const bulkUpdateThreadStatus = useCallback(async (threadIds, status) => {
+    if (!threadIds || threadIds.length === 0) return
+
+    const failedUpdates = []
+    const successfulUpdates = []
+    
+    try {
+      // Process threads sequentially to avoid overwhelming the API
+      for (const threadId of threadIds) {
+        try {
+          const response = await adminAPI.updateCommunicationThreadStatus(threadId, status)
+          successfulUpdates.push(response.data.thread)
+        } catch (error) {
+          console.error(`Failed to update thread ${threadId}:`, error)
+          failedUpdates.push(threadId)
+        }
+      }
+
+      // Update local state for successful updates
+      if (successfulUpdates.length > 0) {
+        setThreads(prev => 
+          prev.map(thread => {
+            const updatedThread = successfulUpdates.find(updated => updated.id === thread.id)
+            return updatedThread || thread
+          })
+        )
+
+        // If current thread is in the successful updates and archived/closed, clear selection
+        const currentThreadUpdated = successfulUpdates.find(thread => thread.id === selectedThread?.id)
+        if (currentThreadUpdated && status !== 'open') {
+          setSelectedThread(null)
+          setMessages([])
+          setReservation(null)
+          setGroupBookingInfo(null)
+          
+          // Cleanup subscriptions
+          if (messagesChannelRef.current) {
+            supabase.removeChannel(messagesChannelRef.current)
+            messagesChannelRef.current = null
+          }
+        }
+      }
+
+      // Show appropriate notifications
+      if (successfulUpdates.length > 0 && failedUpdates.length === 0) {
+        toast.success(`Successfully ${status} ${successfulUpdates.length} thread${successfulUpdates.length > 1 ? 's' : ''}`)
+      } else if (successfulUpdates.length > 0 && failedUpdates.length > 0) {
+        toast.success(`${successfulUpdates.length} thread${successfulUpdates.length > 1 ? 's' : ''} ${status} successfully`)
+        toast.error(`Failed to ${status.replace('ed', '')} ${failedUpdates.length} thread${failedUpdates.length > 1 ? 's' : ''}`)
+      } else if (failedUpdates.length > 0) {
+        toast.error(`Failed to ${status.replace('ed', '')} all selected threads`)
+      }
+
+      return {
+        successful: successfulUpdates,
+        failed: failedUpdates
+      }
+    } catch (error) {
+      console.error('Error in bulk update:', error)
+      toast.error('Failed to update threads')
+      throw error
+    }
+  }, [selectedThread])
+
   // Load available channels for a thread
   const loadThreadChannels = useCallback(async (threadId) => {
     try {
@@ -913,6 +978,7 @@ export function useRealtimeCommunication() {
     sendMessage,
     unsendMessage,
     updateThreadStatus,
+    bulkUpdateThreadStatus,
     loadThreadChannels,
     markMessagesRead,
     markMessageAsRead,
