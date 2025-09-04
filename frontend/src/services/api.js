@@ -41,9 +41,27 @@ const responseInterceptor = (response) => {
 const responseErrorInterceptor = (error) => {
   // Handle common errors
   if (error.response?.status === 401) {
-    // Unauthorized - clear token and redirect to login
+    // Unauthorized - clear token
     localStorage.removeItem('authToken')
-    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+    
+    // Define public routes that should not redirect to login on 401
+    const publicRoutes = [
+      '/',
+      '/login',
+      '/checkin',
+      '/guest',
+      '/accept-invitation'
+    ]
+    
+    const isPublicRoute = publicRoutes.some(route => {
+      if (route === '/') {
+        return window.location.pathname === '/'
+      }
+      return window.location.pathname.startsWith(route)
+    })
+    
+    // Only redirect to login if we're not on a public route
+    if (!isPublicRoute && window.location.pathname !== '/login') {
       window.location.href = '/login'
     }
   }
@@ -136,6 +154,22 @@ export const adminAPI = {
   getReservationDetails: (reservationId) => 
     api.get(`/reservations/${reservationId}`),
   
+  // Addon Services Management
+  getReservationServices: (reservationId) => 
+    api.get(`/reservations/${reservationId}/services`),
+  
+  getPurchasedServices: (reservationId) => 
+    api.get(`/reservations/${reservationId}/services/purchased`),
+  
+  getAllServices: () => 
+    api.get('/reservations/services/all'),
+  
+  enableServiceForReservation: (reservationId, serviceId, enabledBy) => 
+    api.post(`/reservations/${reservationId}/services/${serviceId}/enable`, { enabled_by: enabledBy }),
+  
+  disableServiceForReservation: (reservationId, serviceId) => 
+    api.delete(`/reservations/${reservationId}/services/${serviceId}/enable`),
+  
   // Create new reservation
   createReservation: (reservationData) => 
     api.post('/reservations', reservationData),
@@ -223,6 +257,13 @@ export const adminAPI = {
   
   updateUserStatus: (id, isActive) => api.patch(`/users/${id}/status`, { isActive }),
   
+  // User Invitation Management
+  inviteUser: (invitationData) => api.post('/users/invite', invitationData),
+  
+  getPendingInvitations: () => api.get('/users/invitations/pending'),
+  
+  cleanupExpiredInvitations: () => api.post('/users/invitations/cleanup'),
+  
   // Cleaning Task Management
   getCleaningTasks: (params = {}) => api.get('/cleaning/tasks', { params }),
   
@@ -281,6 +322,12 @@ export const adminAPI = {
   getGroupBookingInfo: (reservationId) => 
     api.get(`/communication/reservation/${reservationId}/group-info`),
   
+  // Get or create thread for a specific reservation
+  getThreadByReservation: (reservationId, autoCreate = true) => 
+    api.get(`/communication/threads/by-reservation/${reservationId}`, { 
+      params: { auto_create: autoCreate.toString() } 
+    }),
+  
   // Unlinked thread management
   linkThread: (threadId, reservationId) => 
     api.put(`/communication/threads/${threadId}/link`, { reservation_id: reservationId }),
@@ -323,11 +370,6 @@ export const adminAPI = {
   
   getAutomationTemplateStats: () => api.get('/automation/templates/stats'),
   
-  toggleAutomationTemplate: (templateId, enabled) => 
-    api.patch(`/automation/templates/${templateId}/toggle`, { enabled }),
-  
-  bulkToggleAutomationTemplates: (templateIds, enabled) => 
-    api.patch('/automation/templates/bulk-toggle', { templateIds, enabled }),
   
   getAutomationTemplate: (templateId) => 
     api.get(`/automation/templates/${templateId}`),
@@ -340,6 +382,46 @@ export const adminAPI = {
 
   getAutomationTemplateUsage: (templateId) => 
     api.get(`/automation/templates/${templateId}/usage`),
+}
+
+// Message Rules Management - New Architecture
+export const messageRulesAPI = {
+  // Get all message rules
+  getRules: (params = {}) => api.get('/message-rules/rules', { params }),
+  
+  // Update a message rule
+  updateRule: (ruleId, updates) => api.put(`/message-rules/rules/${ruleId}`, updates),
+  
+  // Get scheduled messages for a reservation
+  getScheduledMessagesForReservation: (reservationId, params = {}) => 
+    api.get(`/message-rules/scheduled/${reservationId}`, { params }),
+  
+  // Preview messages for a reservation (without creating them)
+  previewMessagesForReservation: (reservationId) => 
+    api.get(`/message-rules/preview/${reservationId}`),
+  
+  // Generate scheduled messages for a reservation manually
+  generateMessagesForReservation: (reservationId, options = {}) => 
+    api.post(`/message-rules/generate/${reservationId}`, options),
+  
+  // Cancel scheduled messages for a reservation
+  cancelMessagesForReservation: (reservationId) => 
+    api.delete(`/message-rules/cancel/${reservationId}`),
+  
+  // Get system status and stats
+  getSystemStatus: () => api.get('/message-rules/status'),
+  
+  // Get summary for admin dashboard
+  getSystemSummary: () => api.get('/message-rules/summary'),
+  
+  // Test utilities
+  testRecentReservations: (minutesBack = 60) => 
+    api.post('/message-rules/test/recent', { minutes_back: minutesBack }),
+  
+  testReconciliation: (daysAhead = 30) => 
+    api.post('/message-rules/test/reconcile', { days_ahead: daysAhead }),
+  
+  cleanupLeases: () => api.post('/message-rules/cleanup/leases'),
 }
 
 export const reservationAPI = {
@@ -361,6 +443,16 @@ export const webhookAPI = {
 export const guestAPI = {
   // Validate guest token
   validateToken: (token) => api.get(`/guest/${token}`),
+}
+
+// Public invitation API (no auth required)
+export const invitationAPI = {
+  // Validate invitation token
+  validateToken: (token) => api.get(`/users/invitation/${token}`),
+  
+  // Accept invitation and complete setup
+  acceptInvitation: (token, setupData) => 
+    api.post(`/users/accept-invitation`, { token, ...setupData }),
 }
 
 // Market Demand Management - optimized for performance

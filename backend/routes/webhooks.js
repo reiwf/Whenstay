@@ -4,7 +4,7 @@ const beds24Service = require('../services/beds24Service');
 const reservationService = require('../services/reservationService');
 const emailService = require('../services/emailService');
 const communicationService = require('../services/communicationService');
-const automationService = require('../services/automationService');
+const generatorService = require('../services/scheduler/generatorService');
 const stripeService = require('../services/stripeService');
 const { adminAuth } = require('../middleware/auth');
 
@@ -363,8 +363,8 @@ async function handleNewBooking(webhookData) {
     if (bookingInfo.isGroupMaster || !bookingInfo.bookingGroupMasterId) {
       // Process automation rules for the new reservation
       try {
-        await automationService.processReservationAutomation(reservation, false);
-        console.log(`Automation processing completed for ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${reservation.id}`);
+        await generatorService.generateForReservation(reservation);
+        console.log(`Message generation completed for ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${reservation.id}`);
       } catch (automationError) {
         console.error(`Error processing automation for reservation ${reservation.id}:`, automationError);
         // Don't throw error - automation failure shouldn't break webhook processing
@@ -418,8 +418,8 @@ async function handleBookingUpdate(webhookData) {
     if (bookingInfo.isGroupMaster || !bookingInfo.bookingGroupMasterId) {
       // Process automation rules for the updated reservation (will cancel existing and reschedule)
       try {
-        await automationService.processReservationAutomation(updatedReservation, true);
-        console.log(`Automation processing completed for updated ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${updatedReservation.id}`);
+        await generatorService.handleReservationUpdate(existingReservation, updatedReservation);
+        console.log(`Message update processing completed for updated ${bookingInfo.isGroupMaster ? 'group master' : 'individual'} reservation: ${updatedReservation.id}`);
       } catch (automationError) {
         console.error(`Error processing automation for updated reservation ${updatedReservation.id}:`, automationError);
         // Don't throw error - automation failure shouldn't break webhook processing
@@ -456,7 +456,7 @@ async function handleBookingCancellation(webhookData) {
       
       // Cancel any pending scheduled messages for this reservation
       try {
-        await automationService.handleReservationCancellation(existingReservation.id);
+        await generatorService.cancelExistingMessages(existingReservation.id);
         console.log(`Cancelled scheduled messages for reservation: ${existingReservation.id}`);
       } catch (automationError) {
         console.error(`Error cancelling scheduled messages for reservation ${existingReservation.id}:`, automationError);

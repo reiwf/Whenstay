@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Search, MessageCircle, Clock, Users, Crown, AlertTriangle, X, Check } from 'lucide-react';
 import airbnbLogo from '../../../shared/airbnblogo.png';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const CHANNEL_ICONS = {
   beds24: '🛏️',
@@ -30,25 +31,38 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
-  const filteredThreads = threads
-    .filter(thread => {
-      const matchesSearch = !searchTerm || 
-        thread.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        thread.last_message_preview?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Debounce search term to reduce filter operations
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-      const matchesFilter = filter === 'all' || 
-        (filter === 'unread' && thread.unread_count > 0) ||
-        (filter === 'unlinked' && thread.needs_linking) ||
-        (filter === 'closed' && thread.status === 'closed');
+  // Memoize thread counts for filter tabs
+  const threadCounts = useMemo(() => ({
+    all: threads.length,
+    unread: threads.filter(t => t.unread_count > 0).length,
+    unlinked: threads.filter(t => t.needs_linking).length,
+  }), [threads]);
 
-      return matchesSearch && matchesFilter;
-    })
-    .sort((a, b) => {
-      // Sort by last_message_at in descending order (most recent first)
-      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-      return bTime - aTime;
-    });
+  // Memoize filtered and sorted threads
+  const filteredThreads = useMemo(() => {
+    return threads
+      .filter(thread => {
+        const matchesSearch = !debouncedSearchTerm || 
+          thread.subject?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+          thread.last_message_preview?.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+
+        const matchesFilter = filter === 'all' || 
+          (filter === 'unread' && thread.unread_count > 0) ||
+          (filter === 'unlinked' && thread.needs_linking) ||
+          (filter === 'closed' && thread.status === 'closed');
+
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
+        // Sort by last_message_at in descending order (most recent first)
+        const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [threads, debouncedSearchTerm, filter]);
 
   const getThreadChannels = (thread) => {
     if (!thread.thread_channels) return [];
@@ -76,15 +90,17 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  // Bulk selection handlers
-  const handleSelectModeToggle = () => {
-    setIsSelectMode(!isSelectMode);
-    if (isSelectMode) {
-      setSelectedThreads(new Set());
-    }
-  };
+  // Bulk selection handlers with useCallback optimization
+  const handleSelectModeToggle = useCallback(() => {
+    setIsSelectMode(prev => {
+      if (prev) {
+        setSelectedThreads(new Set());
+      }
+      return !prev;
+    });
+  }, []);
 
-  const handleThreadSelectionToggle = (threadId, event) => {
+  const handleThreadSelectionToggle = useCallback((threadId, event) => {
     event.stopPropagation(); // Prevent thread selection
     setSelectedThreads(prev => {
       const newSet = new Set(prev);
@@ -95,9 +111,9 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleSelectAllToggle = () => {
+  const handleSelectAllToggle = useCallback(() => {
     const openThreads = filteredThreads.filter(thread => thread.status === 'open');
     const allSelected = openThreads.every(thread => selectedThreads.has(thread.id));
     
@@ -106,9 +122,9 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
     } else {
       setSelectedThreads(new Set(openThreads.map(thread => thread.id)));
     }
-  };
+  }, [filteredThreads, selectedThreads]);
 
-  const handleBulkCloseConfirm = async () => {
+  const handleBulkCloseConfirm = useCallback(async () => {
     if (onBulkClose && selectedThreads.size > 0) {
       try {
         await onBulkClose(Array.from(selectedThreads));
@@ -119,7 +135,26 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
         console.error('Bulk close failed:', error);
       }
     }
-  };
+  }, [onBulkClose, selectedThreads]);
+
+  // Additional optimized handlers
+  const handleSearchTermChange = useCallback((e) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilter) => {
+    setFilter(newFilter);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+  }, []);
+
+  const handleThreadClick = useCallback((thread) => {
+    if (!isSelectMode && onThreadSelect) {
+      onThreadSelect(thread);
+    }
+  }, [isSelectMode, onThreadSelect]);
 
   const openThreads = filteredThreads.filter(thread => thread.status === 'open');
   const allOpenSelected = openThreads.length > 0 && openThreads.every(thread => selectedThreads.has(thread.id));
@@ -191,7 +226,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
             type="text"
             placeholder="Search conversations..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={handleSearchTermChange}
             className="w-full pl-9 pr-3 py-2 border border-primary-300 rounded-md text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
@@ -199,13 +234,13 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
         {/* Filter tabs */}
         <div className="flex space-x-1">
           {[
-            { key: 'all', label: 'All', count: threads.length },
-            { key: 'unread', label: 'Unread', count: threads.filter(t => t.unread_count > 0).length },
-            { key: 'unlinked', label: 'Unlinked', count: threads.filter(t => t.needs_linking).length },
+            { key: 'all', label: 'All', count: threadCounts.all },
+            { key: 'unread', label: 'Unread', count: threadCounts.unread },
+            { key: 'unlinked', label: 'Unlinked', count: threadCounts.unlinked },
           ].map(({ key, label, count }) => (
             <button
               key={key}
-              onClick={() => setFilter(key)}
+              onClick={() => handleFilterChange(key)}
               className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 filter === key
                   ? 'bg-primary-100 text-primary-700'
@@ -220,12 +255,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
 
       {/* Thread List */}
       <div className="flex-1 overflow-y-auto">
-        {loading && (
-          <div className="p-4 text-center text-primary-500">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-2"></div>
-            Loading conversations...
-          </div>
-        )}
+
 
         {!loading && filteredThreads.length === 0 && (
                   <div className="p-4 text-center text-primary-500">
@@ -233,7 +263,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
                     <p className="text-sm">No conversations found</p>
                     {searchTerm && (
                       <button
-                        onClick={() => setSearchTerm('')}
+                        onClick={handleClearSearch}
                         className="text-primary-600 hover:text-primary-800 text-xs mt-1"
                       >
                         Clear search
@@ -245,7 +275,7 @@ export default function InboxPanel({ threads, selectedThread, onThreadSelect, lo
                 {!loading && filteredThreads.map((thread) => (
           <div
             key={thread.id}
-            onClick={() => !isSelectMode && onThreadSelect(thread)}
+            onClick={() => handleThreadClick(thread)}
             className={`rounded-lg border border-primary-200 cursor-pointer hover:bg-primary-50 transition-colors
               ${selectedThread?.id === thread.id ? 'bg-primary-50 border-primary-500' : ''}
               ${isSelectMode ? 'pl-2' : ''}`}

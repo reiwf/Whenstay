@@ -21,7 +21,8 @@ export default function MessagePanel({
   onMessageUpdate,
   loading,
   reservation,
-  groupBookingInfo
+  groupBookingInfo,
+  threadChannels = []
 }) {
   const { user } = useAuth();
   const [draft, setDraft] = useState('');
@@ -122,8 +123,17 @@ export default function MessagePanel({
     
     const availableChannels = ['inapp']; // Always available
     
-    // Add channels from thread_channels if they exist
-    if (thread.thread_channels && Array.isArray(thread.thread_channels)) {
+    // Add channels from threadChannels prop (loaded from the hook)
+    if (threadChannels && Array.isArray(threadChannels)) {
+      threadChannels.forEach(channel => {
+        if (channel && !availableChannels.includes(channel)) {
+          availableChannels.push(channel);
+        }
+      });
+    }
+    
+    // Fallback: Add channels from thread.thread_channels if threadChannels prop is empty
+    if (threadChannels.length === 0 && thread.thread_channels && Array.isArray(thread.thread_channels)) {
       thread.thread_channels.forEach(tc => {
         if (tc.channel && !availableChannels.includes(tc.channel)) {
           availableChannels.push(tc.channel);
@@ -372,20 +382,9 @@ export default function MessagePanel({
               </span>
             </div>
           </div>
-          {/* Scheduled Messages Panel */}
-      {showScheduledMessages && thread?.reservation_id && (
-        <div className="border-t border-gray-200 bg-white">
-          <ScheduledMessagesPanel
-            reservationId={thread.reservation_id}
-            onTriggerAutomation={handleTriggerAutomation}
-            onCancelMessages={handleCancelMessages}
-          />
-        </div>
-      )}
-
           <div className="flex items-center mt-3 sm:mt-0 space-x-1 sm:space-x-2">
             <button
-              onClick={() => setShowScheduledMessages(!showScheduledMessages)}
+              onClick={() => setShowScheduledMessages(true)}
               className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
               <Clock className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
@@ -624,7 +623,16 @@ export default function MessagePanel({
         </div>
       </div>
 
-      
+      {/* Scheduled Messages Drawer */}
+      {thread?.reservation_id && (
+        <ScheduledMessagesPanel
+          reservationId={thread.reservation_id}
+          isOpen={showScheduledMessages}
+          onClose={() => setShowScheduledMessages(false)}
+          onTriggerAutomation={handleTriggerAutomation}
+          onCancelMessages={handleCancelMessages}
+        />
+      )}
     </div>
   );
 }

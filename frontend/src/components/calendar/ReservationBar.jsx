@@ -21,7 +21,8 @@ export default function ReservationBar({
   isSwapTarget = false, // Indicates this reservation is a swap target
   isSwapPreview = false, // Indicates this is a swap preview
   swapType = null, // 'dragged' or 'target' for different swap preview types
-  className = ""
+  className = "",
+  onReservationClick = null // Handler for reservation bar clicks
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [currentDragType, setCurrentDragType] = useState(null);
@@ -83,6 +84,26 @@ export default function ReservationBar({
 
   // Get reservation color
   const reservationColor =  StatusUtils.getStatusColor(reservation.status);
+
+  // Group booking detection and information
+  const getGroupBookingInfo = (reservation) => {
+    // Handle both snake_case and camelCase property names
+    const groupRoomCount = reservation.group_room_count || reservation.groupRoomCount || 1;
+    const isGroupMaster = reservation.is_group_master || reservation.isGroupMaster || false;
+    const bookingGroupMasterId = reservation.booking_group_master_id || reservation.bookingGroupMasterId;
+    
+    const isGroupBooking = groupRoomCount > 1;
+    
+    return {
+      isGroupBooking,
+      roomCount: groupRoomCount,
+      isGroupMaster,
+      bookingGroupMasterId,
+      displayText: isGroupBooking ? `${groupRoomCount} rooms` : null
+    };
+  };
+
+  const groupInfo = getGroupBookingInfo(reservation);
 
   // Create custom drag image for better visual feedback
   useEffect(() => {
@@ -302,8 +323,8 @@ export default function ReservationBar({
       // Normal state with mode-specific styling
       if (reservation.status === 'checked_in') {
         // Orange color scheme for checked-in reservations
-        backgroundColor = 'rgba(250, 142, 40, 0.25)'; // orange-200
-        borderColor = '#f7d0b5ff'; // orange-500
+        backgroundColor = 'rgba(250, 236, 40, 0.4)'; // orange-200
+        borderColor = '#f7edb5ff'; // orange-500
         textColor = '#ffb68fff'; // orange-600
       } else {
         backgroundColor = '#f0fdf4';
@@ -356,7 +377,7 @@ export default function ReservationBar({
       height: `${gridConstants.ROW_HEIGHT - Math.max(4, gridConstants.ROW_HEIGHT * 0.2)}px`,
 
       // Glassy look
-      backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(240, 226, 34, 0.3)', 
+      backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(240, 127, 34, 0.4)', 
       backdropFilter: 'blur(8px) saturate(150%)',
       WebkitBackdropFilter: 'blur(8px) saturate(150%)', // Safari support
 
@@ -425,15 +446,18 @@ export default function ReservationBar({
 
 
   /**
-   * Render reservation label with truncation and resize feedback
+   * Render reservation label with truncation, resize feedback, and group booking information
    */
   const renderLabel = () => {
-    const label = reservation.label || reservation.bookingName || 'Reservation';
+    const baseLabel = reservation.label || reservation.bookingName || 'Reservation';
+    let displayLabel = baseLabel;
+        
+    // Calculate max length based on available width
     const maxLength = Math.floor(width / 8); // Rough character estimate based on width
     
-    let displayLabel = label;
-    if (label.length > maxLength && maxLength > 3) {
-      displayLabel = label.substring(0, maxLength - 3) + '...';
+    // Truncate if necessary
+    if (displayLabel.length > maxLength && maxLength > 3) {
+      displayLabel = displayLabel.substring(0, maxLength - 3) + '...';
     }
     
     // Add operation indicator for resize previews
@@ -455,7 +479,7 @@ export default function ReservationBar({
   };
 
   /**
-   * Generate enhanced tooltip for resize preview with shrink/expand indicators
+   * Generate enhanced tooltip with group booking information
    */
   const getTooltipText = () => {
     const baseName = reservation.bookingName || 'Reservation';
@@ -464,6 +488,17 @@ export default function ReservationBar({
     const status = StatusUtils.getStatusDisplayName(reservation.status);
     
     let tooltip = `${baseName} • ${startFormatted} → ${endFormatted}`;
+    
+    // Add group booking information
+    if (groupInfo.isGroupBooking) {
+      tooltip += ` • GROUP: ${groupInfo.displayText}`;
+      if (groupInfo.isGroupMaster) {
+        tooltip += ' (Master)';
+      }
+      if (reservation.booking_group_master_id) {
+        tooltip += ` • Group ID: ${reservation.booking_group_master_id}`;
+      }
+    }
     
     if (isPreview && reservation.resizePreviewData) {
       const { duration, validationReason, wasConstrained } = reservation.resizePreviewData;
@@ -495,6 +530,22 @@ export default function ReservationBar({
     return tooltip;
   };
 
+  /**
+   * Handle reservation bar click to open drawer
+   */
+  const handleClick = (event) => {
+    // Don't trigger click during drag operations
+    if (isDragging || isPreview) return;
+    
+    // Don't trigger if this is part of a drag start
+    if (currentDragType) return;
+    
+    // Call the click handler if provided
+    if (onReservationClick && reservation) {
+      onReservationClick(reservation);
+    }
+  };
+
   return (
     <div
       ref={barRef}
@@ -503,6 +554,7 @@ export default function ReservationBar({
       className={`group select-none ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
       onDragStart={(e) => {
         let dragType = 'move-vertical'; // Default to vertical movement
         
@@ -599,6 +651,24 @@ export default function ReservationBar({
           {renderLabel()}
         </span>
       </div>
+
+      {/* Group Booking Visual Indicators - Less intrusive approach */}
+      {groupInfo.isGroupBooking && !isPreview && (
+        <>
+          {/* Group booking border accent */}
+          <div className="absolute inset-0 pointer-events-none rounded-lg opacity-60"></div>
+          
+          {/* Small room count indicator in bottom-right corner */}
+          <div className="text-[10px] absolute bottom-1 right-1 bg-orange-400 text-white rounded px-1 py-0.5 pointer-events-none z-10 shadow-sm leading-none">
+            {groupInfo.roomCount}
+          </div>
+          
+          {/* Group master indicator - small dot in top-right */}
+          {groupInfo.isGroupMaster && (
+            <div className="absolute top-2 right-1 w-2 h-2 bg-gray-400 rounded-full pointer-events-none z-10 shadow-sm"></div>
+          )}
+        </>
+      )}
 
       {/* Conflict Indicator */}
       {hasConflict && (

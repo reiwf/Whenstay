@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
-import PropertySelector from '../components/pricing/PropertySelector';
+import { useProperty } from '../contexts/PropertyContext';
 import RoomTypeList from '../components/pricing/RoomTypeList';
 import CalendarGrid from '../components/pricing/CalendarGrid';
 import PriceDrawer from '../components/pricing/PriceDrawer';
@@ -17,9 +17,9 @@ const formatDate = (date) => date.toISOString().slice(0, 10);
 export default function PricingPage() {
   const { roomTypeId: urlRoomTypeId } = useParams();
   const navigate = useNavigate();
+  const { selectedProperty, selectProperty } = useProperty();
 
   // Core state
-  const [selectedProperty, setSelectedProperty] = useState(null);
   const [roomTypes, setRoomTypes] = useState([]);
   const [selectedRoomType, setSelectedRoomType] = useState(null);
   const [calendar, setCalendar] = useState([]);
@@ -81,7 +81,7 @@ export default function PricingPage() {
         // Load the property for this room type
         const propertyResponse = await adminAPI.getProperty(roomType.property_id);
         if (propertyResponse.data.property) {
-          setSelectedProperty(propertyResponse.data.property);
+          selectProperty(roomType.property_id);
           setSelectedRoomType(roomType);
         }
       }
@@ -139,18 +139,6 @@ export default function PricingPage() {
     }
   };
 
-  // Handle property selection
-  const handlePropertySelect = (property) => {
-    setSelectedProperty(property);
-    setSelectedRoomType(null);
-    setRoomTypes([]);
-    setCalendar([]);
-    
-    // Update URL to remove room type ID if navigated from specific room type
-    if (urlRoomTypeId) {
-      navigate('/pricing', { replace: true });
-    }
-  };
 
   // Handle room type selection
   const handleRoomTypeSelect = (roomType) => {
@@ -266,11 +254,6 @@ export default function PricingPage() {
 
         {/* Property Selector */}
         <div className="mb-6">
-          <PropertySelector 
-            selectedProperty={selectedProperty}
-            onPropertySelect={handlePropertySelect}
-            className="max-w-md"
-          />
         </div>
 
         {!selectedProperty ? (

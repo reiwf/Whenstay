@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { adminAPI } from '../services/api'
 import { getSupabaseAdminClient, checkSupabaseEnvironment } from '../services/supabaseClient'
 import toast from 'react-hot-toast'
+import { useDebounce } from './useDebounce'
 
 // Check environment variables and get admin client
 checkSupabaseEnvironment()
@@ -23,12 +24,18 @@ export function useRealtimeCommunication() {
   const [typingUsers, setTypingUsers] = useState([])
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   
+  // Cache state for performance optimization
+  const [channelsCache, setChannelsCache] = useState(new Map())
+  const [reservationCache, setReservationCache] = useState(new Map())
+  const [pendingThreadSelection, setPendingThreadSelection] = useState(null)
+  
   // Refs for real-time subscriptions
   const threadsChannelRef = useRef(null)
   const messagesChannelRef = useRef(null)
   const globalMessagesChannelRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const messageListRef = useRef(null)
+  const threadSelectionTimeoutRef = useRef(null)
 
   // Auto-scroll to bottom of messages
   const scrollToBottom = useCallback((smooth = true) => {
@@ -617,45 +624,130 @@ export function useRealtimeCommunication() {
     }
   }, [selectedThread])
 
-  // Load available channels for a thread
+  // Load available channels for a thread with caching
   const loadThreadChannels = useCallback(async (threadId) => {
     try {
-      const response = await adminAPI.getCommunicationThreadChannels(threadId)
-      const channelsData = response.data.channels || []
-      setThreadChannels(channelsData)
-      return channelsData
-    } catch (error) {
-      console.error('Error loading thread channels:', error)
-      return ['inapp'] // Default fallback
-    }
-  }, [])
-
-  // Mark messages as read
-  const markMessagesRead = useCallback(async (threadId, lastMessageId) => {
-    try {
-      await adminAPI.markCommunicationMessagesRead(threadId, lastMessageId)
+      // Check cache first
+      if (channelsCache.has(threadId)) {
+        console.log('📦 Using cached channels for thread:', threadId);
+        const cachedChannels = channelsCache.get(threadId);
+        setThreadChannels(cachedChannels);
+        return cachedChannels;
+      }
       
-      // Update unread count in threads list
+      const response = await adminAPI.getCommunicationThreadChannels(threadId);
+      const channelsData = response.data.channels || [];
+      
+      // Cache the result (TTL: 5 minutes)
+      setChannelsCache(prev => new Map(prev).set(threadId, channelsData));
+      setThreadChannels(channelsData);
+      
+      // Clear cache after 5 minutes
+      setTimeout(() => {
+        setChannelsCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(threadId);
+          return newCache;
+        });
+      }, 5 * 60 * 1000);
+      
+      return channelsData;
+    } catch (error) {
+      console.error('Error loading thread channels:', error);
+      return ['inapp']; // Default fallback
+    }
+  }, [channelsCache]);
+
+  // Optimistic mark messages as read - immediate UI update, background sync
+  const markMessagesRead = useCallback(async (threadId, lastMessageId) => {
+    // Get original thread state for potential rollback
+    const originalThread = threads.find(t => t.id === threadId);
+    
+    try {
+      // Immediate optimistic update - this provides instant UI feedback
+      console.log('⚡ Optimistic mark-as-read for thread:', threadId);
+      
+      // Update unread count in threads list immediately
       setThreads(prev => 
         prev.map(thread => 
           thread.id === threadId 
             ? { ...thread, unread_count: 0 }
             : thread
         )
-      )
+      );
+      
+      // Update message read status immediately
+      setMessages(prev => 
+        prev.map(msg => {
+          if (msg.direction === 'incoming' && msg.thread_id === threadId) {
+            const updatedDeliveries = msg.message_deliveries?.map(delivery => 
+              delivery.channel === 'inapp' 
+                ? { ...delivery, status: 'read', read_at: new Date().toISOString() }
+                : delivery
+            ) || [{ channel: 'inapp', status: 'read', read_at: new Date().toISOString() }];
+            return { ...msg, message_deliveries: updatedDeliveries };
+          }
+          return msg;
+        })
+      );
       
       // Trigger global unread count update immediately via custom event
-      console.log('🔄 Triggering global unread count update via custom event')
+      console.log('🔄 Triggering global unread count update via custom event');
       window.dispatchEvent(new CustomEvent('thread-messages-read', { 
         detail: { threadId, lastMessageId }
-      }))
+      }));
       
-      return true
+      // Background sync with server (non-blocking)
+      adminAPI.markCommunicationMessagesRead(threadId, lastMessageId)
+        .then(() => {
+          console.log('✅ Mark-as-read synced with server for thread:', threadId);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to sync mark-as-read with server:', error);
+          
+          // Rollback optimistic update on server error
+          if (originalThread) {
+            setThreads(prev => 
+              prev.map(thread => 
+                thread.id === threadId ? originalThread : thread
+              )
+            );
+            
+            // Revert message read status
+            setMessages(prev => 
+              prev.map(msg => {
+                if (msg.direction === 'incoming' && msg.thread_id === threadId) {
+                  const revertedDeliveries = msg.message_deliveries?.map(delivery => 
+                    delivery.channel === 'inapp' 
+                      ? { ...delivery, status: 'delivered', read_at: null }
+                      : delivery
+                  ) || [];
+                  return { ...msg, message_deliveries: revertedDeliveries };
+                }
+                return msg;
+              })
+            );
+            
+            toast.error('Failed to mark messages as read');
+          }
+        });
+      
+      return true;
     } catch (error) {
-      console.error('Error marking messages as read:', error)
-      return false
+      console.error('Error in optimistic mark-as-read:', error);
+      
+      // Rollback optimistic update on immediate error
+      if (originalThread) {
+        setThreads(prev => 
+          prev.map(thread => 
+            thread.id === threadId ? originalThread : thread
+          )
+        );
+      }
+      
+      return false;
     }
-  }, [])
+  }, [threads, messages]);
 
   // Mark a specific message as read
   const markMessageAsRead = useCallback(async (messageId, channel = 'inapp') => {
@@ -781,7 +873,7 @@ export function useRealtimeCommunication() {
     }
   }, [])
 
-  // Load reservation details for a thread
+  // Load reservation details for a thread with caching
   const loadReservationDetails = useCallback(async (reservationId) => {
     if (!reservationId) {
       setReservation(null)
@@ -790,6 +882,15 @@ export function useRealtimeCommunication() {
     }
     
     try {
+      // Check cache first
+      if (reservationCache.has(reservationId)) {
+        console.log('📦 Using cached reservation for ID:', reservationId);
+        const cachedData = reservationCache.get(reservationId);
+        setReservation(cachedData.reservation);
+        setGroupBookingInfo(cachedData.groupBookingInfo);
+        return cachedData.reservation;
+      }
+      
       const response = await adminAPI.getReservationDetails(reservationId)
       
       // Extract the actual reservation data from nested structure
@@ -812,10 +913,12 @@ export function useRealtimeCommunication() {
         }
         
         // Load group booking information if this reservation is part of a group
+        let groupBookingData = null;
         try {
           const groupResponse = await adminAPI.getGroupBookingInfo(reservationId)
           if (groupResponse.data && groupResponse.data.isGroupBooking) {
-            setGroupBookingInfo(groupResponse.data)
+            groupBookingData = groupResponse.data;
+            setGroupBookingInfo(groupBookingData)
             if (process.env.NODE_ENV === 'development') {
               console.log('Group booking info loaded for reservation:', reservationId)
             }
@@ -826,6 +929,23 @@ export function useRealtimeCommunication() {
           console.warn('Failed to load group booking info:', groupError)
           setGroupBookingInfo(null)
         }
+        
+        // Cache the result (TTL: 10 minutes)
+        const cacheData = {
+          reservation: reservationData,
+          groupBookingInfo: groupBookingData
+        };
+        setReservationCache(prev => new Map(prev).set(reservationId, cacheData));
+        
+        // Clear cache after 10 minutes
+        setTimeout(() => {
+          setReservationCache(prev => {
+            const newCache = new Map(prev);
+            newCache.delete(reservationId);
+            return newCache;
+          });
+        }, 10 * 60 * 1000);
+        
       } else {
         console.warn('Invalid reservation data structure received')
         setReservation({ error: true, message: 'Invalid reservation data structure returned from API' })
@@ -842,40 +962,86 @@ export function useRealtimeCommunication() {
       setGroupBookingInfo(null)
       return null
     }
-  }, [])
+  }, [reservationCache]);
 
-  // Select a thread and load its details
+  // Optimized thread selection with immediate mark-as-read and parallel operations
   const selectThread = useCallback(async (thread) => {
     try {
-      setSelectedThread(thread)
-      setLoading(true)
+      setSelectedThread(thread);
+      setLoading(true);
       
-      // Load messages for the thread (includes real-time setup)
-      const loadedMessages = await loadMessages(thread.id)
+      console.log('🚀 Optimized thread selection started for:', thread.id);
       
-      // Load available channels
-      await loadThreadChannels(thread.id)
+      // PHASE 1: IMMEDIATE MARK-AS-READ (highest priority for UX)
+      // This provides instant visual feedback to the user
+      if (thread.unread_count > 0) {
+        console.log('⚡ Immediate mark-as-read for instant UI feedback');
+        // Use optimistic mark-as-read for immediate response
+        markMessagesRead(thread.id, thread.id); // Use thread.id as fallback message ID
+      }
       
-      // Load reservation details if available
+      // PHASE 2: CRITICAL DATA LOADING (blocking)
+      // Load messages first since this is essential for the conversation view
+      console.log('📥 Loading messages (critical path)');
+      const loadedMessages = await loadMessages(thread.id);
+      
+      // PHASE 3: PARALLEL NON-CRITICAL OPERATIONS (non-blocking)
+      // Load channels and reservation data in parallel since they're supplementary
+      console.log('🔄 Starting parallel operations for supplementary data');
+      
+      const parallelOperations = [];
+      
+      // Add channels loading to parallel operations
+      parallelOperations.push(
+        loadThreadChannels(thread.id).catch(error => {
+          console.warn('Non-critical: Failed to load channels:', error);
+          return ['inapp']; // Fallback
+        })
+      );
+      
+      // Add reservation loading to parallel operations if needed
       if (thread.reservation_id) {
-        await loadReservationDetails(thread.reservation_id)
+        parallelOperations.push(
+          loadReservationDetails(thread.reservation_id).catch(error => {
+            console.warn('Non-critical: Failed to load reservation:', error);
+            setReservation({ error: true, message: 'Failed to load reservation details' });
+            return null;
+          })
+        );
       } else {
-        setReservation(null)
-        setGroupBookingInfo(null)
+        // Clear reservation data immediately if no reservation_id
+        setReservation(null);
+        setGroupBookingInfo(null);
       }
       
-      // Mark messages as read using the loaded messages data
+      // Execute parallel operations without blocking the UI
+      Promise.allSettled(parallelOperations).then((results) => {
+        console.log('✅ Parallel operations completed:', results.length, 'operations');
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.warn(`Parallel operation ${index} failed:`, result.reason);
+          }
+        });
+      });
+      
+      // PHASE 4: REFINED MARK-AS-READ (if we have actual message data)
+      // Update mark-as-read with precise last message ID if available
       if (thread.unread_count > 0 && loadedMessages && loadedMessages.length > 0) {
-        const latestMessage = loadedMessages[loadedMessages.length - 1]
-        await markMessagesRead(thread.id, latestMessage.id)
+        const latestMessage = loadedMessages[loadedMessages.length - 1];
+        console.log('🔍 Refining mark-as-read with actual latest message ID:', latestMessage.id);
+        // Note: This will be handled optimistically, so no await needed
+        markMessagesRead(thread.id, latestMessage.id);
       }
+      
+      console.log('🎯 Thread selection core operations completed');
       
     } catch (error) {
-      console.error('Error selecting thread:', error)
+      console.error('❌ Error in optimized thread selection:', error);
+      // Don't show error toast here as individual operations handle their own errors
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [loadMessages, loadThreadChannels, loadReservationDetails, markMessagesRead])
+  }, [loadMessages, loadThreadChannels, loadReservationDetails, markMessagesRead]);
 
   // Unsend a message with optimistic update
   const unsendMessage = useCallback(async (messageId) => {
@@ -998,7 +1164,8 @@ export function useRealtimeCommunication() {
     // State setters
     setSelectedThread,
     setMessages,
-    setThreads
+    setThreads,
+    setThreadChannels
   }
 }
 

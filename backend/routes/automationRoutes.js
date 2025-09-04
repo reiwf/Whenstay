@@ -1,21 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const automationService = require('../services/automationService');
+const generatorService = require('../services/scheduler/generatorService');
 const cronService = require('../services/cronService');
 const communicationService = require('../services/communicationService');
 const { adminAuth } = require('../middleware/auth');
 
-// Get automation rules
-router.get('/rules', adminAuth, async (req, res) => {
-  try {
-    const { propertyId } = req.query;
-    const rules = await automationService.getEnabledAutomationRules(propertyId);
-    res.json({ rules });
-  } catch (error) {
-    console.error('Error fetching automation rules:', error);
-    res.status(500).json({ error: 'Failed to fetch automation rules' });
-  }
-});
 
 // Get scheduled messages for a specific reservation
 router.get('/scheduled-messages/:reservationId', adminAuth, async (req, res) => {
@@ -29,7 +18,7 @@ router.get('/scheduled-messages/:reservationId', adminAuth, async (req, res) => 
       .select(`
         *,
         message_templates(name, content),
-        automation_rules!fk_scheduled_messages_rule_id(name, options)
+        message_rules(name, type, code)
       `)
       .eq('reservation_id', reservationId)
       .order('run_at', { ascending: true });
@@ -64,7 +53,7 @@ router.get('/scheduled-messages', adminAuth, async (req, res) => {
         *,
         message_templates(name, content),
         message_threads(subject, reservation_id),
-        automation_rules(name)
+        message_rules(name, code)
       `)
       .order('run_at', { ascending: true });
 
@@ -143,13 +132,10 @@ router.get('/stats', adminAuth, async (req, res) => {
 // Trigger backfill for existing reservations
 router.post('/backfill', adminAuth, async (req, res) => {
   try {
-    const { limit = 50, daysAhead = 30, onlyFutureCheckIns = true } = req.body;
+    const { daysAhead = 14 } = req.body;
     
-    const results = await automationService.backfillExistingReservations({
-      limit: parseInt(limit),
-      daysAhead: parseInt(daysAhead),
-      onlyFutureCheckIns: Boolean(onlyFutureCheckIns)
-    });
+    // Use the new generator service reconciliation method
+    const results = await generatorService.reconcileForFutureArrivals(parseInt(daysAhead));
 
     res.json({
       success: true,
@@ -177,13 +163,18 @@ router.post('/process-scheduled', adminAuth, async (req, res) => {
 router.post('/test-reservation/:reservationId', adminAuth, async (req, res) => {
   try {
     const { reservationId } = req.params;
-    const { isUpdate = false } = req.body;
+    const { cancelExisting = true } = req.body;
     
     // Get reservation details
     const { supabaseAdmin } = require('../config/supabase');
     const { data: reservation, error } = await supabaseAdmin
       .from('reservations')
-      .select('*')
+      .select(`
+        *,
+        properties(name, wifi_name, wifi_password),
+        room_units(unit_number),
+        message_threads(id)
+      `)
       .eq('id', reservationId)
       .single();
 
@@ -191,17 +182,17 @@ router.post('/test-reservation/:reservationId', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    // Process automation
-    const results = await automationService.processReservationAutomation(reservation, isUpdate);
+    // Use regenerate method from generator service
+    const results = await generatorService.regenerateForReservation(reservationId, cancelExisting);
 
     res.json({
       success: true,
-      message: 'Automation processing completed',
+      message: 'Message generation completed',
       reservation: {
         id: reservation.id,
-        beds24BookingId: reservation.beds24BookingId,
-        checkInDate: reservation.checkInDate,
-        checkOutDate: reservation.checkOutDate
+        beds24_booking_id: reservation.beds24_booking_id,
+        check_in_date: reservation.check_in_date,
+        check_out_date: reservation.check_out_date
       },
       results
     });
@@ -217,15 +208,12 @@ router.post('/cancel-reservation/:reservationId', adminAuth, async (req, res) =>
     const { reservationId } = req.params;
     const { reason = 'Manual cancellation' } = req.body;
     
-    const cancelledCount = await automationService.cancelScheduledMessagesForReservation(
-      reservationId, 
-      reason
-    );
+    const result = await generatorService.cancelExistingMessages(reservationId);
 
     res.json({
       success: true,
-      message: `Cancelled ${cancelledCount} scheduled messages`,
-      cancelledCount
+      message: 'Cancelled scheduled messages for reservation',
+      result
     });
   } catch (error) {
     console.error('Error cancelling scheduled messages:', error);
@@ -263,10 +251,10 @@ router.get('/cron-status', adminAuth, async (req, res) => {
 
 // ===== MESSAGE TEMPLATE MANAGEMENT =====
 
-// Get all message templates with enabled status
+// Get all message templates
 router.get('/templates', adminAuth, async (req, res) => {
   try {
-    const { propertyId, enabled } = req.query;
+    const { propertyId } = req.query;
     const { supabaseAdmin } = require('../config/supabase');
     
     let query = supabaseAdmin
@@ -279,11 +267,6 @@ router.get('/templates', adminAuth, async (req, res) => {
       query = query.eq('property_id', propertyId);
     } else if (propertyId === 'null') {
       query = query.is('property_id', null);
-    }
-
-    // Filter by enabled status if specified
-    if (enabled !== undefined) {
-      query = query.eq('enabled', enabled === 'true');
     }
 
     const { data: templates, error } = await query;
@@ -304,17 +287,15 @@ router.get('/templates/stats', adminAuth, async (req, res) => {
   try {
     const { supabaseAdmin } = require('../config/supabase');
     
-    // Get enabled/disabled counts
+    // Get total count only
     const { data: templates, error } = await supabaseAdmin
       .from('message_templates')
-      .select('enabled');
+      .select('id');
 
     if (error) throw error;
 
     const stats = {
-      total: templates?.length || 0,
-      enabled: templates?.filter(t => t.enabled).length || 0,
-      disabled: templates?.filter(t => !t.enabled).length || 0
+      total: templates?.length || 0
     };
 
     res.json({ stats });
@@ -324,76 +305,6 @@ router.get('/templates/stats', adminAuth, async (req, res) => {
   }
 });
 
-// Toggle template enabled/disabled status
-router.patch('/templates/:templateId/toggle', adminAuth, async (req, res) => {
-  try {
-    const { templateId } = req.params;
-    const { enabled } = req.body;
-    const { supabaseAdmin } = require('../config/supabase');
-
-    // Validate enabled parameter
-    if (typeof enabled !== 'boolean') {
-      return res.status(400).json({ error: 'enabled must be a boolean value' });
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('message_templates')
-      .update({ enabled })
-      .eq('id', templateId)
-      .select('id, name, enabled')
-      .single();
-
-    if (error) throw error;
-
-    if (!data) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-
-    res.json({
-      success: true,
-      message: `Template "${data.name}" ${enabled ? 'enabled' : 'disabled'}`,
-      template: data
-    });
-  } catch (error) {
-    console.error('Error toggling template status:', error);
-    res.status(500).json({ error: 'Failed to update template status' });
-  }
-});
-
-// Bulk enable/disable templates
-router.patch('/templates/bulk-toggle', adminAuth, async (req, res) => {
-  try {
-    const { templateIds, enabled } = req.body;
-    const { supabaseAdmin } = require('../config/supabase');
-
-    // Validate input
-    if (!Array.isArray(templateIds) || templateIds.length === 0) {
-      return res.status(400).json({ error: 'templateIds must be a non-empty array' });
-    }
-
-    if (typeof enabled !== 'boolean') {
-      return res.status(400).json({ error: 'enabled must be a boolean value' });
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('message_templates')
-      .update({ enabled })
-      .in('id', templateIds)
-      .select('id, name, enabled');
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      message: `${data?.length || 0} templates ${enabled ? 'enabled' : 'disabled'}`,
-      templates: data || [],
-      count: data?.length || 0
-    });
-  } catch (error) {
-    console.error('Error bulk toggling template status:', error);
-    res.status(500).json({ error: 'Failed to bulk update template status' });
-  }
-});
 
 // Get single template details
 router.get('/templates/:templateId', adminAuth, async (req, res) => {
@@ -568,10 +479,10 @@ router.get('/templates/:templateId/usage', adminAuth, async (req, res) => {
 
     if (scheduledError) throw scheduledError;
 
-    // Get automation rules using this template
-    const { data: automationRules, error: rulesError } = await supabaseAdmin
-      .from('automation_rules')
-      .select('id, name, enabled')
+    // Get message rules using this template
+    const { data: messageRules, error: rulesError } = await supabaseAdmin
+      .from('message_rules')
+      .select('id, name, enabled, code')
       .eq('template_id', templateId);
 
     if (rulesError) throw rulesError;
@@ -588,8 +499,8 @@ router.get('/templates/:templateId/usage', adminAuth, async (req, res) => {
     res.json({
       template,
       scheduledStats,
-      automationRules: automationRules || [],
-      activeRules: automationRules?.filter(r => r.enabled).length || 0
+      messageRules: messageRules || [],
+      activeRules: messageRules?.filter(r => r.enabled).length || 0
     });
   } catch (error) {
     console.error('Error fetching template usage:', error);

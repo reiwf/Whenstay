@@ -97,8 +97,15 @@ class CommunicationService {
   }
 
   async addThreadChannels(threadId, channels) {
+    // Filter out 'inapp' channels - they don't need explicit mapping in thread_channels table
+    const externalChannels = channels.filter(c => c.channel !== 'inapp');
     
-    const channelRows = channels.map(c => ({
+    // If no external channels remain after filtering, return empty array
+    if (externalChannels.length === 0) {
+      return [];
+    }
+    
+    const channelRows = externalChannels.map(c => ({
       thread_id: threadId,
       channel: c.channel,
       external_thread_id: c.external_thread_id || threadId // Use threadId as fallback if external_thread_id is null
@@ -423,7 +430,7 @@ class CommunicationService {
 
   async sendEmail(messageId, content, data) {
     try {
-      console.log('Sending email via n8n with HTML template:', { messageId, content });
+      console.log('Sending email via Resend with HTML template:', { messageId, content });
 
       // FIXED: Use resilient separate queries instead of complex inner joins
       // Step 1: Get the basic message data
@@ -563,26 +570,18 @@ class CommunicationService {
         checkOutDate: thread.reservations.check_out_date
       } : {};
 
-      // Use n8nEmailService with HTML template functionality
-      const n8nEmailService = require('./n8nEmailService');
-      
-      // Prepare threading data for Gmail threading
-      const threadingData = {
-        messageId: gmailContext.latestGmailMessageId,
-        inReplyTo: gmailContext.latestGmailMessageId,
-        references: gmailContext.references,
-        threadId: gmailThreadId
-      };
+      // Use enhanced emailService with Resend
+      const emailService = require('./emailService');
 
-      console.log('Sending HTML templated email via n8nEmailService:', {
+      console.log('Sending HTML templated email via emailService (Resend):', {
         to: recipientEmail,
         threadId: gmailThreadId,
-        hasThreadingData: Object.keys(threadingData).length > 0,
+        hasGmailContext: Object.keys(gmailContext).length > 0,
         hasReservationData: Object.keys(reservationData).length > 0
       });
 
-      // Send using n8nEmailService with HTML template
-      const result = await n8nEmailService.sendGenericMessage(
+      // Send using emailService with HTML template and threading
+      const result = await emailService.sendGenericMessage(
         recipientEmail,
         recipientName,
         `Re: ${thread.subject || 'Message from Staylabel'}`,
@@ -597,21 +596,23 @@ class CommunicationService {
         messageId
       );
 
-      console.log('N8N email service response:', result);
+      console.log('Resend email service response:', result);
 
       // Update delivery status to sent
       await this.updateDeliveryStatus(messageId, 'email', 'sent');
 
-      console.log(`Successfully sent email ${messageId} to ${recipientEmail} via n8n`);
+      console.log(`Successfully sent email ${messageId} to ${recipientEmail} via Resend`);
 
     } catch (error) {
-      console.error('Error sending email via n8n:', error);
+      console.error('Error sending email via Resend:', error);
       
       // Categorize the error type for appropriate handling
-      const isConfigError = error.message?.includes('N8N_EMAIL_WEBHOOK_URL not configured');
+      const isConfigError = error.message?.includes('Resend API key not configured') || 
+                           error.message?.includes('Invalid Resend API key');
       const isEmailError = error.message?.includes('No recipient email found');
       const isDataError = error.message?.includes('Message not found');
-      const isWebhookError = error.message?.includes('N8N webhook failed');
+      const isValidationError = error.message?.includes('Email validation error');
+      const isRateLimitError = error.message?.includes('Rate limit exceeded');
 
       // Handle different error types appropriately
       if (isConfigError) {
@@ -623,8 +624,11 @@ class CommunicationService {
       } else if (isDataError) {
         await this.updateDeliveryStatus(messageId, 'email', 'failed', error.message);
         throw error;
-      } else if (isWebhookError) {
-        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Webhook error: ${error.message}`);
+      } else if (isValidationError) {
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Validation error: ${error.message}`);
+        throw error;
+      } else if (isRateLimitError) {
+        await this.updateDeliveryStatus(messageId, 'email', 'failed', `Rate limit error: ${error.message}`);
         throw error;
       } else {
         await this.updateDeliveryStatus(messageId, 'email', 'failed', `Unknown error: ${error.message}`);
@@ -933,84 +937,205 @@ class CommunicationService {
   // ===== SCHEDULED MESSAGES =====
 
   async scheduleMessage(data) {
-    const { thread_id, template_id, channel, run_at, payload = {}, created_by } = data;
+    const { 
+      thread_id, 
+      template_id, 
+      channel, 
+      run_at, 
+      payload = {}, 
+      created_by,
+      idempotency_key,
+      reservation_id,
+      rule_id 
+    } = data;
 
-    const { error, data: scheduled } = await this.supabase
-      .from('scheduled_messages')
-      .insert({
-        thread_id,
-        template_id,
-        channel,
-        run_at,
-        payload,
-        status: 'queued',
-        created_by
-      })
-      .select()
-      .single();
+    // Validate that either thread_id OR reservation_id is provided
+    if (!thread_id && !reservation_id) {
+      throw new Error('Either thread_id or reservation_id must be provided for scheduled message');
+    }
 
+    const row = {
+      thread_id: thread_id || null, // Allow null thread_id
+      template_id,
+      channel,
+      run_at,
+      payload,
+      status: 'pending', // Use new status system
+      created_by,
+      reservation_id,
+      rule_id,
+      idempotency_key: idempotency_key || null
+    };
+
+    // Use UPSERT when an idempotency_key is provided for duplicate prevention
+    const query = idempotency_key
+      ? this.supabase.from('scheduled_messages').upsert(row, { 
+          onConflict: 'idempotency_key',
+          ignoreDuplicates: false 
+        }).select().single()
+      : this.supabase.from('scheduled_messages').insert(row).select().single();
+
+    const { data: scheduled, error } = await query;
     if (error) throw error;
     return scheduled;
   }
 
   async getDueScheduledMessages(limit = 50) {
+    const instanceId = process.env.INSTANCE_ID || `node-${process.pid}`;
+    
+    // Use the enhanced claiming function with lease management
     const { data, error } = await this.supabase
-      .from('scheduled_messages')
-      .select(`
-        *,
-        message_templates(*),
-        message_threads(*)
-      `)
-      .eq('status', 'queued')
-      .lte('run_at', new Date().toISOString())
-      .order('run_at')
-      .limit(limit);
+      .rpc('claim_due_scheduled_messages', { 
+        p_limit: limit, 
+        p_instance_id: instanceId,
+        p_lease_seconds: 300 // 5 minute lease
+      });
 
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.error('Error claiming scheduled messages:', error);
+      throw error;
+    }
+
+    // Hydrate with related data for backward compatibility
+    const claimedMessages = data || [];
+    if (claimedMessages.length === 0) {
+      return [];
+    }
+
+    // Get template and thread data for the claimed messages
+    const templateIds = [...new Set(claimedMessages.map(m => m.template_id))];
+    const threadIds = [...new Set(claimedMessages.map(m => m.thread_id))];
+
+    const [templatesResult, threadsResult] = await Promise.all([
+      this.supabase.from('message_templates').select('*').in('id', templateIds),
+      this.supabase.from('message_threads').select('*').in('id', threadIds)
+    ]);
+
+    const templatesById = {};
+    const threadsById = {};
+
+    (templatesResult.data || []).forEach(t => templatesById[t.id] = t);
+    (threadsResult.data || []).forEach(t => threadsById[t.id] = t);
+
+    // Attach related data to claimed messages
+    return claimedMessages.map(msg => ({
+      ...msg,
+      message_templates: templatesById[msg.template_id] || null,
+      message_threads: threadsById[msg.thread_id] || null
+    }));
   }
 
   async processScheduledMessage(scheduledId) {
+    // Re-fetch fresh row (it was already claimed with processing status)
     const { data: scheduled, error: fetchError } = await this.supabase
       .from('scheduled_messages')
       .select(`
         *,
-        message_templates(*),
-        message_threads(*)
+        message_templates(*)
       `)
       .eq('id', scheduledId)
       .single();
 
     if (fetchError) throw fetchError;
 
+    // Verify the message is in processing state and lease hasn't expired
+    if (scheduled.status !== 'processing') {
+      throw new Error(`Scheduled message ${scheduledId} not in processing state`);
+    }
+    
+    if (scheduled.lease_until && new Date(scheduled.lease_until) < new Date()) {
+      throw new Error(`Lease expired for scheduled message ${scheduledId}`);
+    }
+
     try {
+      console.log(`Processing scheduled message ${scheduled.id} for template ${scheduled.template_id}`);
+
+      // THREAD RESOLUTION: Handle null thread_id by finding/creating thread using reservation_id
+      let resolvedThreadId = scheduled.thread_id;
+      
+      if (!resolvedThreadId && scheduled.reservation_id) {
+        console.log(`🔍 Resolving thread for scheduled message ${scheduled.id} using reservation ${scheduled.reservation_id}`);
+        
+        // Find or create thread for the reservation
+        const thread = await this.findOrCreateThreadByReservation(scheduled.reservation_id);
+        resolvedThreadId = thread.id;
+        
+        // Update the scheduled message with the resolved thread_id for future efficiency
+        await this.supabase
+          .from('scheduled_messages')
+          .update({ 
+            thread_id: resolvedThreadId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scheduledId);
+          
+        console.log(`✅ Resolved thread ${resolvedThreadId} for scheduled message ${scheduled.id}`);
+      }
+      
+      if (!resolvedThreadId) {
+        throw new Error(`Cannot resolve thread_id for scheduled message ${scheduledId} - no thread_id or reservation_id available`);
+      }
+
       // Render template with payload variables
-      const rendered = await this.renderTemplate(scheduled.template_id, scheduled.payload);
+      const rendered = await this.renderTemplate(scheduled.template_id, scheduled.payload || {});
 
-      // Send the message
-      const message = await this.sendMessage({
-        thread_id: scheduled.thread_id,
-        channel: scheduled.channel,
-        content: rendered.rendered_content,
-        origin_role: 'system'
-      });
+      let message;
+      
+      // Handle different channels appropriately
+      if (scheduled.channel === 'inapp') {
+        // For inapp messages, use sendMessage to ensure correct direction (outgoing)
+        // Scheduled messages are system-generated messages being sent TO the guest
+        message = await this.sendMessage({
+          thread_id: resolvedThreadId,
+          channel: 'inapp',
+          content: rendered.rendered_content,
+          origin_role: 'system' // System-generated automated message
+        });
+        console.log(`📱 Created inapp scheduled message ${message.id} for thread ${resolvedThreadId} with direction: outgoing`);
+      } else {
+        // For external channels, use the normal send flow
+        message = await this.sendMessage({
+          thread_id: resolvedThreadId,
+          channel: scheduled.channel,
+          content: rendered.rendered_content,
+          origin_role: 'system' // System-generated automated message
+        });
+        console.log(`📤 Sent external scheduled message ${message.id} via ${scheduled.channel}`);
+      }
 
-      // Mark scheduled message as sent
-      await this.supabase
-        .from('scheduled_messages')
-        .update({ status: 'sent' })
-        .eq('id', scheduledId);
-
-      return message;
-    } catch (error) {
-      // Mark as failed
-      await this.supabase
+      // Mark scheduled message as successfully sent
+      const { error: updateError } = await this.supabase
         .from('scheduled_messages')
         .update({ 
-          status: 'failed',
-          last_error: error.message 
+          status: 'sent',
+          last_error: null, // Clear any previous errors
+          updated_at: new Date().toISOString()
         })
         .eq('id', scheduledId);
+
+      if (updateError) {
+        throw new Error(`Failed to update scheduled message status: ${updateError.message}`);
+      }
+
+      console.log(`✅ Successfully processed scheduled message ${scheduled.id} -> message ${message.id}`);
+      return message;
+
+    } catch (error) {
+      console.error(`❌ Error processing scheduled message ${scheduled.id}:`, error);
+
+      // Mark as failed with comprehensive error details
+      try {
+        await this.supabase
+          .from('scheduled_messages')
+          .update({ 
+            status: 'failed',
+            last_error: error.message,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scheduledId);
+      } catch (updateError) {
+        console.error(`Failed to update failed scheduled message ${scheduledId}:`, updateError);
+      }
 
       throw error;
     }
@@ -1452,9 +1577,9 @@ class CommunicationService {
       const checkIn = reservation.check_in_date;
       
       if (reservation.is_group_master && reservation.group_room_count > 1) {
-        return `${guestName} - Group Booking (${reservation.group_room_count} rooms) - ${propertyName} - ${checkIn}`;
+        return `${guestName} - (${reservation.group_room_count}R`;
       } else if (reservation.is_group_master) {
-        return `${guestName} - Group Booking - ${propertyName} - ${checkIn}`;
+        return `${guestName} `;
       } else {
         return null; // Let database trigger handle single bookings
       }
@@ -1649,9 +1774,14 @@ class CommunicationService {
         groupThread.status = 'open';
       }
       
-      // Add channel mappings if needed
+      // Add channel mappings if needed (skip 'inapp' channel - it doesn't need explicit mapping)
       if (initialData.channels && Array.isArray(initialData.channels)) {
         for (const channelData of initialData.channels) {
+          // Skip 'inapp' channel - it's always available and doesn't need thread_channels mapping
+          if (channelData.channel === 'inapp') {
+            continue;
+          }
+          
           const existingChannelMapping = groupThread.thread_channels?.find(
             tc => tc.channel === channelData.channel && tc.external_thread_id === channelData.external_thread_id
           );
@@ -1667,7 +1797,7 @@ class CommunicationService {
             }
           }
         }
-      }      
+      }
       return groupThread;
     }
       
@@ -1691,9 +1821,14 @@ class CommunicationService {
         existingByReservation.status = 'open';
       }
       
-      // Check if we need to add channel mappings
+      // Check if we need to add channel mappings (skip 'inapp' channel - it doesn't need explicit mapping)
       if (initialData.channels && Array.isArray(initialData.channels)) {
         for (const channelData of initialData.channels) {
+          // Skip 'inapp' channel - it's always available and doesn't need thread_channels mapping
+          if (channelData.channel === 'inapp') {
+            continue;
+          }
+          
           const existingChannelMapping = existingByReservation.thread_channels?.find(
             tc => tc.channel === channelData.channel && tc.external_thread_id === channelData.external_thread_id
           );

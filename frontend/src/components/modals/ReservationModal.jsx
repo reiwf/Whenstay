@@ -210,6 +210,7 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
   const [copied, setCopied] = useState(false)
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState('booking')
+  const [showScheduledMessagesDrawer, setShowScheduledMessagesDrawer] = useState(false)
 
   // Define tabs with icons and labels
   const tabs = [
@@ -488,15 +489,12 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
           />
         )
       case 'scheduled':
-        return reservation ? (
-          <div className="bg-white p-6 rounded-lg">
-            <ScheduledMessagesPanel
-              reservationId={reservation.id}
-              onTriggerAutomation={handleTriggerAutomation}
-              onCancelMessages={handleCancelMessages}
-            />
-          </div>
-        ) : null
+        // Open drawer instead of showing inline content
+        if (reservation && !showScheduledMessagesDrawer) {
+          setShowScheduledMessagesDrawer(true)
+          setActiveTab('booking') // Reset to booking tab
+        }
+        return null
       default:
         return null
     }
@@ -641,6 +639,17 @@ export default function ReservationModal({ reservation, properties, onSave, onCl
           </form>
         </div>
       </div>
+
+      {/* Scheduled Messages Drawer */}
+      {reservation && (
+        <ScheduledMessagesPanel
+          reservationId={reservation.id}
+          isOpen={showScheduledMessagesDrawer}
+          onClose={() => setShowScheduledMessagesDrawer(false)}
+          onTriggerAutomation={handleTriggerAutomation}
+          onCancelMessages={handleCancelMessages}
+        />
+      )}
     </div>
   )
 }

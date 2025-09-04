@@ -157,7 +157,13 @@ class CalendarService {
         color: item.color,
         label: item.label,
         isSegment: item.is_segment,
-        isUnassigned: item.room_unit_id === null && item.room_unit_number === 'UNASSIGNED'
+        isUnassigned: item.room_unit_id === null && item.room_unit_number === 'UNASSIGNED',
+        
+        // Group booking fields - preserve for calendar display
+        group_room_count: item.group_room_count,
+        is_group_master: item.is_group_master,
+        booking_group_master_id: item.booking_group_master_id,
+        booking_group_ids: item.booking_group_ids
       };
 
       if (item.is_segment) {

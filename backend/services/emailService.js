@@ -4,7 +4,8 @@ class EmailService {
   constructor() {
     this.resend = new Resend(process.env.RESEND_API_KEY);
     this.fromEmail = process.env.ADMIN_EMAIL || 'chat@staylabel.com';
-    this.frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    this.invitationFromEmail = process.env.INVITATION_FROM_EMAIL || 'register@staylabel.com';
+    this.frontendUrl = process.env.FRONTEND_URL || 'https://app.staylabel.com';
     
     if (!process.env.RESEND_API_KEY) {
       console.warn('Resend API key not configured - emails will not be sent');
@@ -48,6 +49,27 @@ class EmailService {
     } catch (error) {
       console.error('Error sending check-in confirmation:', error);
       throw new Error('Failed to send check-in confirmation email');
+    }
+  }
+
+  // Send user invitation email
+  async sendUserInvitation(email, invitationToken, role) {
+    try {
+      const invitationUrl = `${this.frontendUrl}/accept-invitation/${invitationToken}`;
+      
+      const emailData = {
+        from: `"Register" <${this.invitationFromEmail}>`,
+        to: email,
+        subject: 'You\'re invited to join Staylabel',
+        html: this.getUserInvitationTemplate(email, invitationUrl, role)
+      };
+
+      const result = await this.resend.emails.send(emailData);
+      console.log('User invitation sent:', result.id);
+      return result;
+    } catch (error) {
+      console.error('Error sending user invitation:', error);
+      throw new Error('Failed to send user invitation email');
     }
   }
 
@@ -241,48 +263,236 @@ class EmailService {
     `;
   }
 
-  // Send generic message email through message panel
+  // User invitation email template
+  getUserInvitationTemplate(email, invitationUrl, role) {
+    return `
+      <!DOCTYPE html>
+        <html lang="en" style="mso-line-height-rule:exactly;">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width">
+          <meta http-equiv="x-ua-compatible" content="ie=edge">
+          <title>Welcome to Staylabel</title>
+          <style>
+            /* Dark-mode hint (supported clients only) */
+            @media (prefers-color-scheme: dark) {
+              body, .bg { background:#0B0B0C !important; }
+              .card { background:#161617 !important; border-color:#262626 !important; }
+              .text { color:#F3F4F6 !important; }
+              .muted { color:#B3B3B3 !important; }
+              .chip { background:#201A16 !important; }
+            }
+            @media only screen and (max-width:600px) {
+              .container { width:100% !important; }
+              .p-24 { padding:16px !important; }
+              .h-24 { height:16px !important; }
+            }
+          </style>
+        </head>
+        <body class="bg" style="margin:0; padding:0; background:#F6F7F9; -webkit-font-smoothing:antialiased; -ms-text-size-adjust:100%; -webkit-text-size-adjust:100%;">
+          <!-- preheader (hidden) -->
+          <div style="display:none; font-size:0; line-height:0; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">
+            Your Staylabel invite is ready—set your password to join the team.
+          </div>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F6F7F9;">
+            <tr>
+              <td align="center" style="padding:24px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="container" style="width:600px; max-width:100%;">
+                  
+                  <!-- Header -->
+                  <tr>
+                    <td style="padding:0 0 16px 0;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        <tr>
+                          <td align="left" style="padding:0;">
+                            <!-- Brand chip -->
+                            <div style="display:inline-block; padding:10px 14px; background:#FF6B00; color:#0A0A0A; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; font-weight:800; border-radius:10px;">
+                              Staylabel
+                            </div>
+                          </td>
+                          <td align="right" style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:12px; color:#6B7280;">
+                            <span class="muted">Invitation</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Card -->
+                  <tr>
+                    <td class="card" style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:14px; padding:0;">
+                      <!-- Accent bar -->
+                      <div style="height:4px; width:100%; background:#FF6B00; border-top-left-radius:14px; border-top-right-radius:14px;"></div>
+
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        <tr><td class="h-24" style="height:24px; line-height:24px;">&nbsp;</td></tr>
+                        <tr>
+                          <td class="p-24" style="padding:0 24px;">
+                            <h1 class="text" style="margin:0 0 8px 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:22px; line-height:30px; color:#0A0A0A;">
+                              Welcome to Staylabel!
+                            </h1>
+                            <p class="text" style="margin:0 0 16px 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#111827;">
+                              You’ve been invited to join our property management platform. We’re excited to have you on board!
+                            </p>
+
+                            <!-- Info chip -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                              <tr>
+                                <td class="chip" style="background:#FFF7F0; border:1px solid #E5E7EB; border-left:4px solid #FF6B00; border-radius:10px; padding:16px;">
+                                  <div class="text" style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#0A0A0A;">
+                                    <strong>Your invitation details</strong><br>
+                                    Email: ${email}<br>
+                                    This invitation will expire in <strong>24 hours</strong>.
+                                  </div>
+                                </td>
+                              </tr>
+                            </table>
+
+                            <div style="height:16px; line-height:16px;">&nbsp;</div>
+
+                            <!-- CTA Button -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                              <tr>
+                                <td align="center" bgcolor="#FF6B00" style="border-radius:10px;">
+                                  <a href="${invitationUrl}"
+                                    style="display:inline-block; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; font-weight:700; color:#0A0A0A; text-decoration:none; padding:12px 24px; border-radius:10px; background:#FF6B00;">
+                                    Accept Invitation &amp; Set Password
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+
+                            <div style="height:16px; line-height:16px;">&nbsp;</div>
+
+                            <!-- Bullet list -->
+                            <p class="text" style="margin:0 0 8px 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#0A0A0A;">
+                              During setup you’ll be able to:
+                            </p>
+                            <ul style="margin:0 0 16px 20px; padding:0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#111827;">
+                              <li>Create your secure password</li>
+                              <li>Complete your profile information</li>
+                              <li>Access your dashboard and start using the platform</li>
+                            </ul>
+
+                            <p class="text" style="margin:0 0 0 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#111827;">
+                              <strong>Important:</strong> This link is unique to you and expires in 24 hours. If it expires, please request a new invitation.
+                            </p>
+
+                            <div style="height:20px; line-height:20px;">&nbsp;</div>
+
+                            <p class="text" style="margin:0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:#0A0A0A; font-weight:600;">
+                              The Staylabel Team
+                            </p>
+                          </td>
+                        </tr>
+                        <tr><td class="h-24" style="height:24px; line-height:24px;">&nbsp;</td></tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding:16px 4px 0; text-align:center; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:12px; line-height:18px; color:#6B7280;">
+                      This invitation was sent to ${email}. If you didn’t expect it, you can safely ignore this email. For security reasons, this link will expire in 24 hours.
+                    </td>
+                  </tr>
+                  <tr><td style="height:24px; line-height:24px;">&nbsp;</td></tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+    `;
+  }
+
+  // Send generic message email through message panel with advanced threading
   async sendGenericMessage(guestEmail, guestName, subject, messageContent, reservationData = {}, messageId = null) {
     try {
-      // Generate email thread ID for threading
-      const emailThreadId = this.generateEmailThreadId(reservationData.reservationId, messageId);
+      console.log('Sending email via Resend with HTML template:', { 
+        to: guestEmail, 
+        messageId, 
+        hasReservationData: Object.keys(reservationData).length > 0 
+      });
+
+      // Get threading context if messageId is provided
+      let threadingContext = null;
+      if (messageId) {
+        threadingContext = await this.getThreadingContext(messageId, reservationData);
+      }
+
+      // Generate unique Message-ID for this email
+      const newMessageId = this.generateMessageId(reservationData.reservationId, messageId);
       
-      // Prepare email headers for threading
+      // Prepare email headers with threading support
       const headers = {
         'Reply-To': this.fromEmail,
-        'Message-ID': `<${emailThreadId}@staylabel.com>`
+        'Message-ID': `<${newMessageId}@staylabel.com>`
       };
 
-      // If this is a reply in an existing thread, add threading headers
-      if (reservationData.emailThreadId) {
-        headers['In-Reply-To'] = `<${reservationData.emailThreadId}@staylabel.com>`;
-        headers['References'] = `<${reservationData.emailThreadId}@staylabel.com>`;
+      // Add threading headers if we have context
+      if (threadingContext && threadingContext.shouldThread) {
+        if (threadingContext.inReplyTo) {
+          headers['In-Reply-To'] = threadingContext.inReplyTo;
+        }
+        if (threadingContext.references) {
+          headers['References'] = threadingContext.references;
+        }
+        console.log('Adding threading headers:', {
+          inReplyTo: threadingContext.inReplyTo,
+          references: threadingContext.references
+        });
       }
 
       const emailData = {
         from: this.fromEmail,
         to: guestEmail,
         subject: subject || 'Message from Staylabel',
-        html: this.getGenericMessageTemplate(guestName, messageContent, reservationData),
+        html: this.getBrandedMessageTemplate(guestName, messageContent, reservationData),
         headers
       };
 
       const result = await this.resend.emails.send(emailData);
-      console.log('Generic message email sent:', result.id);
+      console.log('Resend email sent successfully:', result.id);
 
       // Store email metadata for threading if messageId is provided
       if (messageId) {
         await this.storeEmailMetadata(messageId, {
           email_message_id: result.id,
-          email_thread_id: emailThreadId,
-          resend_message_id: result.id
+          email_thread_id: threadingContext?.threadId || newMessageId,
+          email_in_reply_to: threadingContext?.inReplyTo || null,
+          email_references: threadingContext?.references || null,
+          resend_message_id: result.id,
+          email_provider_data: {
+            resend_response: result,
+            headers: headers,
+            sent_at: new Date().toISOString()
+          }
         });
       }
 
-      return { ...result, emailThreadId };
+      return { 
+        ...result, 
+        emailThreadId: threadingContext?.threadId || newMessageId,
+        emailMessageId: result.id,
+        success: true,
+        provider: 'resend'
+      };
     } catch (error) {
-      console.error('Error sending generic message email:', error);
-      throw new Error('Failed to send message email');
+      console.error('Error sending generic message email via Resend:', error);
+      
+      // Categorize Resend errors
+      if (error.name === 'validation_error') {
+        throw new Error(`Email validation error: ${error.message}`);
+      } else if (error.name === 'rate_limit_exceeded') {
+        throw new Error(`Rate limit exceeded: ${error.message}`);
+      } else if (error.name === 'api_key_invalid') {
+        throw new Error(`Invalid Resend API key: ${error.message}`);
+      } else {
+        throw new Error(`Failed to send message email: ${error.message}`);
+      }
     }
   }
 
@@ -418,6 +628,94 @@ class EmailService {
     };
   }
 
+  // Get threading context from email_metadata table for proper thread continuation
+  async getThreadingContext(messageId, reservationData = {}) {
+    try {
+      const { supabaseAdmin } = require('../config/supabase');
+      
+      // Get the message and its thread
+      const { data: message, error: msgError } = await supabaseAdmin
+        .from('messages')
+        .select('thread_id')
+        .eq('id', messageId)
+        .single();
+
+      if (msgError || !message) {
+        console.log('No message found for threading context');
+        return { shouldThread: false };
+      }
+
+      // Get the latest email metadata from this thread for threading
+      const { data: latestEmailMessage, error: threadError } = await supabaseAdmin
+        .from('messages')
+        .select(`
+          id,
+          created_at,
+          email_metadata!inner(
+            email_message_id,
+            email_thread_id,
+            email_in_reply_to,
+            email_references
+          )
+        `)
+        .eq('thread_id', message.thread_id)
+        .eq('channel', 'email')
+        .not('email_metadata.email_message_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (threadError) {
+        console.error('Error getting threading context:', threadError);
+        return { shouldThread: false };
+      }
+
+      if (!latestEmailMessage?.email_metadata) {
+        console.log('No previous email metadata found for threading');
+        return { shouldThread: false };
+      }
+
+      const metadata = latestEmailMessage.email_metadata;
+      
+      // Build References chain
+      const references = [];
+      if (metadata.email_references) {
+        references.push(metadata.email_references);
+      }
+      if (metadata.email_message_id) {
+        references.push(`<${metadata.email_message_id}@staylabel.com>`);
+      }
+
+      return {
+        shouldThread: true,
+        threadId: metadata.email_thread_id,
+        inReplyTo: `<${metadata.email_message_id}@staylabel.com>`,
+        references: references.join(' '),
+        latestMessageId: metadata.email_message_id
+      };
+
+    } catch (error) {
+      console.error('Error getting threading context:', error);
+      return { shouldThread: false };
+    }
+  }
+
+  // Generate unique Message-ID for email headers
+  generateMessageId(reservationId, messageId) {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    
+    if (reservationId && messageId) {
+      return `msg-${reservationId}-${messageId}-${timestamp}-${random}`;
+    } else if (reservationId) {
+      return `msg-${reservationId}-${timestamp}-${random}`;
+    } else if (messageId) {
+      return `msg-${messageId}-${timestamp}-${random}`;
+    } else {
+      return `msg-${timestamp}-${random}`;
+    }
+  }
+
   // Generate unique email thread ID for threading
   generateEmailThreadId(reservationId, messageId) {
     const timestamp = Date.now();
@@ -432,26 +730,220 @@ class EmailService {
     }
   }
 
-  // Store email metadata for threading
+  // Branded message template (ported from n8nEmailService)
+  getBrandedMessageTemplate(guestName, messageContent, reservationData = {}) {
+    const propertyName = reservationData.propertyName || 'Staylabel';
+    const checkInDate = reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString() : '';
+    const reservationId = reservationData.reservationId || '';
+    
+    // Convert plain text to HTML paragraphs
+    const formattedContent = this.formatMessageContent(messageContent);
+    
+    // Use the branded email template
+    return this.buildBrandEmailHTML({
+      propertyName,
+      guestName,
+      formattedContent,
+      checkInDate,
+      reservationId,
+      logoUrl: '' // Could be configured later with process.env.BRAND_LOGO_URL
+    });
+  }
+
+  // Modern branded email template with Staylabel design (ported from n8nEmailService)
+  buildBrandEmailHTML({
+    propertyName,
+    guestName,
+    formattedContent,
+    checkInDate = "",
+    reservationId = "",
+    logoUrl = ""
+  }) {
+    const BRAND_ORANGE = "#ff6a0063";
+    const BRAND_BLACK  = "#0A0A0A";
+    const BG           = "#F6F7F9";
+    const CARD_BG      = "#FFFFFF";
+    const MUTED_TEXT   = "#6B7280";
+    const BORDER       = "#E5E7EB";
+
+    const preheaderText = `Message from ${propertyName}${reservationId ? ` • Reservation ${reservationId}` : ""}`;
+
+    // helper snippet: reservation block if we have dates/id
+    const reservationBlock = checkInDate
+      ? `
+        <tr>
+          <td style="padding: 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; background: #FFF7F0; border: 1px solid ${BORDER}; border-radius: 10px;">
+              <tr>
+                <td style="padding: 14px 16px; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 14px; line-height: 20px; color: ${BRAND_BLACK};">
+                  <div style="font-weight:700; margin-bottom:6px;">Reservation Details</div>
+                  ${reservationId ? `<div style="color:${BRAND_BLACK};"><strong>ID:</strong> ${reservationId}</div>` : ""}
+                  <div style="color:${BRAND_BLACK};"><strong>Check-in:</strong> ${checkInDate}</div>
+                  <div style="color:${BRAND_BLACK};"><strong>Property:</strong> ${propertyName}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:16px; line-height:16px;">&nbsp;</td></tr>
+      `
+      : "";
+
+    return `
+<!DOCTYPE html>
+<html lang="en" style="mso-line-height-rule: exactly;">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <title>Message from ${propertyName}</title>
+  <style>
+    /* Dark-mode support (where available) */
+    @media (prefers-color-scheme: dark) {
+      body, .bg { background: #0B0B0C !important; }
+      .card { background: #161617 !important; border-color: #262626 !important; }
+      .muted { color: #B3B3B3 !important; }
+      .text { color: #F3F4F6 !important; }
+      .accent { background: ${BRAND_ORANGE} !important; color: #0A0A0A !important; }
+      .chip { background: #201A16 !important; }
+    }
+    /* Mobile tweaks */
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; }
+      .p-24 { padding: 16px !important; }
+      .h-24 { height: 16px !important; }
+    }
+  </style>
+</head>
+<body class="bg" style="margin:0; padding:0; background:${BG}; -webkit-font-smoothing:antialiased; -ms-text-size-adjust:100%; -webkit-text-size-adjust:100%;">
+  <!-- preheader (hidden) -->
+  <div style="display:none; font-size:0; line-height:0; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">
+    ${preheaderText}
+  </div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BG};">
+    <tr>
+      <td align="center" style="padding: 24px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="container" style="width:600px; max-width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:0 0 16px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <td align="left" style="padding:0;">
+                    ${logoUrl
+                      ? `<img src="${logoUrl}" width="44" height="44" alt="${propertyName} logo" style="display:block; border:0; outline:none; text-decoration:none; border-radius:12px; background:${BRAND_ORANGE};" />`
+                      : `<div style="display:inline-block; padding:10px 14px; background:${BRAND_ORANGE}; color:${BRAND_BLACK}; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-weight:800; border-radius:10px;">${propertyName}</div>`
+                    }
+                  </td>
+                  <td align="right" style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:12px; color:${MUTED_TEXT};">
+                    <span class="muted">Automated message</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td class="card" style="background:${CARD_BG}; border:1px solid ${BORDER}; border-radius:14px; padding: 0;">
+              <!-- Top bar accent -->
+              <div class="accent" style="height:4px; width:100%; background:${BRAND_ORANGE}; border-top-left-radius:14px; border-top-right-radius:14px;"></div>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr><td class="h-24" style="height:24px; line-height:24px;">&nbsp;</td></tr>
+                <tr>
+                  <td class="p-24" style="padding: 0 24px;">
+                    <h1 class="text" style="margin:0 0 8px 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:20px; line-height:28px; color:${BRAND_BLACK};">
+                      Hello ${guestName},
+                    </h1>
+                    <p class="muted" style="margin:0 0 16px 0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:${MUTED_TEXT};">
+                      You have a new message from <strong style="color:${BRAND_BLACK};">${propertyName}</strong>:
+                    </p>
+
+                    <!-- Message content bubble -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td class="chip" style="background:#F8F9FB; border:1px solid ${BORDER}; border-left:4px solid ${BRAND_ORANGE}; border-radius:10px; padding:16px;">
+                          <div class="text" style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:${BRAND_BLACK};">
+                            ${formattedContent}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <div style="height:16px; line-height:16px;">&nbsp;</div>
+
+                    ${reservationBlock}
+
+                    <p class="muted" style="margin:0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:${MUTED_TEXT};">
+                      If you have any questions, just reply to this email and we'll help you out.
+                    </p>
+
+                    <div style="height:20px; line-height:20px;">&nbsp;</div>
+
+                    <!-- Signature -->
+                    <p class="text" style="margin:0; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:14px; line-height:22px; color:${BRAND_BLACK}; font-weight:600;">
+                      The ${propertyName} Team
+                    </p>
+                  </td>
+                </tr>
+                <tr><td class="h-24" style="height:24px; line-height:24px;">&nbsp;</td></tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 4px 0; text-align:center; font-family:Arial,'Helvetica Neue',Helvetica,sans-serif; font-size:12px; line-height:18px; color:${MUTED_TEXT};">
+              This message relates to your reservation with ${propertyName}. If you believe you received it in error, please contact us.
+            </td>
+          </tr>
+          <tr><td style="height:24px; line-height:24px;">&nbsp;</td></tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+  }
+
+  // Store email metadata for threading using dedicated email_metadata table
   async storeEmailMetadata(messageId, metadata) {
     try {
       const { supabaseAdmin } = require('../config/supabase');
       
+      // Store in email_metadata table using upsert
       const { error } = await supabaseAdmin
-        .from('messages')
-        .update({
+        .from('email_metadata')
+        .upsert({
+          message_id: messageId,
           email_message_id: metadata.email_message_id,
           email_thread_id: metadata.email_thread_id,
+          email_in_reply_to: metadata.email_in_reply_to,
+          email_references: metadata.email_references,
+          email_name: metadata.email_name,
+          email_provider_data: metadata.email_provider_data,
           updated_at: new Date().toISOString()
-        })
-        .eq('id', messageId);
+        }, { 
+          onConflict: 'message_id' 
+        });
 
       if (error) {
-        console.error('Error storing email metadata:', error);
+        console.error('Error storing email metadata in email_metadata table:', error);
         throw error;
       }
 
-      console.log(`Stored email metadata for message ${messageId}:`, metadata);
+      console.log(`Stored Resend email metadata for message ${messageId}:`, {
+        email_message_id: metadata.email_message_id,
+        email_thread_id: metadata.email_thread_id,
+        email_in_reply_to: metadata.email_in_reply_to,
+        email_references: metadata.email_references,
+        provider: 'resend'
+      });
     } catch (error) {
       console.error('Failed to store email metadata:', error);
       // Don't throw error to avoid breaking email sending

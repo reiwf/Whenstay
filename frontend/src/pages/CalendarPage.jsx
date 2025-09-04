@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar } from 'lucide-react';
 import DashboardLayout from '../components/layout/DashboardLayout';
-import PropertySelector from '../components/calendar/PropertySelector';
 import CalendarTimeline from '../components/calendar/CalendarTimeline';
+import { useProperty } from '../contexts/PropertyContext';
 
 /**
  * Integrates property selection with calendar timeline
  */
 export default function CalendarPage() {
-  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
+  const { selectedPropertyId, selectProperty } = useProperty();
   const [pageLoading, setPageLoading] = useState(true);
 
   // Initialize page
@@ -25,7 +25,7 @@ export default function CalendarPage() {
    * Handle property selection change
    */
   const handlePropertyChange = (propertyId) => {
-    setSelectedPropertyId(propertyId);
+    selectProperty(propertyId);
   };
 
   if (pageLoading) {
@@ -55,18 +55,6 @@ export default function CalendarPage() {
           </div>
         </div> */}
 
-        {/* Property Selector */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="w-80">
-              <PropertySelector
-                selectedPropertyId={selectedPropertyId}
-                onPropertyChange={handlePropertyChange}
-                className="w-full"
-              />
-            </div>
-          </div>
-        </div>
 
         {/* Calendar Timeline */}
         <div className="min-h-screen">

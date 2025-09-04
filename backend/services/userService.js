@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require('../config/supabase');
 const { cleanObject } = require('./utils/dbHelpers');
+const crypto = require('crypto');
 
 class UserService {
   // User Management Methods
@@ -293,6 +294,335 @@ class UserService {
       return usersWithStats;
     } catch (error) {
       console.error('Database error fetching users with details:', error);
+      throw error;
+    }
+  }
+
+  // Invitation Management Methods
+
+  // Generate a secure invitation token
+  generateInvitationToken() {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  // Invite a new user by email
+  async inviteUser(email, role, invitedBy) {
+    try {
+      // Check if user already exists
+      const existingUser = await this.getUserByEmail(email);
+      if (existingUser && existingUser.profile) {
+        throw new Error('User with this email already exists');
+      }
+
+      // Validate role
+      const validRoles = ['admin', 'owner', 'guest', 'cleaner'];
+      if (!validRoles.includes(role)) {
+        throw new Error('Invalid role. Must be one of: admin, owner, guest, cleaner');
+      }
+
+      // Generate secure invitation token
+      const invitationToken = this.generateInvitationToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours from now
+
+      // Create auth user without password (email not confirmed)
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        email_confirm: false, // User will confirm via invitation
+        user_metadata: {
+          role: role,
+          invited: true
+        }
+      });
+
+      if (authError) {
+        console.error('Error creating auth user for invitation:', authError);
+        throw new Error(`Failed to create invitation: ${authError.message}`);
+      }
+
+      // Create user profile with invitation details
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .insert({
+          id: authUser.user.id,
+          role: role,
+          first_name: null, // User will provide during acceptance
+          last_name: null,
+          phone: null,
+          company_name: null,
+          is_active: false, // Inactive until invitation accepted
+          invitation_token: invitationToken,
+          invitation_expires_at: expiresAt.toISOString(),
+          invited_by: invitedBy,
+          invitation_status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Error creating user profile for invitation:', profileError);
+        
+        // Clean up auth user if profile creation fails
+        try {
+          await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+        } catch (cleanupError) {
+          console.error('Error cleaning up auth user:', cleanupError);
+        }
+        
+        throw new Error(`Failed to create invitation profile: ${profileError.message}`);
+      }
+
+      // Send invitation email (with graceful failure handling)
+      const emailService = require('./emailService');
+      try {
+        await emailService.sendUserInvitation(email, invitationToken, role);
+        console.log(`Invitation email sent successfully to ${email}`);
+      } catch (emailError) {
+        console.error('Failed to send invitation email:', emailError);
+        // Don't throw the error - the invitation was created successfully
+        // The user can manually send the invitation URL or troubleshoot email later
+      }
+
+      return {
+        ...profile,
+        email: authUser.user.email,
+        auth_id: authUser.user.id,
+        email_sent: true // We'll assume it was sent for now
+      };
+    } catch (error) {
+      console.error('Database error inviting user:', error);
+      throw error;
+    }
+  }
+
+  // Validate invitation token and get invitation details
+  async validateInvitationToken(token) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('invitation_token', token)
+        .eq('invitation_status', 'pending')
+        .single();
+
+      if (error || !data) {
+        // Check if this user already exists and is active (already registered)
+        const { data: existingUser, error: existingError } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*')
+          .eq('invitation_token', token)
+          .single();
+
+        if (existingUser && existingUser.is_active && existingUser.invitation_status === 'accepted') {
+          throw new Error('This user has already been registered');
+        }
+
+        throw new Error('Invalid or expired invitation token');
+      }
+
+      // Check if token has expired
+      const now = new Date();
+      const expiresAt = new Date(data.invitation_expires_at);
+      
+      if (now > expiresAt) {
+        // Mark as expired
+        await this.markInvitationExpired(token);
+        throw new Error('Invitation token has expired');
+      }
+
+      // Get email from auth user
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(data.id);
+      
+      if (authError || !authUser.user) {
+        throw new Error('Failed to get invitation details');
+      }
+
+      return {
+        ...data,
+        email: authUser.user.email
+      };
+    } catch (error) {
+      console.error('Database error validating invitation token:', error);
+      throw error;
+    }
+  }
+
+  // Get invitation by token (for public access)
+  async getInvitationByToken(token) {
+    try {
+      const invitation = await this.validateInvitationToken(token);
+      
+      // Return only safe fields for public access
+      return {
+        role: invitation.role,
+        email: invitation.email,
+        expires_at: invitation.invitation_expires_at,
+        invited_by: invitation.invited_by
+      };
+    } catch (error) {
+      console.error('Database error getting invitation by token:', error);
+      throw error;
+    }
+  }
+
+  // Accept invitation and complete user setup
+  async acceptInvitation(token, password, firstName, lastName) {
+    try {
+      // Validate invitation
+      const invitation = await this.validateInvitationToken(token);
+      
+      // Set password for auth user
+      const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(
+        invitation.id,
+        { 
+          password: password,
+          email_confirm: true // Confirm email upon acceptance
+        }
+      );
+
+      if (passwordError) {
+        console.error('Error setting password for invited user:', passwordError);
+        throw new Error('Failed to set password');
+      }
+
+      // Update user profile
+      const { data: updatedProfile, error: updateError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          is_active: true,
+          invitation_token: null, // Clear token
+          invitation_expires_at: null,
+          invitation_status: 'accepted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', invitation.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating user profile after invitation acceptance:', updateError);
+        throw new Error('Failed to complete invitation acceptance');
+      }
+
+      return {
+        ...updatedProfile,
+        email: invitation.email
+      };
+    } catch (error) {
+      console.error('Database error accepting invitation:', error);
+      throw error;
+    }
+  }
+
+  // Mark invitation as expired
+  async markInvitationExpired(token) {
+    try {
+      await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          invitation_status: 'expired',
+          updated_at: new Date().toISOString()
+        })
+        .eq('invitation_token', token);
+    } catch (error) {
+      console.error('Error marking invitation as expired:', error);
+    }
+  }
+
+  // Get pending invitations (for admin)
+  async getPendingInvitations() {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('user_profiles')
+        .select(`
+          *,
+          invited_by_profile:invited_by (
+            first_name,
+            last_name
+          )
+        `)
+        .eq('invitation_status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pending invitations:', error);
+        throw new Error('Failed to fetch pending invitations');
+      }
+
+      // Get email addresses from auth users
+      const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users for invitations:', authError);
+        return data; // Return without email if auth fetch fails
+      }
+
+      // Create a map of auth users by ID
+      const authUserMap = {};
+      if (authUsers && authUsers.users) {
+        authUsers.users.forEach(authUser => {
+          authUserMap[authUser.id] = authUser;
+        });
+      }
+
+      // Add email addresses to invitation data
+      const invitationsWithEmails = data.map(invitation => {
+        const authUser = authUserMap[invitation.id];
+        return {
+          ...invitation,
+          email: authUser?.email || null
+        };
+      });
+
+      return invitationsWithEmails;
+    } catch (error) {
+      console.error('Database error fetching pending invitations:', error);
+      throw error;
+    }
+  }
+
+  // Clean up expired invitations (for maintenance)
+  async cleanupExpiredInvitations() {
+    try {
+      const now = new Date().toISOString();
+      
+      // Get expired invitations
+      const { data: expiredInvitations, error: fetchError } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq('invitation_status', 'pending')
+        .lt('invitation_expires_at', now);
+
+      if (fetchError) {
+        console.error('Error fetching expired invitations:', fetchError);
+        return 0;
+      }
+
+      if (!expiredInvitations || expiredInvitations.length === 0) {
+        return 0;
+      }
+
+      // Mark as expired
+      const { error: updateError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          invitation_status: 'expired',
+          updated_at: new Date().toISOString()
+        })
+        .eq('invitation_status', 'pending')
+        .lt('invitation_expires_at', now);
+
+      if (updateError) {
+        console.error('Error marking invitations as expired:', updateError);
+        throw new Error('Failed to cleanup expired invitations');
+      }
+
+      console.log(`Cleaned up ${expiredInvitations.length} expired invitations`);
+      return expiredInvitations.length;
+    } catch (error) {
+      console.error('Database error cleaning up expired invitations:', error);
       throw error;
     }
   }

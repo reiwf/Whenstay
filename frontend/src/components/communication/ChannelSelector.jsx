@@ -91,6 +91,25 @@ export default function ChannelSelector({
     [selectedChannel]
   );
 
+  // Update highlighted index when availableChannels change
+  useEffect(() => {
+    const newIndex = Math.max(0, availableChannels.indexOf(selectedChannel));
+    setHighlighted(newIndex);
+  }, [availableChannels, selectedChannel]);
+
+  // Ensure selectedChannel is valid when availableChannels change
+  useEffect(() => {
+    if (availableChannels.length > 0 && selectedChannel && !availableChannels.includes(selectedChannel)) {
+      // Selected channel is not available, switch to first available channel
+      console.log('ChannelSelector: Selected channel not available, switching to:', availableChannels[0]);
+      onChannelChange?.(availableChannels[0]);
+    } else if (availableChannels.length > 0 && !selectedChannel) {
+      // No selected channel but channels are available, select first one
+      console.log('ChannelSelector: No selected channel, selecting first available:', availableChannels[0]);
+      onChannelChange?.(availableChannels[0]);
+    }
+  }, [availableChannels, selectedChannel, onChannelChange]);
+
   // Close on outside click
   useEffect(() => {
     function onDocClick(e) {

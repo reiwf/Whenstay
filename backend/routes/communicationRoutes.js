@@ -328,6 +328,23 @@ router.get('/threads/:threadId/channels', async (req, res) => {
   try {
     const { threadId } = req.params;
 
+    // Get thread with reservation info to determine booking source
+    const { data: thread, error: threadError } = await supabaseAdmin
+      .from('message_threads')
+      .select(`
+        id,
+        reservation_id,
+        reservations (
+          booking_source,
+          booking_email,
+          booking_phone
+        )
+      `)
+      .eq('id', threadId)
+      .single();
+
+    if (threadError) throw threadError;
+
     // Get thread channels
     const { data: threadChannels, error: channelsError } = await supabaseAdmin
       .from('thread_channels')
@@ -367,6 +384,39 @@ router.get('/threads/:threadId/channels', async (req, res) => {
       }
     });
 
+    // Add channels based on booking source
+    if (thread.reservations) {
+      const reservation = thread.reservations;
+      
+      // Check for Booking.com
+      if (reservation.booking_source && 
+          (reservation.booking_source.toLowerCase().includes('booking.com') || 
+           reservation.booking_source.toLowerCase() === 'booking.com')) {
+        if (!availableChannels.includes('booking.com')) {
+          availableChannels.push('booking.com');
+        }
+      }
+      
+      // Check for Airbnb
+      if (reservation.booking_source && 
+          reservation.booking_source.toLowerCase().includes('airbnb')) {
+        if (!availableChannels.includes('airbnb')) {
+          availableChannels.push('airbnb');
+        }
+      }
+      
+      // Add email if reservation has email
+      if (reservation.booking_email && !availableChannels.includes('email')) {
+        availableChannels.push('email');
+      }
+      
+      // Add SMS if reservation has phone
+      // if (reservation.booking_phone && !availableChannels.includes('sms')) {
+      //   availableChannels.push('sms');
+      // }
+    }
+
+    console.log(`📞 Available channels for thread ${threadId}:`, availableChannels);
     res.json({ channels: availableChannels });
 
   } catch (error) {
@@ -925,7 +975,6 @@ router.get('/test/n8n', async (req, res) => {
   try {
     const n8nEmailService = require('../services/n8nEmailService');
     
-    console.log('Testing N8N webhook connectivity...');
     const testResult = await n8nEmailService.testWebhookConnectivity();
     
     res.json({
@@ -946,7 +995,6 @@ router.get('/test/n8n', async (req, res) => {
 // GET /api/communication/test/email-threading - Test complete Gmail email threading flow
 router.get('/test/email-threading', async (req, res) => {
   try {
-    console.log('🔄 Testing complete Gmail email threading flow...');
     
     const communicationService = require('../services/communicationService');
     const n8nEmailService = require('../services/n8nEmailService');
@@ -959,7 +1007,6 @@ router.get('/test/email-threading', async (req, res) => {
 
     // Step 1: Test database schema
     try {
-      console.log('📋 Step 1: Testing database schema...');
       const { data: schemaTest } = await supabaseAdmin
         .from('message_deliveries')
         .select('email_message_id, email_thread_id, email_in_reply_to, email_references')
@@ -982,7 +1029,6 @@ router.get('/test/email-threading', async (req, res) => {
     }
 
     // Step 2: Test N8N service configuration
-    console.log('🔧 Step 2: Testing N8N service configuration...');
     const n8nStatus = n8nEmailService.getServiceStatus();
     testResults.steps.push({
       step: 2,
@@ -997,7 +1043,6 @@ router.get('/test/email-threading', async (req, res) => {
     }
 
     // Step 3: Create a test thread for threading context testing
-    console.log('🧵 Step 3: Creating test thread for threading context...');
     try {
       const testThread = await communicationService.createThread({
         subject: 'Test Gmail Threading Flow',
@@ -1021,7 +1066,6 @@ router.get('/test/email-threading', async (req, res) => {
       });
 
       // Step 4: Test Gmail threading context retrieval
-      console.log('📧 Step 4: Testing Gmail threading context retrieval...');
       const threadingContext = await communicationService.getThreadGmailContext(testThread.id);
       
       testResults.steps.push({
@@ -1125,15 +1169,194 @@ router.get('/test/email-threading', async (req, res) => {
   }
 });
 
+// GET /api/communication/threads/by-reservation/:reservationId - Get or create thread for reservation (with group booking support)
+router.get('/threads/by-reservation/:reservationId', async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { auto_create = 'true' } = req.query;
+
+    console.log(`🔍 [GROUP-AWARE] Looking for thread for reservation: ${reservationId}, auto_create: ${auto_create}`);
+
+    const shouldAutoCreate = auto_create === 'true' || auto_create === true;
+    const communicationService = require('../services/communicationService');
+
+    let thread = null;
+    let wasCreated = false;
+    let wasReopened = false;
+
+    if (shouldAutoCreate) {
+      // Use the group-aware findOrCreateThreadByReservation method
+      console.log(`🔄 [GROUP-AWARE] Starting thread resolution for reservation: ${reservationId}`);
+      
+      // Step 1: Check for existing group booking thread
+      console.log(`🔍 [STEP 1] Checking for existing group booking thread...`);
+      const existingGroupThread = await communicationService.findGroupBookingThread(reservationId);
+      console.log(`📋 [STEP 1] Group thread search result:`, existingGroupThread ? {
+        id: existingGroupThread.id,
+        reservation_id: existingGroupThread.reservation_id,
+        status: existingGroupThread.status,
+        subject: existingGroupThread.subject
+      } : 'No group thread found');
+      
+      // Step 2: Check for direct reservation thread as fallback
+      console.log(`🔍 [STEP 2] Checking for direct reservation thread...`);
+      const { data: directThreads } = await supabaseAdmin
+        .from('message_threads')
+        .select('id, reservation_id, status, subject')
+        .eq('reservation_id', reservationId);
+      
+      console.log(`📋 [STEP 2] Direct thread search result:`, directThreads?.length > 0 ? directThreads : 'No direct threads found');
+      
+      // Step 3: Determine existing thread and track creation status
+      const existingThread = existingGroupThread || (directThreads?.length > 0 ? directThreads[0] : null);
+      const wasClosedBefore = existingThread?.status === 'closed';
+      
+      console.log(`📊 [STEP 3] Thread resolution summary:`, {
+        hasExistingThread: !!existingThread,
+        existingThreadId: existingThread?.id,
+        existingThreadStatus: existingThread?.status,
+        wasClosedBefore,
+        willCreateNew: !existingThread
+      });
+      
+      // Step 4: Call findOrCreateThreadByReservation
+      console.log(`🛠️ [STEP 4] Calling findOrCreateThreadByReservation...`);
+      thread = await communicationService.findOrCreateThreadByReservation(reservationId);
+      wasCreated = !existingThread;
+      wasReopened = wasClosedBefore && thread.status === 'open';
+      
+      console.log(`✅ [GROUP-AWARE] Thread resolution complete:`, {
+        finalThreadId: thread.id,
+        finalReservationId: thread.reservation_id,
+        wasCreated,
+        wasReopened,
+        finalStatus: thread.status,
+        duplicateCreated: existingThread && existingThread.id !== thread.id
+      });
+      
+      if (existingThread && existingThread.id !== thread.id) {
+        console.error(`❌ [DUPLICATE DETECTED] Expected to reuse thread ${existingThread.id} but got ${thread.id}`);
+      }
+    } else {
+      // Just look for existing thread without creating
+      const existingThread = await communicationService.findGroupBookingThread(reservationId);
+      
+      if (!existingThread) {
+        // Try direct reservation match as fallback
+        const { data: directThread } = await supabaseAdmin
+          .from('message_threads')
+          .select(`
+            id,
+            reservation_id,
+            subject,
+            status,
+            priority,
+            last_message_at,
+            last_message_preview,
+            created_at,
+            updated_at,
+            thread_channels (
+              channel,
+              external_thread_id
+            )
+          `)
+          .eq('reservation_id', reservationId)
+          .single();
+        
+        thread = directThread;
+      } else {
+        thread = existingThread;
+      }
+    }
+
+    if (!thread) {
+      return res.status(404).json({ error: 'No thread found for this reservation' });
+    }
+
+    // Get complete thread data with reservation details
+    const { data: completeThread, error: fetchError } = await supabaseAdmin
+      .from('message_threads')
+      .select(`
+        id,
+        reservation_id,
+        subject,
+        status,
+        priority,
+        last_message_at,
+        last_message_preview,
+        created_at,
+        updated_at,
+        thread_channels (
+          channel,
+          external_thread_id
+        ),
+        reservations (
+          id,
+          booking_name,
+          booking_email,
+          check_in_date,
+          check_out_date,
+          properties (
+            id,
+            name
+          ),
+          room_types (
+            id,
+            name
+          ),
+          room_units (
+            id,
+            unit_number
+          )
+        )
+      `)
+      .eq('id', thread.id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Calculate unread count for this thread
+    const userId = req.user.id;
+    const { data: participant } = await supabaseAdmin
+      .from('message_participants')
+      .select('last_read_at')
+      .eq('thread_id', thread.id)
+      .eq('user_id', userId)
+      .single();
+
+    const lastReadAt = participant?.last_read_at || '1970-01-01T00:00:00Z';
+
+    const { count } = await supabaseAdmin
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('thread_id', thread.id)
+      .eq('direction', 'incoming')
+      .gt('created_at', lastReadAt);
+
+    const threadWithUnread = {
+      ...completeThread,
+      unread_count: count || 0
+    };
+
+    res.json({ 
+      thread: threadWithUnread,
+      created: wasCreated,
+      reopened: wasReopened
+    });
+
+  } catch (error) {
+    console.error('❌ [GROUP-AWARE] Error fetching/creating thread for reservation:', error);
+    res.status(500).json({ error: 'Failed to fetch thread for reservation' });
+  }
+});
+
 // GET /api/communication/reservation/:reservationId/group-info - Get group booking info for a reservation
 router.get('/reservation/:reservationId/group-info', async (req, res) => {
   try {
-    console.log(`🔍 [DEBUG] /reservation/${req.params.reservationId}/group-info request received`);
     
     const { reservationId } = req.params;
 
     // First, check if the reservation exists with basic fields
-    console.log(`🔍 [DEBUG] Querying basic reservation data...`);
     const { data: basicReservation, error: basicError } = await supabaseAdmin
       .from('reservations')
       .select('id, booking_name')
@@ -1148,7 +1371,6 @@ router.get('/reservation/:reservationId/group-info', async (req, res) => {
       throw basicError;
     }
 
-    console.log(`✅ [DEBUG] Basic reservation found:`, basicReservation);
 
     // Try to get group booking details, but handle case where migration hasn't been run
     let reservation = basicReservation;

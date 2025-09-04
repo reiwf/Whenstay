@@ -3,11 +3,13 @@ const beds24Service = require('./beds24Service');
 const { supabaseAdmin } = require('../config/supabase');
 const communicationService = require('./communicationService');
 const smartMarketDemandService = require('./smartMarketDemandService');
+const generatorService = require('./scheduler/generatorService');
 
 class CronService {
   constructor() {
     this.cronJobs = new Map();
     this.isInitialized = false;
+    this.runningJobs = new Set(); // Track currently running jobs to prevent overlaps
   }
 
   // Initialize all cron jobs
@@ -19,11 +21,17 @@ class CronService {
 
     console.log('🔄 Initializing cron service...');
 
+    // Initialize generator service with dependencies
+    generatorService.init(supabaseAdmin, communicationService);
+
     // Start Beds24 token refresh job
     this.startBeds24TokenRefreshJob();
 
     // Start scheduled message processing job
     this.startScheduledMessageProcessingJob();
+
+    // Start occurrence generation job (new architecture)
+    this.startOccurrenceGenerationJob();
 
     // Start pricing-related cron jobs
     this.startPricingCronJobs();
@@ -62,8 +70,8 @@ class CronService {
 
   // Start the scheduled message processing cron job
   startScheduledMessageProcessingJob() {
-    // Run every minute to process due scheduled messages
-    const cronExpression = '* * * * *'; // Every minute
+    // Run every 10 minutes to process due scheduled messages
+    const cronExpression = '*/10 * * * *'; // Every 10 minutes
     
     const task = cron.schedule(cronExpression, async () => {
       await this.processScheduledMessages();
@@ -79,12 +87,46 @@ class CronService {
     task.start();
 
     console.log('✅ Scheduled message processing cron job scheduled');
-    console.log(`📅 Schedule: Every minute (${cronExpression})`);
+    console.log(`📅 Schedule: Every 10 minutes (${cronExpression})`);
+    console.log('🌏 Timezone: Asia/Tokyo (JST)');
+  }
+
+  // Start the occurrence generation cron job (RECONCILIATION FOCUSED)
+  startOccurrenceGenerationJob() {
+    // Run every 15 minutes to reconcile any missed messages (safety net)
+    const cronExpression = '*/15 * * * *'; // Every 15 minutes
+    
+    const task = cron.schedule(cronExpression, async () => {
+      await this.processOccurrenceGeneration();
+    }, {
+      scheduled: false, // Don't start automatically
+      timezone: 'Asia/Tokyo' // Use JST timezone
+    });
+
+    // Store the task for later management
+    this.cronJobs.set('occurrenceGeneration', task);
+
+    // Start the task
+    task.start();
+
+    console.log('✅ Occurrence reconciliation cron job scheduled (real-time generation is primary)');
+    console.log(`📅 Schedule: Every 15 minutes (${cronExpression}) - reduced frequency since messages are generated real-time`);
     console.log('🌏 Timezone: Asia/Tokyo (JST)');
   }
 
   // Process due scheduled messages
   async processScheduledMessages(forceProcess = false) {
+    const jobName = 'scheduledMessageProcessing';
+    
+    // Check for job overlap protection
+    if (this.runningJobs.has(jobName)) {
+      console.log('⏸️  Scheduled message processing already running - skipping this execution to prevent overlap');
+      return;
+    }
+
+    // Mark job as running
+    this.runningJobs.add(jobName);
+
     try {
       // Check environment flags before processing (unless forced)
       if (!forceProcess) {
@@ -142,79 +184,25 @@ class CronService {
 
     } catch (error) {
       console.error('❌ Error in scheduled message processing:', error);
+    } finally {
+      // Always remove job from running set, even if error occurred
+      this.runningJobs.delete(jobName);
     }
   }
 
   // Process an individual scheduled message
   async processIndividualScheduledMessage(scheduledMessage) {
-    const { supabaseAdmin } = require('../config/supabase');
-    
     try {
       console.log(`Processing scheduled message ${scheduledMessage.id} for template ${scheduledMessage.template_id}`);
 
-      // Render template with variables
-      const rendered = await communicationService.renderTemplate(
-        scheduledMessage.template_id,
-        scheduledMessage.payload || {}
-      );
-
-      // For inapp messages, create the message directly without external routing
-      let message;
-      if (scheduledMessage.channel === 'inapp') {
-        // Create message directly in the database for inapp channel
-        message = await communicationService.receiveMessage({
-          thread_id: scheduledMessage.thread_id,
-          channel: 'inapp',
-          content: rendered.rendered_content,
-          origin_role: 'system', // System-generated automated message
-          direction: 'outgoing'
-        });
-        console.log(`📱 Created inapp scheduled message ${message.id} for thread ${scheduledMessage.thread_id}`);
-      } else {
-        // For external channels, use the normal send flow
-        message = await communicationService.sendMessage({
-          thread_id: scheduledMessage.thread_id,
-          channel: scheduledMessage.channel,
-          content: rendered.rendered_content,
-          origin_role: 'system' // System-generated automated message
-        });
-        console.log(`📤 Sent external scheduled message ${message.id} via ${scheduledMessage.channel}`);
-      }
-
-      // Mark scheduled message as sent
-      const { error: updateError } = await supabaseAdmin
-        .from('scheduled_messages')
-        .update({ 
-          status: 'sent',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', scheduledMessage.id);
-
-      if (updateError) {
-        throw new Error(`Failed to update scheduled message status: ${updateError.message}`);
-      }
+      // Use the communication service's processScheduledMessage method which handles all logic including thread resolution
+      const message = await communicationService.processScheduledMessage(scheduledMessage.id);
 
       console.log(`✅ Successfully processed scheduled message ${scheduledMessage.id} -> message ${message.id}`);
       return message;
 
     } catch (error) {
       console.error(`❌ Error processing scheduled message ${scheduledMessage.id}:`, error);
-
-      // Mark as failed with error details
-      try {
-        const { supabaseAdmin } = require('../config/supabase');
-        await supabaseAdmin
-          .from('scheduled_messages')
-          .update({ 
-            status: 'failed',
-            last_error: error.message,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', scheduledMessage.id);
-      } catch (updateError) {
-        console.error(`Failed to update failed scheduled message ${scheduledMessage.id}:`, updateError);
-      }
-
       throw error;
     }
   }
@@ -230,6 +218,71 @@ class CronService {
     console.log('🔧 FORCED scheduled message processing (bypassing environment checks)');
     console.log('⚠️  This will process messages even in development mode');
     await this.processScheduledMessages(true); // true = force processing
+  }
+
+  // Process occurrence reconciliation (SAFETY NET - real-time generation is primary)
+  async processOccurrenceGeneration() {
+    const jobName = 'occurrenceGeneration';
+    
+    // Check for job overlap protection
+    if (this.runningJobs.has(jobName)) {
+      console.log('⏸️  Occurrence reconciliation already running - skipping this execution to prevent overlap');
+      return;
+    }
+
+    // Mark job as running
+    this.runningJobs.add(jobName);
+
+    try {
+      const startTime = new Date();
+      
+      // 1. SAFETY NET: Generate for any recently created reservations that might have been missed
+      // (Most reservations should already have messages from real-time generation)
+      const recentResults = await generatorService.generateForRecentReservations(15);
+      
+      // 2. RECONCILIATION: Reconcile only near-term arrivals to catch any edge cases
+      // (7-14 day window instead of 60 days since most work is done real-time)
+      const reconcileResults = await generatorService.reconcileForFutureArrivals(10);
+      
+      // 3. Clean up expired leases
+      const cleanedUpLeases = await generatorService.cleanupExpiredLeases();
+
+      const endTime = new Date();
+      const durationMs = endTime.getTime() - startTime.getTime();
+
+      // Log summary (only when there's actual work done)
+      const totalGenerated = (recentResults.results?.length || 0) + (reconcileResults.totalGenerated || 0);
+      
+      if (totalGenerated > 0 || cleanedUpLeases > 0) {
+        console.log(`📅 [OPTIMIZED] Occurrence generation complete:`, {
+          recent_reservations: recentResults.processed || 0,
+          recent_messages: recentResults.results?.length || 0,
+          reconciled_reservations: reconcileResults.processed || 0,
+          reconciled_messages: reconcileResults.totalGenerated || 0,
+          cleaned_leases: cleanedUpLeases,
+          total_generated: totalGenerated,
+          duration: `${durationMs}ms`,
+          window: '10-day check-in window (was 60-day)'
+        });
+      } else {
+        // Only log every 12th run (every hour) to avoid spam when nothing to do
+        if (Math.floor(Date.now() / 300000) % 12 === 0) {
+          console.log(`📭 [OPTIMIZED] No occurrence generation needed (checked recent + 14-day window)`);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error in occurrence generation:', error);
+    } finally {
+      // Always remove job from running set, even if error occurred
+      this.runningJobs.delete(jobName);
+    }
+  }
+
+  // Manually trigger occurrence generation (useful for testing)
+  async triggerOccurrenceGeneration() {
+    console.log('🔧 Manual occurrence generation triggered');
+    await this.processOccurrenceGeneration();
   }
 
   // Refresh Beds24 token with comprehensive error handling
@@ -348,6 +401,17 @@ class CronService {
 
   // Update market factors using smart market demand calculations - OPTIMIZED VERSION
   async updateMarketFactors() {
+    const jobName = 'marketFactorUpdate';
+    
+    // Check for job overlap protection
+    if (this.runningJobs.has(jobName)) {
+      console.log('⏸️  Market factor update already running - skipping this execution to prevent overlap');
+      return;
+    }
+
+    // Mark job as running
+    this.runningJobs.add(jobName);
+
     try {
       console.log('🧠 [OPTIMIZED] Updating smart market factors...');
       const startTime = new Date();
@@ -445,6 +509,9 @@ class CronService {
 
     } catch (error) {
       console.error('❌ Error updating smart market factors:', error);
+    } finally {
+      // Always remove job from running set, even if error occurred
+      this.runningJobs.delete(jobName);
     }
   }
 
@@ -506,6 +573,17 @@ class CronService {
 
   // Process pricing recalculation queue
   async processPricingQueue() {
+    const jobName = 'pricingQueueProcessor';
+    
+    // Check for job overlap protection
+    if (this.runningJobs.has(jobName)) {
+      console.log('⏸️  Pricing queue processing already running - skipping this execution to prevent overlap');
+      return;
+    }
+
+    // Mark job as running
+    this.runningJobs.add(jobName);
+
     try {
       // Call the database function to process queue items
       const { data, error } = await supabaseAdmin.rpc('process_pricing_queue');
@@ -523,6 +601,9 @@ class CronService {
 
     } catch (error) {
       console.error('❌ Error processing pricing queue:', error);
+    } finally {
+      // Always remove job from running set, even if error occurred
+      this.runningJobs.delete(jobName);
     }
   }
 

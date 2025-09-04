@@ -13,7 +13,7 @@ primary_region = 'nrt'
   force_https = true
   auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2
 
 # Support multiple domains
 [[http_service.http_options.headers]]

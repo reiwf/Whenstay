@@ -627,26 +627,27 @@ router.get('/:id/services', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    // Get all services and their status for this reservation
+    // Get all services and reservation-specific addon data
     const allServices = await guestServicesService.getAllServices();
-    const enabledServices = await guestServicesService.getEnabledServicesForReservation(reservationId);
-    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
 
     // Combine the data
     const servicesWithStatus = allServices.map(service => {
-      const enabled = enabledServices.find(e => e.service_id === service.id);
-      const purchased = purchasedServices.find(p => p.service_id === service.id);
+      const addon = reservationAddons.find(a => a.service_id === service.id);
 
       return {
         ...service,
-        is_enabled: !!enabled,
-        enabled_at: enabled?.enabled_at || null,
-        enabled_by: enabled?.enabled_by || null,
-        is_purchased: !!purchased,
-        purchased_at: purchased?.purchased_at || null,
-        purchase_amount: purchased?.amount || null,
-        stripe_payment_intent_id: purchased?.stripe_payment_intent_id || null,
-        can_enable: service.is_active && service.admin_approval_required
+        is_enabled: addon?.admin_enabled || false,
+        enabled_at: addon?.created_at || null,
+        enabled_by: addon?.enabled_by || null,
+        is_purchased: addon?.purchase_status === 'paid',
+        purchased_at: addon?.purchased_at || null,
+        purchase_amount: addon?.amount_paid || addon?.calculated_amount || null,
+        purchase_status: addon?.purchase_status || 'not_available',
+        stripe_payment_intent_id: addon?.stripe_payment_intent_id || null,
+        calculated_amount: addon?.calculated_amount || service.price,
+        is_tax_exempted: addon?.is_tax_exempted || false,
+        can_enable: service.is_active && !addon?.admin_enabled
       };
     });
 
@@ -687,8 +688,10 @@ router.post('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    // Check if service exists and requires admin approval
-    const service = await guestServicesService.getServiceById(serviceIdNum);
+    // Get all services to find the one we want to enable
+    const allServices = await guestServicesService.getAllServices();
+    const service = allServices.find(s => s.id === serviceIdNum);
+    
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
@@ -703,10 +706,10 @@ router.post('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
       return res.status(400).json({ error: 'Service is not active' });
     }
 
-    // Enable the service for the reservation
+    // Enable the service for the reservation using service key
     const result = await guestServicesService.enableServiceForReservation(
       reservationId,
-      serviceIdNum,
+      service.service_key,
       enabled_by || null
     );
 
@@ -748,16 +751,15 @@ router.delete('/:id/services/:serviceId/enable', adminAuth, async (req, res) => 
     }
 
     // Check if service is enabled for this reservation
-    const enabledServices = await guestServicesService.getEnabledServicesForReservation(reservationId);
-    const enabledService = enabledServices.find(s => s.service_id === serviceIdNum);
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const enabledService = reservationAddons.find(s => s.service_id === serviceIdNum && s.admin_enabled);
 
     if (!enabledService) {
       return res.status(404).json({ error: 'Service is not enabled for this reservation' });
     }
 
     // Check if service has been purchased
-    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
-    const purchasedService = purchasedServices.find(s => s.service_id === serviceIdNum);
+    const purchasedService = reservationAddons.find(s => s.service_id === serviceIdNum && s.purchase_status === 'paid');
 
     if (purchasedService) {
       return res.status(400).json({ 
@@ -765,8 +767,16 @@ router.delete('/:id/services/:serviceId/enable', adminAuth, async (req, res) => 
       });
     }
 
+    // Get service details to disable by service key
+    const allServices = await guestServicesService.getAllServices();
+    const serviceDetails = allServices.find(s => s.id === serviceIdNum);
+    
+    if (!serviceDetails) {
+      return res.status(404).json({ error: 'Service details not found' });
+    }
+
     // Disable the service
-    const result = await guestServicesService.disableServiceForReservation(reservationId, serviceIdNum);
+    const result = await guestServicesService.disableServiceForReservation(reservationId, serviceDetails.service_key, req.user?.id);
 
     res.status(200).json({
       message: 'Service disabled successfully',
@@ -793,20 +803,15 @@ router.get('/:id/services/purchased', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    // Get purchased services with full details
-    const purchasedServices = await guestServicesService.getPurchasedServicesForReservation(reservationId);
+    // Get purchased services with full details - use the correct method
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const purchasedServices = reservationAddons.filter(addon => addon.purchase_status === 'paid');
 
     // Calculate total amount and effective times
-    const totalAmount = purchasedServices.reduce((sum, service) => sum + (service.amount || 0), 0);
+    const totalAmount = purchasedServices.reduce((sum, service) => sum + (service.amount_paid || service.calculated_amount || 0), 0);
     
     // Get effective times with service overrides
-    const effectiveTimes = await guestServicesService.calculateEffectiveTimes(
-      reservationId,
-      reservation.check_in_date,
-      reservation.check_out_date,
-      reservation.access_time,
-      reservation.departure_time || '11:00:00'
-    );
+    const effectiveTimes = await guestServicesService.calculateEffectiveTimes(reservationId);
 
     res.status(200).json({
       message: 'Purchased services retrieved successfully',

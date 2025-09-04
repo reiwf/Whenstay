@@ -68,6 +68,15 @@ class ReservationService {
         // Don't fail reservation creation if tax attachment fails
       }
 
+      // NEW: Generate scheduled messages immediately upon reservation creation
+      try {
+        await this.generateScheduledMessagesForReservation(data);
+        console.log(`Scheduled messages generated for reservation ${data.id}`);
+      } catch (messageError) {
+        console.error('Error generating scheduled messages for reservation:', messageError);
+        // Don't fail reservation creation if message generation fails
+      }
+
       return data;
     } catch (error) {
       console.error('Database error creating reservation:', error);
@@ -3116,6 +3125,58 @@ class ReservationService {
       return groupBookings.filter(Boolean); // Remove any null results
     } catch (error) {
       console.error('Database error fetching group bookings:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Generate scheduled messages immediately for a reservation
+  async generateScheduledMessagesForReservation(reservation) {
+    try {
+      console.log(`Generating scheduled messages for reservation ${reservation.id}`);
+
+      // Dynamically import the generator service to avoid circular dependencies
+      const generatorService = require('./scheduler/generatorService');
+      
+      // Ensure generator service is initialized
+      if (!generatorService.supabase || !generatorService.communicationService) {
+        const { supabaseAdmin } = require('../config/supabase');
+        const communicationService = require('./communicationService');
+        generatorService.init(supabaseAdmin, communicationService);
+      }
+
+      // Get full reservation details with property information
+      const fullReservation = await this.getReservationFullDetails(reservation.id);
+      if (!fullReservation) {
+        console.warn(`Could not get full details for reservation ${reservation.id}`);
+        return { generated: 0, error: 'Could not get full reservation details' };
+      }
+
+      // Ensure reservation has a thread (create if needed)
+      if (!fullReservation.thread_id) {
+        // Get or create thread for this reservation
+        const communicationService = require('./communicationService');
+        const thread = await communicationService.getOrCreateThreadForReservation(reservation.id);
+        fullReservation.thread_id = thread.id;
+        console.log(`Created thread ${thread.id} for reservation ${reservation.id}`);
+      }
+
+      // Generate all scheduled messages for this reservation (real-time generation)
+      const results = await generatorService.generateForReservation(fullReservation, null, true);
+      
+      const generatedCount = results.filter(r => r.status === 'created').length;
+      const immediateCount = results.filter(r => r.status === 'sent_immediate').length;
+      
+      console.log(`✅ Generated ${generatedCount} scheduled messages and ${immediateCount} immediate messages for reservation ${reservation.id}`);
+      
+      return {
+        generated: generatedCount,
+        immediate: immediateCount,
+        total: results.length,
+        results: results
+      };
+
+    } catch (error) {
+      console.error(`❌ Error generating scheduled messages for reservation ${reservation.id}:`, error);
       throw error;
     }
   }

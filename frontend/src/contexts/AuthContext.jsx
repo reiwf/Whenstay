@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { setAuthToken, clearAuthToken, isAuthenticated } from '../services/api'
 
 const AuthContext = createContext({})
@@ -16,11 +17,37 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const location = useLocation()
 
-  // Initialize auth state on mount
+  // Define public routes that don't require authentication
+  const isPublicRoute = (pathname) => {
+    const publicRoutes = [
+      '/',
+      '/login',
+      '/checkin',
+      '/guest',
+      '/accept-invitation'
+    ]
+    
+    // Check exact matches and pattern matches
+    return publicRoutes.some(route => {
+      if (route === '/') {
+        return pathname === '/'
+      }
+      return pathname.startsWith(route)
+    })
+  }
+
+  // Initialize auth state on mount and route changes
   useEffect(() => {
-    initializeAuth()
-  }, [])
+    if (isPublicRoute(location.pathname)) {
+      // Skip auth check for public routes
+      setLoading(false)
+    } else {
+      // Run auth check for protected routes
+      initializeAuth()
+    }
+  }, [location.pathname])
 
   const initializeAuth = async () => {
     try {

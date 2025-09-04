@@ -20,10 +20,10 @@ app.use(helmet({
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://staylabel.fly.dev',
-    'https://app.staylabel.com',
+    'https://app.staylabel.com',    
     'https://www.staylabel.com',
-    'https://staylabel.com'
+    'https://staylabel.com',
+    'https://staylabel.fly.dev'
   ],
   credentials: true
 }));
@@ -72,6 +72,7 @@ const marketDemandRoutes = require('./routes/marketDemandRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const upsellRoutes = require('./routes/upsellRoutes');
 const translationRoutes = require('./routes/translationRoutes');
+const messageRuleRoutes = require('./routes/messageRuleRoutes');
 
 // Debug middleware to log all API requests
 app.use('/api/*', (req, res, next) => {
@@ -98,6 +99,7 @@ app.use('/api/market-demand', marketDemandRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/upsell', upsellRoutes);
 app.use('/api/translations', translationRoutes);
+app.use('/api/message-rules', messageRuleRoutes);
 
 // Domain-based routing setup
 const frontendPath = process.env.NODE_ENV === 'production' 

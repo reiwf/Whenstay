@@ -11,7 +11,8 @@ import {
   MessageCircle,
   X,
   DollarSign,
-  Calendar
+  Calendar,
+  Zap
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -49,6 +50,7 @@ const Sidebar = ({
         { id: 'cleaning-management', label: t('cleaningManagement'), icon: Sparkles },
         { id: 'properties', label: t('properties'), icon: Building },
         { id: 'pricing', label: t('pricing'), icon: DollarSign },
+        { id: 'automation', label: t('automation'), icon: Zap },
         { id: 'market-settings', label: t('marketSettings'), icon: Settings },
         { id: 'users', label: t('users'), icon: Users }
       )
@@ -100,6 +102,9 @@ const Sidebar = ({
     } else if (itemId === 'calendar') {
       // Navigate to the dedicated calendar page
       navigate('/calendar')
+    } else if (itemId === 'automation') {
+      // Navigate to the dedicated automation page
+      navigate('/automation')
     } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {
@@ -129,7 +134,7 @@ const Sidebar = ({
               <img 
                 src={staylabelLogo} 
                 alt="Staylabel Logo" 
-                className="w-8 h-8 mr-3 rounded-lg"
+                className="w-7 h-7 mr-3 rounded-lg"
               />
               <h1 className="text-lg font-bold text-primary-900">{t('staylabel')}</h1>
             </>

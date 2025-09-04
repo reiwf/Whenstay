@@ -213,4 +213,167 @@ router.patch('/:id/status', adminAuth, async (req, res) => {
   }
 });
 
+// Invitation Management Routes
+
+// Send user invitation
+router.post('/invite', adminAuth, async (req, res) => {
+  try {
+    const { email, role } = req.body;
+    const invitedBy = req.user?.profile?.id; // Get from auth middleware
+
+    // Validate required fields
+    if (!email || !role) {
+      return res.status(400).json({ error: 'Email and role are required' });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Validate role
+    const validRoles = ['admin', 'owner', 'guest', 'cleaner'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be one of: admin, owner, guest, cleaner' });
+    }
+
+    const invitation = await userService.inviteUser(email, role, invitedBy);
+
+    res.status(201).json({
+      message: 'User invitation created successfully',
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        invitation_expires_at: invitation.invitation_expires_at,
+        invitation_status: invitation.invitation_status,
+        email_sent: invitation.email_sent || false
+      }
+    });
+  } catch (error) {
+    console.error('Error sending user invitation:', error);
+
+    if (error.message.includes('User with this email already exists')) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+
+    res.status(500).json({ error: 'Failed to send user invitation' });
+  }
+});
+
+// Get invitation details by token (public access)
+router.get('/invitation/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Invitation token is required' });
+    }
+
+    const invitation = await userService.getInvitationByToken(token);
+
+    res.status(200).json({
+      message: 'Invitation details retrieved successfully',
+      invitation
+    });
+  } catch (error) {
+    console.error('Error getting invitation details:', error);
+
+    if (error.message.includes('This user has already been registered')) {
+      return res.status(409).json({ error: 'This user has already been registered' });
+    }
+
+    if (error.message.includes('Invalid or expired invitation token') || 
+        error.message.includes('Invitation token has expired')) {
+      return res.status(404).json({ error: 'Invalid or expired invitation token' });
+    }
+
+    res.status(500).json({ error: 'Failed to retrieve invitation details' });
+  }
+});
+
+// Accept invitation and complete user setup
+router.post('/accept-invitation', async (req, res) => {
+  try {
+    const { token, password, firstName, lastName } = req.body;
+
+    // Validate required fields
+    if (!token || !password || !firstName || !lastName) {
+      return res.status(400).json({ 
+        error: 'Token, password, first name, and last name are required' 
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters long' 
+      });
+    }
+
+    const user = await userService.acceptInvitation(token, password, firstName, lastName);
+
+    res.status(200).json({
+      message: 'Invitation accepted successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+        is_active: user.is_active,
+        invitation_status: user.invitation_status
+      }
+    });
+  } catch (error) {
+    console.error('Error accepting invitation:', error);
+
+    if (error.message.includes('This user has already been registered')) {
+      return res.status(409).json({ error: 'This user has already been registered' });
+    }
+
+    if (error.message.includes('Invalid or expired invitation token') || 
+        error.message.includes('Invitation token has expired')) {
+      return res.status(404).json({ error: 'Invalid or expired invitation token' });
+    }
+
+    if (error.message.includes('Failed to set password')) {
+      return res.status(400).json({ error: 'Failed to set password. Please try again.' });
+    }
+
+    res.status(500).json({ error: 'Failed to accept invitation' });
+  }
+});
+
+// Get pending invitations (admin only)
+router.get('/invitations/pending', adminAuth, async (req, res) => {
+  try {
+    const invitations = await userService.getPendingInvitations();
+
+    res.status(200).json({
+      message: 'Pending invitations retrieved successfully',
+      invitations
+    });
+  } catch (error) {
+    console.error('Error fetching pending invitations:', error);
+    res.status(500).json({ error: 'Failed to fetch pending invitations' });
+  }
+});
+
+// Clean up expired invitations (admin only - maintenance endpoint)
+router.post('/invitations/cleanup', adminAuth, async (req, res) => {
+  try {
+    const cleanupCount = await userService.cleanupExpiredInvitations();
+
+    res.status(200).json({
+      message: 'Expired invitations cleanup completed',
+      cleaned_up_count: cleanupCount
+    });
+  } catch (error) {
+    console.error('Error cleaning up expired invitations:', error);
+    res.status(500).json({ error: 'Failed to cleanup expired invitations' });
+  }
+});
+
 module.exports = router;

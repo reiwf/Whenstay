@@ -11,13 +11,16 @@ import {
   Plus,
   Trash2,
   Shield,
-  XCircle
+  XCircle,
+  Send,
+  Clock
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { DataTableAdvanced } from '../components/ui'
 import toast from 'react-hot-toast'
 import UserModal from '../components/modals/UserModal'
+import InviteUserModal from '../components/modals/InviteUserModal'
 import { adminAPI } from '../services/api'
 import { useNavigation } from '../hooks/useNavigation'
 
@@ -30,6 +33,7 @@ export default function UserPage() {
   const [users, setUsers] = useState([])
   const [userStats, setUserStats] = useState({})
   const [showUserModal, setShowUserModal] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
 
   // Load initial data
@@ -79,6 +83,21 @@ export default function UserPage() {
   const handleCreateUser = () => {
     setEditingUser(null)
     setShowUserModal(true)
+  }
+
+  const handleInviteUser = () => {
+    setShowInviteModal(true)
+  }
+
+  const handleInvitationSent = async (invitationData) => {
+    try {
+      await adminAPI.inviteUser(invitationData)
+      setShowInviteModal(false)
+      toast.success('Invitation sent successfully! The user will receive an email to set up their account.')
+    } catch (error) {
+      console.error('Error sending invitation:', error)
+      throw error // Re-throw to let the modal handle the error state
+    }
   }
 
   const handleEditUser = (user) => {
@@ -296,11 +315,11 @@ export default function UserPage() {
             Refresh
           </button>
           <button
-            onClick={handleCreateUser}
+            onClick={handleInviteUser}
             className="btn-primary"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            New User
+            <Send className="w-4 h-4 mr-2" />
+            Invite User
           </button>
         </div>
       }
@@ -331,6 +350,15 @@ export default function UserPage() {
               setEditingUser(null)
             }}
             onUserSaved={handleSaveUser}
+          />
+        )}
+
+        {/* Invite User Modal */}
+        {showInviteModal && (
+          <InviteUserModal
+            isOpen={showInviteModal}
+            onClose={() => setShowInviteModal(false)}
+            onInvitationSent={handleInvitationSent}
           />
         )}
       </div>

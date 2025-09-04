@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { PropertyProvider } from './contexts/PropertyContext'
 import CheckinPage from './pages/CheckinPage'
 import Login from './pages/Login'
 import AdminDashboard from './pages/AdminDashboard'
@@ -14,17 +15,21 @@ import CommunicationPage from './pages/CommunicationPage'
 import PricingPage from './pages/PricingPage'
 import MarketSettingsPage from './pages/MarketSettingsPage'
 import CalendarPage from './pages/CalendarPage'
+import AutomationPage from './pages/AutomationPage'
+import AcceptInvitationPage from './pages/AcceptInvitationPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
+      <PropertyProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/checkin/:token" element={<CheckinPage />} />
           <Route path="/guest/:token" element={<GuestApp />} />
+          <Route path="/accept-invitation/:token" element={<AcceptInvitationPage />} />
           <Route path="/login" element={<Login />} />
           
           {/* Protected Admin Routes - Allow admin, owner, and cleaner roles */}
@@ -123,6 +128,15 @@ function App() {
             } 
           />
           
+          <Route 
+            path="/automation/*" 
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <AutomationPage />
+              </ProtectedRoute>
+            } 
+          />
+          
           {/* Legacy route redirects */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
           <Route path="/admin-login" element={<Navigate to="/login" replace />} />
@@ -141,8 +155,9 @@ function App() {
           
           {/* 404 Route */}
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </div>
+          </Routes>
+        </div>
+      </PropertyProvider>
     </AuthProvider>
   )
 }

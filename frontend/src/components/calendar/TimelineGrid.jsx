@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Move, Scaling } from 'lucide-react';
 import ReservationBar from './ReservationBar';
+import ReservationDrawer from './ReservationDrawer';
 import { DateUtils, GridUtils, ConflictUtils, SnapUtils, ResizeUtils, SwapUtils } from './CalendarUtils';
 
 /**
@@ -35,6 +36,8 @@ export default function TimelineGrid({
   const [lockedGridConstants, setLockedGridConstants] = useState(null); // Locked constants during drag
   const [windowWidth, setWindowWidth] = useState(window?.innerWidth || 1200);
   const [roomPositionMap, setRoomPositionMap] = useState(new Map()); // Cached room positions
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState(null);
   const gridRef = useRef(null);
   const lastStableTargetRef = React.useRef(null); 
   const lastSwitchYRef = React.useRef(0);
@@ -160,6 +163,7 @@ export default function TimelineGrid({
               dates={dates}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
+              onReservationClick={handleReservationClick}
               showHandles={!loading}
               enableSplit={!reservation.isSegment}
               isResizeMode={isResizeMode}
@@ -1150,6 +1154,35 @@ export default function TimelineGrid({
     return ConflictUtils.hasConflicts(reservation, allReservations, reservation.id);
   };
 
+  /**
+   * Handle reservation click to open drawer
+   */
+  const handleReservationClick = (reservation) => {
+    console.log('TimelineGrid: Reservation clicked:', {
+      reservation: reservation,
+      hasId: !!reservation?.id,
+      keys: reservation ? Object.keys(reservation) : [],
+      reservationType: typeof reservation
+    });
+    
+    if (!reservation) {
+      console.error('TimelineGrid: No reservation data provided to handleReservationClick');
+      return;
+    }
+    
+    setSelectedReservation(reservation);
+    setIsDrawerOpen(true);
+    console.log('TimelineGrid: Drawer opened with reservation ID:', reservation.id || 'NO_ID');
+  };
+
+  /**
+   * Handle drawer close
+   */
+  const handleDrawerClose = () => {
+    setIsDrawerOpen(false);
+    setSelectedReservation(null);
+  };
+
 
   /**
    * Render room type header with accessibility improvements and availability timeline
@@ -1410,6 +1443,7 @@ export default function TimelineGrid({
                       dates={dates}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
+                      onReservationClick={handleReservationClick}
                       isDragging={dragState?.reservation?.id === reservation.id}
                       showHandles={!loading}
                       enableSplit={!reservation.isSegment} // Only allow splitting on main reservations
@@ -1560,6 +1594,13 @@ export default function TimelineGrid({
           }}
         />
       )}
+
+      {/* Reservation Drawer */}
+      <ReservationDrawer
+        isOpen={isDrawerOpen}
+        onClose={handleDrawerClose}
+        reservation={selectedReservation}
+      />
     </div>
   );
 }

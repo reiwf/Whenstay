@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Search, Download, AlertCircle, CheckCircle } from 'lucide-react';
-import PropertySelector from './PropertySelector';
+import { useProperty } from '../../contexts/PropertyContext';
 import api from '../../services/api';
 
 /**
@@ -8,7 +8,7 @@ import api from '../../services/api';
  * Reuses PropertySelector and provides date picker for arrival date
  */
 export default function Beds24BookingsFetcher({ className = "" }) {
-  const [selectedProperty, setSelectedProperty] = useState(null);
+  const { selectedProperty, properties } = useProperty();
   const [arrivalDate, setArrivalDate] = useState('');
   const [arrivalToDate, setArrivalToDate] = useState('');
   const [processAndSave, setProcessAndSave] = useState(false);
@@ -95,16 +95,16 @@ export default function Beds24BookingsFetcher({ className = "" }) {
         dark:bg-slate-900/50 dark:ring-slate-700/60">
         
         <div className="space-y-4">
-          {/* Property Selection */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
-              Select Property
-            </label>
-            <PropertySelector
-              selectedPropertyId={selectedProperty?.id || null}
-              onPropertyChange={(propertyId, property) => setSelectedProperty(property)}
-              disabled={loading}
-            />
+          {/* Property Selection Note */}
+          <div className="rounded-xl p-3 bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              <strong>Selected Property:</strong> {selectedProperty?.name || 'No property selected'}
+              {!selectedProperty && (
+                <span className="block mt-1 text-blue-600 dark:text-blue-400">
+                  Please select a property from the header dropdown above.
+                </span>
+              )}
+            </p>
           </div>
 
           {/* Date Selection */}

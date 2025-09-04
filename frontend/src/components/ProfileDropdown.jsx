@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
-import LanguageSwitcher from './LanguageSwitcher'
+import { getAllLanguages, getLanguageDisplayInfo } from '../utils/phoneLanguageDetection'
+import { changeLanguage } from '../i18n/config'
 
 const ProfileDropdown = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const languageDropdownRef = useRef(null)
+  const { i18n } = useTranslation()
   const { 
     user, 
     profile, 
@@ -15,11 +20,18 @@ const ProfileDropdown = () => {
   } = useAuth()
   const navigate = useNavigate()
 
-  // Close dropdown when clicking outside
+  // Language-related state and data
+  const languages = getAllLanguages()
+  const currentLanguage = getLanguageDisplayInfo(i18n.language)
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false)
+      }
+      if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target)) {
+        setLanguageDropdownOpen(false)
       }
     }
 
@@ -36,6 +48,11 @@ const ProfileDropdown = () => {
     } catch (error) {
       console.error('Logout error:', error)
     }
+  }
+
+  const handleLanguageChange = (languageCode) => {
+    changeLanguage(languageCode, 'admin', user?.id)
+    setLanguageDropdownOpen(false)
   }
 
 
@@ -146,8 +163,50 @@ const ProfileDropdown = () => {
                 Account Settings
               </button>
 
-              {/* Language Switcher */}
-              <LanguageSwitcher userType="admin" identifier={user?.id} />
+              {/* Language Button */}
+              <div className="relative" ref={languageDropdownRef}>
+                <button
+                  onClick={() => setLanguageDropdownOpen(!languageDropdownOpen)}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  <svg className="mr-3 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  <span className="flex-1 text-left">Language</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-base">{currentLanguage.flag}</span>
+                    <span className="text-xs text-gray-500">{currentLanguage.name}</span>
+                  </div>
+                </button>
+
+                {/* Language Dropdown */}
+                {languageDropdownOpen && (
+                  <div className="absolute left-full bottom-0 mr-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-60">
+                    <div className="py-1">
+                      <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                        Select Language
+                      </div>
+                      {languages.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => handleLanguageChange(lang.code)}
+                          className={`flex items-center w-full px-3 py-2 text-sm transition-colors ${
+                            lang.code === i18n.language 
+                              ? 'bg-primary-50 text-primary-700 font-medium' 
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="mr-3 text-base">{lang.flag}</span>
+                          <span className="flex-1 text-left">{lang.name}</span>
+                          {lang.code === i18n.language && (
+                            <div className="w-2 h-2 bg-primary-600 rounded-full"></div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="border-t border-gray-100 my-1"></div>
               

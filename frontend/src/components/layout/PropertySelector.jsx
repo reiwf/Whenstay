@@ -1,24 +1,29 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown, Search, Check, Building2 } from 'lucide-react';
-import api from '../../services/api';
+import { useProperty } from '../../contexts/PropertyContext';
 
 /**
- * PropertySelector - Glassy dropdown for calendar property selection
+ * PropertySelector - Global property selector for header use
+ * Uses PropertyContext for state management
  * Props:
- *  - selectedPropertyId
- *  - onPropertyChange(id)
  *  - className
  *  - disabled
+ *  - compact (for header usage)
  */
 export default function PropertySelector({
-  selectedPropertyId,
-  onPropertyChange,
   className = "",
-  disabled = false
+  disabled = false,
+  compact = false
 }) {
-  const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const {
+    properties,
+    selectedPropertyId,
+    selectedProperty,
+    loading,
+    error,
+    selectProperty
+  } = useProperty();
+
   const [isOpen, setIsOpen] = useState(false);
   const [q, setQ] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -26,10 +31,6 @@ export default function PropertySelector({
   const wrapperRef = useRef(null);
   const buttonRef = useRef(null);
   const listRef = useRef(null);
-
-  useEffect(() => {
-    loadProperties();
-  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -41,38 +42,6 @@ export default function PropertySelector({
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
-  // Keep active index valid on filter changes
-  useEffect(() => {
-    setActiveIndex((i) => Math.min(i, Math.max(0, filtered.length - 1)));
-  }, [/* deps below, filled after filtered is declared */]);
-
-  const loadProperties = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await api.get('/calendar/properties');
-      if (res.data?.success) {
-        const list = res.data.data || [];
-        setProperties(list);
-        if (!selectedPropertyId && list.length > 0) {
-          onPropertyChange?.(list[0].id);
-        }
-      } else {
-        setError('Failed to load properties');
-      }
-    } catch (e) {
-      console.error(e);
-      setError('Failed to load properties');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const selected = useMemo(
-    () => properties.find((p) => p.id === selectedPropertyId) || null,
-    [properties, selectedPropertyId]
-  );
-
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return properties;
@@ -83,7 +52,7 @@ export default function PropertySelector({
     );
   }, [properties, q]);
 
-  // Now that `filtered` exists, fix the earlier effect's deps:
+  // Keep active index valid on filter changes
   useEffect(() => {
     setActiveIndex((i) => Math.min(i, Math.max(0, filtered.length - 1)));
   }, [filtered.length]);
@@ -93,8 +62,8 @@ export default function PropertySelector({
     setIsOpen((v) => !v);
   };
 
-  const selectProperty = (p) => {
-    onPropertyChange?.(p.id);
+  const handleSelectProperty = (p) => {
+    selectProperty(p.id);
     setIsOpen(false);
   };
 
@@ -127,7 +96,7 @@ export default function PropertySelector({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const pick = filtered[activeIndex];
-      if (pick) selectProperty(pick);
+      if (pick) handleSelectProperty(pick);
     }
   };
 
@@ -136,20 +105,20 @@ export default function PropertySelector({
     el?.scrollIntoView({ block: 'nearest' });
   };
 
-  // Loading skeleton (glassy)
+  // Loading skeleton
   if (loading) {
     return (
       <div className={`inline-flex items-center gap-2 rounded-xl px-3 py-2
         bg-white/55 backdrop-blur-xl ring-1 ring-white/50 shadow-sm animate-pulse
         dark:bg-slate-900/35 dark:ring-slate-700/60 ${className}`}>
         <div className="h-5 w-5 rounded bg-gray-300/70 dark:bg-slate-700/60" />
-        <div className="h-4 w-32 rounded bg-gray-300/70 dark:bg-slate-700/60" />
+        <div className={`h-4 rounded bg-gray-300/70 dark:bg-slate-700/60 ${compact ? 'w-20' : 'w-32'}`} />
         <div className="h-4 w-4 rounded bg-gray-300/70 dark:bg-slate-700/60" />
       </div>
     );
   }
 
-  // Error state (glassy)
+  // Error state
   if (error) {
     return (
       <div className={`inline-flex items-center gap-2 rounded-xl px-3 py-2
@@ -167,7 +136,7 @@ export default function PropertySelector({
       className={`relative ${className}`}
       onKeyDown={onKeyDown}
     >
-      {/* Trigger (glassy) */}
+      {/* Trigger */}
       <button
         ref={buttonRef}
         type="button"
@@ -176,7 +145,7 @@ export default function PropertySelector({
         disabled={disabled}
         onClick={toggleDropdown}
         className={`
-          group inline-flex w-full max-w-[320px] items-center justify-between gap-3 rounded-xl px-3 py-2
+          group inline-flex items-center justify-between gap-3 rounded-xl px-3 py-2
           text-left text-sm transition
           bg-white/55 backdrop-blur-xl ring-1 ring-white/50 shadow-sm shadow-slate-900/5
           hover:bg-white/70 hover:ring-white/60 hover:shadow-md
@@ -184,6 +153,7 @@ export default function PropertySelector({
           dark:bg-slate-900/35 dark:ring-slate-700/60
           ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
           ${isOpen ? 'ring-2 ring-blue-400/50 dark:ring-blue-400/40' : ''}
+          ${compact ? 'max-w-[240px]' : 'w-full max-w-[320px]'}
         `}
       >
         <span className="flex h-5 w-5 items-center justify-center rounded-md
@@ -193,18 +163,18 @@ export default function PropertySelector({
         </span>
 
         <div className="min-w-0 grow">
-          {selected ? (
+          {selectedProperty ? (
             <div className="truncate font-medium text-slate-800 dark:text-slate-100">
-              {selected.name}
+              {selectedProperty.name}
             </div>
           ) : (
             <div className="truncate text-slate-500 dark:text-slate-400">
               Select a property
             </div>
           )}
-          {selected?.address && (
+          {!compact && selectedProperty?.address && (
             <div className="truncate text-[11px] text-slate-500/80 dark:text-slate-400/80">
-              {selected.address}
+              {selectedProperty.address}
             </div>
           )}
         </div>
@@ -215,17 +185,18 @@ export default function PropertySelector({
         />
       </button>
 
-      {/* Popover (glassy) */}
+      {/* Popover */}
       {isOpen && (
         <div
           ref={listRef}
           role="listbox"
           aria-label="Choose property"
           className="
-            absolute z-50 mt-2 w-[360px] max-w-[80vw]
+            absolute text-sm z-50 mt-2 w-[360px] max-w-[80vw]
             rounded-2xl p-2
             bg-white/70 backdrop-blur-2xl ring-1 ring-white/60 shadow-xl shadow-slate-900/10
             dark:bg-slate-900/55 dark:ring-slate-700/70
+            right-0
           "
         >
           {/* Search */}
@@ -264,7 +235,7 @@ export default function PropertySelector({
                   aria-selected={isSel}
                   data-index={i}
                   onMouseEnter={() => setActiveIndex(i)}
-                  onClick={() => selectProperty(p)}
+                  onClick={() => handleSelectProperty(p)}
                   className={`
                     w-full rounded-xl px-3 py-2.5 text-left transition
                     bg-white/40 ring-1 ring-white/45 shadow-sm shadow-slate-900/5

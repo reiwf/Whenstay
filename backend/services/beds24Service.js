@@ -473,11 +473,11 @@ class Beds24Service {
         bookingTime: booking.bookingTime || null,
         timeStamp: body.timeStamp || webhookData.timeStamp || null,
         lang: booking.lang || '',
-        comments: booking.comments || booking.notes || '',
+        comments: booking.comments || '', // Only use booking.comments
         price: booking.price || 0,
         
-        // Special requests and notes
-        specialRequests: booking.message || booking.notes || booking.comments || null,
+        // Special requests and notes (prioritize message field, fallback to notes only if no comments used)
+        specialRequests: booking.message || (booking.comments ? null : booking.notes) || null,
         
         // Legacy compatibility fields (use extracted values)
         guestName: `${firstName} ${lastName}`.trim(),

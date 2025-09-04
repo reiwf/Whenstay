@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Search, Download, AlertCircle, CheckCircle, Database } from 'lucide-react';
-import PropertySelector from '../calendar/PropertySelector';
+import { useProperty } from '../../contexts/PropertyContext';
 import api from '../../services/api';
 
 /**
@@ -8,7 +8,7 @@ import api from '../../services/api';
  * Reuses PropertySelector and provides date picker for arrival date
  */
 export default function Beds24BookingsFetcher({ className = "" }) {
-  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
+  const { selectedProperty, selectedPropertyId } = useProperty();
   const [arrivalDate, setArrivalDate] = useState('');
   const [arrivalToDate, setArrivalToDate] = useState('');
   const [processAndSave, setProcessAndSave] = useState(false);
@@ -18,7 +18,7 @@ export default function Beds24BookingsFetcher({ className = "" }) {
   const [lastFetch, setLastFetch] = useState(null);
 
   const handleFetchBookings = async () => {
-    if (!selectedPropertyId) {
+    if (!selectedProperty || !selectedPropertyId) {
       setError('Please select a property first');
       return;
     }
@@ -33,7 +33,7 @@ export default function Beds24BookingsFetcher({ className = "" }) {
     
     try {
       const params = {
-        propertyId: selectedPropertyId,
+        propertyId: selectedProperty.beds24_property_id || selectedPropertyId,
         arrival: arrivalDate
       };
 
@@ -105,11 +105,17 @@ export default function Beds24BookingsFetcher({ className = "" }) {
             <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
               Select Property
             </label>
-            <PropertySelector
-              selectedPropertyId={selectedPropertyId}
-              onPropertyChange={setSelectedPropertyId}
-              disabled={loading}
-            />
+          {/* Property Selection Note */}
+          <div className="rounded-xl p-3 bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-800/50">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              <strong>Selected Property:</strong> {selectedProperty?.name || 'No property selected'}
+              {!selectedProperty && (
+                <span className="block mt-1 text-blue-600 dark:text-blue-400">
+                  Please select a property from the header dropdown above.
+                </span>
+              )}
+            </p>
+          </div>
           </div>
 
           {/* Date Selection */}

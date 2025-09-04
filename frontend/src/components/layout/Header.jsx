@@ -1,9 +1,10 @@
 import { Menu, ChevronLeft, Bell } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import ProfileDropdown from '../ProfileDropdown'
+import PropertySelector from './PropertySelector'
 import staylabelLogo from '../../../shared/staylabellogo.png'
 
-const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
+const Header = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
   const { profile } = useAuth()
 
   return (
@@ -30,10 +31,16 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
           </div>
         </div>
 
+        {/* Center - Property Selector */}
+        <div className="flex-1 px-4">
+          <PropertySelector 
+            compact={true}
+            className="max-w-xs"
+          />
+        </div>
+
         {/* Right Side - Actions & Profile */}
         <div className="flex items-center space-x-4">
-
-
           {/* Desktop Profile (when sidebar is collapsed) */}
           <div className={`hidden lg:block ${!sidebarCollapsed ? 'lg:hidden' : ''}`}>
             <div className="flex items-center space-x-3">
@@ -59,4 +66,4 @@ const MobileHeader = ({ onMenuClick, sidebarCollapsed, onToggleSidebar }) => {
   )
 }
 
-export default MobileHeader
+export default Header
