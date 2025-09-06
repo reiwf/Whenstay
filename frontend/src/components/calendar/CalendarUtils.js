@@ -104,16 +104,16 @@ export class DateUtils {
   }
 
   /**
-   * Get default calendar date range (yesterday + 29 days = 31 total)
+   * Get default calendar date range (yesterday + 27 days = 28 total)
    */
   static getDefaultDateRange() {
     const startDate = this.getYesterday();
-    const endDate = this.addDays(startDate, 31); // +30 to get 31 total days
+    const endDate = this.addDays(startDate, 28); // +27 to get 28 total days
     
     return {
       startDate,
       endDate,
-      totalDays: 31,
+      totalDays: 28,
       dates: this.generateDateRange(startDate, endDate)
     };
   }
@@ -302,7 +302,10 @@ export class StatusUtils {
 export class GridUtils {
   static CONSTANTS = {
     // How small each cell is allowed to be (drop if you want even tighter)
-    MIN_CELL_WIDTH: 20,
+    MIN_CELL_WIDTH: 50,
+
+    // Maximum width for each cell to prevent excessive stretching
+    MAX_CELL_WIDTH: 60,
 
     // Remove inter-day gutter; we'll rely on border lines only
     DAY_GUTTER: 0,
@@ -317,11 +320,11 @@ export class GridUtils {
     BREAKPOINTS: { mobile: 768, tablet: 1024, desktop: 1025 },
 
     // Optional global density scaler (0.75–1.0). Lower = tighter.
-    DENSITY_SCALE: 0.85
+    DENSITY_SCALE: 1
   };
 
-  static getCurrentConstants(windowWidth = window?.innerWidth || 1200, days = 30) {
-    const { BREAKPOINTS, SIDEBAR_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, MIN_CELL_WIDTH, DAY_GUTTER, DENSITY_SCALE } = this.CONSTANTS;
+  static getCurrentConstants(windowWidth = window?.innerWidth || 1200, days = 28) {
+    const { BREAKPOINTS, SIDEBAR_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, MIN_CELL_WIDTH, MAX_CELL_WIDTH, DAY_GUTTER, DENSITY_SCALE } = this.CONSTANTS;
 
     let bp = 'desktop';
     if (windowWidth <= BREAKPOINTS.mobile) bp = 'mobile';
@@ -329,11 +332,12 @@ export class GridUtils {
 
     const sidebar = SIDEBAR_WIDTH[bp];
     const available = Math.max(0, windowWidth - sidebar);
-    // auto-fit 31 columns + (days-1)*gutter into the available width
+    // auto-fit 28 columns + (days-1)*gutter into the available width
     const raw = Math.floor((available - (days - 1) * DAY_GUTTER) / days);
 
-    // apply density scaling and enforce minimum
-    const cellWidth = Math.max(MIN_CELL_WIDTH, Math.floor(raw * DENSITY_SCALE));
+    // apply density scaling and enforce minimum and maximum bounds
+    const scaledWidth = Math.floor(raw * DENSITY_SCALE);
+    const cellWidth = Math.max(MIN_CELL_WIDTH, Math.min(MAX_CELL_WIDTH, scaledWidth));
 
     return {
       CELL_WIDTH: cellWidth,
@@ -1027,6 +1031,73 @@ export class PerformanceUtils {
       }
       rafId = requestAnimationFrame(() => callback(...args));
     };
+  }
+
+  /**
+   * Filter reservations to only include those within the visible date range
+   * Improves performance by reducing the number of reservations to process
+   */
+  static filterReservationsInDateRange(reservations, startDate, endDate) {
+    if (!reservations || !Array.isArray(reservations)) {
+      return [];
+    }
+    
+    return reservations.filter(reservation => {
+      if (!reservation || !reservation.startDate || !reservation.endDate) {
+        return false;
+      }
+      
+      // Include reservation if it overlaps with the visible date range
+      return reservation.startDate < endDate && reservation.endDate > startDate;
+    });
+  }
+
+  /**
+   * Filter and sort reservations for optimal rendering performance
+   */
+  static optimizeReservationsForRender(reservations, segments, startDate, endDate) {
+    // Filter to visible date range
+    const filteredReservations = this.filterReservationsInDateRange(reservations, startDate, endDate);
+    const filteredSegments = this.filterReservationsInDateRange(segments, startDate, endDate);
+    
+    // Sort by start date for consistent rendering order
+    const sortByStartDate = (a, b) => {
+      if (!a.startDate || !b.startDate) return 0;
+      return new Date(a.startDate) - new Date(b.startDate);
+    };
+    
+    return {
+      reservations: filteredReservations.sort(sortByStartDate),
+      segments: filteredSegments.sort(sortByStartDate),
+      totalFiltered: filteredReservations.length + filteredSegments.length
+    };
+  }
+
+  /**
+   * Simple filtering function for a single array of reservations within date range
+   */
+  static filterReservationsForRender(reservations, startDate, dates) {
+    if (!reservations || !Array.isArray(reservations)) {
+      return [];
+    }
+    
+    if (!dates || dates.length === 0) {
+      return reservations;
+    }
+    
+    const endDate = dates[dates.length - 1];
+    
+    return reservations.filter(reservation => {
+      if (!reservation || !reservation.startDate || !reservation.endDate) {
+        return false;
+      }
+      
+      // Include reservation if it overlaps with the visible date range
+      return reservation.startDate <= endDate && reservation.endDate >= startDate;
+    }).sort((a, b) => {
+      if (!a.startDate || !b.startDate) return 0;
+      return new Date(a.startDate) - new Date(b.startDate);
+    });
   }
 }
 

@@ -42,6 +42,7 @@ export default function GuestMessagePanel({ token, guestName }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const hasInitialScrolled = useRef(false);
+  const userJustSentMessage = useRef(false);
   const keyboardInset = useKeyboardInsets();
     
   const {
@@ -88,12 +89,13 @@ export default function GuestMessagePanel({ token, guestName }) {
       return;
     }
     
-    // For new messages, wait for DOM to update then scroll
-    if (messages.length > 0 && hasInitialScrolled.current) {
+    // For new messages, only scroll if user just sent a message
+    if (messages.length > 0 && hasInitialScrolled.current && userJustSentMessage.current) {
       // Use multiple techniques to ensure proper timing
       requestAnimationFrame(() => {
         setTimeout(() => {
           scrollToBottom(false);
+          userJustSentMessage.current = false; // Reset flag after scrolling
         }, 50);
       });
     }
@@ -208,6 +210,9 @@ export default function GuestMessagePanel({ token, guestName }) {
       sending: sending,
       uploading: uploading
     });
+
+    // Set flag to trigger auto-scroll after sending
+    userJustSentMessage.current = true;
 
     // Clear the UI state immediately
     setDraft('');

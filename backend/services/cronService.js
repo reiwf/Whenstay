@@ -383,7 +383,7 @@ class CronService {
     marketTask.start();
 
     // Pricing queue processor - run every 5 minutes
-    const queueCron = '*/5 * * * *';
+    const queueCron = '0 */20 * * *';
     const queueTask = cron.schedule(queueCron, async () => {
       await this.processPricingQueue();
     }, {
@@ -396,7 +396,7 @@ class CronService {
 
     console.log('✅ Pricing cron jobs scheduled');
     console.log(`📅 Market factors: Daily at 2 AM JST (${marketFactorCron})`);
-    console.log(`📅 Pricing queue: Every 5 minutes (${queueCron})`);
+    console.log(`📅 Pricing queue: Every 60 minutes (${queueCron})`);
   }
 
   // Update market factors using smart market demand calculations - OPTIMIZED VERSION

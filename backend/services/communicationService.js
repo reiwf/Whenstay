@@ -912,7 +912,7 @@ class CommunicationService {
     return data;
   }
 
-  async renderTemplate(templateId, variables = {}) {
+  async renderTemplate(templateId, variables = {}, req = null) {
     const { data: template, error } = await this.supabase
       .from('message_templates')
       .select('*')
@@ -921,9 +921,30 @@ class CommunicationService {
 
     if (error) throw error;
 
-    // Simple template variable substitution
+    // Enhanced template variable substitution with special handling for guest_app_link
     let rendered = template.content;
-    for (const [key, value] of Object.entries(variables)) {
+    
+    // Handle special variables that need dynamic generation
+    const enhancedVariables = { ...variables };
+    
+    // Generate guest_app_link if check_in_token is available
+    if (variables.check_in_token && !enhancedVariables.guest_app_link) {
+      // Determine the base URL for the guest app link
+      let baseUrl;
+      if (req && req.get) {
+        // If we have a request object, use the host from it
+        const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        baseUrl = `${protocol}://${req.get('host')}`;
+      } else {
+        // Fallback to environment variable or default
+        baseUrl = process.env.APP_BASE_URL || 'https://app.staylabel.com';
+      }
+      
+      enhancedVariables.guest_app_link = `${baseUrl}/guest/${variables.check_in_token}`;
+    }
+    
+    // Perform variable substitution
+    for (const [key, value] of Object.entries(enhancedVariables)) {
       const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
       rendered = rendered.replace(regex, value || '');
     }

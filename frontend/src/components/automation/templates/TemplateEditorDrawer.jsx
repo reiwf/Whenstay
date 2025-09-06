@@ -153,23 +153,7 @@ export default function TemplateEditorDrawer({ template, isOpen, onClose, onSave
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Channel
-                  </label>
-                  <select
-                    value={formData.channel}
-                    onChange={(e) => handleInputChange('channel', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="inapp">In-App</option>
-                    <option value="email">Email</option>
-                    <option value="sms">SMS</option>
-                    <option value="whatsapp">WhatsApp</option>
-                  </select>
-                </div>
-
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Language
@@ -182,8 +166,12 @@ export default function TemplateEditorDrawer({ template, isOpen, onClose, onSave
                     <option value="en">English</option>
                     <option value="ja">Japanese</option>
                     <option value="ko">Korean</option>
-                    <option value="zh">Chinese</option>
+                    <option value="zh-CN">Chinese (Simplified)</option>
+                    <option value="zh-TW">Chinese (Traditional)</option>
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Channel is automatically determined by booking source (Airbnb, Booking.com, etc.)
+                  </p>
                 </div>
               </div>
 

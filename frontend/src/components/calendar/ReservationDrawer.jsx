@@ -15,11 +15,27 @@ import {
   Shield,
   Plus,
   ExternalLink,
-  MessageCircle
+  MessageCircle,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle,
+  TrendingUp,
+  Receipt,
+  History,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Wallet,
+  Activity,
+  Eye,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader
 } from 'lucide-react';
-import { adminAPI } from '../../services/api';
+import { adminAPI, paymentAPI } from '../../services/api';
 import LoadingSpinner from '../LoadingSpinner';
 import MessageDrawer from '../communication/MessageDrawer';
+import PaymentDrawer from '../payment/PaymentDrawer';
 import toast from 'react-hot-toast';
 
 // Import booking source logos
@@ -38,6 +54,10 @@ export default function ReservationDrawer({
   const [purchasedServices, setPurchasedServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [showMessageDrawer, setShowMessageDrawer] = useState(false);
+  
+  // PaymentDrawer state
+  const [showPaymentDrawer, setShowPaymentDrawer] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState(null);
 
   // Fetch detailed reservation data when drawer opens
   useEffect(() => {
@@ -177,6 +197,57 @@ export default function ReservationDrawer({
       console.error('Error adding guest service:', error);
       toast.error('Failed to add service');
     }
+  };
+
+  // PaymentDrawer handlers
+  const handleOpenPaymentDrawer = async (service) => {
+    // Get the Stripe payment intent ID from the service
+    const stripePaymentIntentId = service.stripe_payment_intent_id;
+    
+    if (!stripePaymentIntentId) {
+      console.log('Service object:', service);
+      toast.error('No payment information found for this service');
+      return;
+    }
+    
+    console.log('Looking up payment intent for Stripe ID:', stripePaymentIntentId);
+    
+    try {
+      // Query the payment_intents table to find the matching record
+      const response = await paymentAPI.getPaymentIntentByStripeId(stripePaymentIntentId);
+      
+      if (response.data && response.data.success && response.data.data) {
+        console.log('Found payment intent record:', response.data.data);
+        // Pass the payment intent record ID to PaymentDrawer
+        setSelectedPaymentId(response.data.data.id);
+        setShowPaymentDrawer(true);
+      } else {
+        console.warn('Payment intent lookup failed:', response);
+        toast.error('Payment record not found in system');
+      }
+    } catch (error) {
+      console.error('Error finding payment intent:', error);
+      if (error.response?.status === 404) {
+        toast.error('Payment record not found for this service');
+      } else {
+        toast.error('Failed to load payment details');
+      }
+    }
+  };
+
+  const handlePaymentDrawerClose = () => {
+    setShowPaymentDrawer(false);
+    setSelectedPaymentId(null);
+    // Refresh services data after payment drawer closes to show any refund updates
+    fetchGuestServices();
+  };
+
+  const canRefund = (service) => {
+    return service.purchase_status === 'paid' && service.stripe_payment_intent_id;
+  };
+
+  const canVoid = (service) => {
+    return ['pending', 'requires_payment_method', 'requires_confirmation'].includes(service.purchase_status) && service.stripe_payment_intent_id;
   };
 
   const formatCurrency = (amount, currency = 'JPY') => {
@@ -621,6 +692,20 @@ export default function ReservationDrawer({
                                               ID: {service.stripe_payment_intent_id.substring(0, 8)}...
                                             </p>
                                           )}
+                                          
+                                          {/* Payment Management Button */}
+                                          <div className="flex space-x-1 mt-2">
+                                            {(canRefund(service) || canVoid(service)) && (
+                                              <button
+                                                onClick={() => handleOpenPaymentDrawer(service)}
+                                                className="flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                                                title="View payment details"
+                                              >
+                                                <CreditCard className="w-3 h-3 mr-1" />
+                                                View Payment
+                                              </button>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -793,6 +878,13 @@ export default function ReservationDrawer({
         reservation={details || reservation}
         isOpen={showMessageDrawer}
         onClose={() => setShowMessageDrawer(false)}
+      />
+
+      {/* PaymentDrawer - stacked on top */}
+      <PaymentDrawer
+        paymentId={selectedPaymentId}
+        isOpen={showPaymentDrawer}
+        onClose={handlePaymentDrawerClose}
       />
     </div>
   );

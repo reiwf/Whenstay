@@ -146,9 +146,6 @@ export default function GuestApp() {
           setPaymentRefreshTrigger(prev => prev + 1)
         }
       } else if (paymentCanceled === 'true') {
-        toast.error(t('guestApp.paymentCanceled'), {
-          duration: 4000,
-        })
         
         // Clear the URL parameters
         navigate(location.pathname, { replace: true })

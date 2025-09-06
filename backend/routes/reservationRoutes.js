@@ -303,123 +303,606 @@ router.get('/beds24-bookings', adminAuth, async (req, res) => {
   }
 });
 
-// Get specific reservation details
-router.get('/:id', adminAuth, async (req, res) => {
+// Send check-in invitation email
+router.post('/:reservationId/send-invitation', adminAuth, async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const reservation = await reservationService.getReservationFullDetails(id);
+    const { reservationId } = req.params;
+    const reservation = await reservationService.getReservationById(reservationId);
 
     if (!reservation) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    res.status(200).json({
-      message: 'Reservation details retrieved successfully',
-      data: {
-        reservation
-      }
-    });
+    const emailService = require('../services/emailService');
+    await emailService.sendCheckinInvitation(
+      reservation.booking_email,
+      reservation.booking_name,
+      reservation.check_in_token,
+      reservation.check_in_date
+    );
+
+    res.status(200).json({ message: 'Check-in invitation sent successfully' });
   } catch (error) {
-    console.error('Error fetching reservation details:', error);
-    res.status(500).json({ error: 'Failed to fetch reservation details' });
+    console.error('Error sending invitation:', error);
+    res.status(500).json({ error: 'Failed to send invitation' });
   }
 });
 
-// Update reservation (includes both booking info and guest info)
-router.put('/:id', adminAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
+// GUEST SERVICES ADMIN ENDPOINTS
 
-    console.log('PUT /reservations/:id - Received data:', { id, updateData });
+// Get all services (available and enabled) for a reservation
+router.get('/:id/services', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId } = req.params;
 
     // Check if reservation exists
-    const existingReservation = await reservationService.getReservationFullDetails(id);
-    if (!existingReservation) {
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    console.log('Existing reservation found:', existingReservation.id);
+    // Get all services and reservation-specific addon data
+    const allServices = await guestServicesService.getAllServices();
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
 
-    // Prepare complete update data (including guest information)
-    const reservationUpdateData = {};
+    // Combine the data
+    const servicesWithStatus = allServices.map(service => {
+      const addon = reservationAddons.find(a => a.service_id === service.id);
 
-    // Booking contact information (kept in reservations table)
-    if (updateData.bookingFirstname !== undefined) reservationUpdateData.bookingFirstname = updateData.bookingFirstname;
-    if (updateData.bookingLastname !== undefined) reservationUpdateData.bookingLastname = updateData.bookingLastname;
-    if (updateData.bookingEmail !== undefined) reservationUpdateData.bookingEmail = updateData.bookingEmail;
-    if (updateData.bookingPhone !== undefined) reservationUpdateData.bookingPhone = updateData.bookingPhone;
-
-    // Reservation details
-    if (updateData.checkInDate !== undefined) reservationUpdateData.checkInDate = updateData.checkInDate;
-    if (updateData.checkOutDate !== undefined) reservationUpdateData.checkOutDate = updateData.checkOutDate;
-    if (updateData.numGuests !== undefined) reservationUpdateData.numGuests = updateData.numGuests;
-    if (updateData.numAdults !== undefined) reservationUpdateData.numAdults = updateData.numAdults;
-    if (updateData.numChildren !== undefined) reservationUpdateData.numChildren = updateData.numChildren;
-    if (updateData.totalAmount !== undefined) reservationUpdateData.totalAmount = updateData.totalAmount;
-    if (updateData.price !== undefined) reservationUpdateData.price = updateData.price;
-    if (updateData.commission !== undefined) reservationUpdateData.commission = updateData.commission;
-    if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
-    if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
-    if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24BookingId = updateData.beds24BookingId;
-    if (updateData.specialRequests !== undefined) reservationUpdateData.specialRequests = updateData.specialRequests;
-    if (updateData.bookingSource !== undefined) reservationUpdateData.bookingSource = updateData.bookingSource;
-    if (updateData.comments !== undefined) reservationUpdateData.comments = updateData.comments;
-
-    // Beds24 specific fields
-    if (updateData.apiReference !== undefined) reservationUpdateData.apiReference = updateData.apiReference;
-    if (updateData.rateDescription !== undefined) reservationUpdateData.rateDescription = updateData.rateDescription;
-    if (updateData.apiMessage !== undefined) reservationUpdateData.apiMessage = updateData.apiMessage;
-    if (updateData.bookingTime !== undefined) reservationUpdateData.bookingTime = updateData.bookingTime;
-    if (updateData.timeStamp !== undefined) reservationUpdateData.timeStamp = updateData.timeStamp;
-    if (updateData.lang !== undefined) reservationUpdateData.lang = updateData.lang;
-
-    // Room assignment
-    if (updateData.propertyId !== undefined) reservationUpdateData.propertyId = updateData.propertyId;
-    if (updateData.roomTypeId !== undefined) reservationUpdateData.roomTypeId = updateData.roomTypeId;
-    if (updateData.roomUnitId !== undefined) reservationUpdateData.roomUnitId = updateData.roomUnitId;
-
-    // Guest personal information (will be handled by service method)
-    if (updateData.guestFirstname !== undefined) reservationUpdateData.guestFirstname = updateData.guestFirstname;
-    if (updateData.guestLastname !== undefined) reservationUpdateData.guestLastname = updateData.guestLastname;
-    if (updateData.guestMail !== undefined) reservationUpdateData.guestMail = updateData.guestMail;
-    if (updateData.guestContact !== undefined) reservationUpdateData.guestContact = updateData.guestContact;
-    if (updateData.guestAddress !== undefined) reservationUpdateData.guestAddress = updateData.guestAddress;
-
-    // Check-in specific information
-    if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimatedCheckinTime = updateData.estimatedCheckinTime;
-    if (updateData.travelPurpose !== undefined) reservationUpdateData.travelPurpose = updateData.travelPurpose;
-    if (updateData.passportUrl !== undefined) reservationUpdateData.passportUrl = updateData.passportUrl;
-
-    // Emergency contact
-    if (updateData.emergencyContactName !== undefined) reservationUpdateData.emergencyContactName = updateData.emergencyContactName;
-    if (updateData.emergencyContactPhone !== undefined) reservationUpdateData.emergencyContactPhone = updateData.emergencyContactPhone;
-
-    // Administrative fields
-    if (updateData.agreementAccepted !== undefined) reservationUpdateData.agreementAccepted = updateData.agreementAccepted;
-    if (updateData.adminVerified !== undefined) reservationUpdateData.adminVerified = updateData.adminVerified;
-    if (updateData.accessRead !== undefined) reservationUpdateData.accessRead = updateData.accessRead;
-
-    console.log('Mapped complete update data:', reservationUpdateData);
-
-    // Update reservation using service (this will now handle guest info too)
-    const updatedReservation = await reservationService.updateReservation(id, reservationUpdateData);
-
-    console.log('Reservation updated successfully:', updatedReservation.id);
-
-    // Get updated reservation with guest information for response
-    const updatedReservationWithGuests = await reservationService.getReservationFullDetails(id);
+      return {
+        ...service,
+        is_enabled: addon?.admin_enabled || false,
+        enabled_at: addon?.created_at || null,
+        enabled_by: addon?.enabled_by || null,
+        is_purchased: addon?.purchase_status === 'paid',
+        purchased_at: addon?.purchased_at || null,
+        purchase_amount: addon?.amount_paid || addon?.calculated_amount || null,
+        purchase_status: addon?.purchase_status || 'not_available',
+        stripe_payment_intent_id: addon?.stripe_payment_intent_id || null,
+        calculated_amount: addon?.calculated_amount || service.price,
+        is_tax_exempted: addon?.is_tax_exempted || false,
+        can_enable: service.is_active && !addon?.admin_enabled
+      };
+    });
 
     res.status(200).json({
-      message: 'Reservation updated successfully',
-      reservation: updatedReservationWithGuests
+      message: 'Services retrieved successfully',
+      data: {
+        reservation: {
+          id: reservation.id,
+          booking_name: reservation.booking_name,
+          check_in_date: reservation.check_in_date,
+          check_out_date: reservation.check_out_date,
+          status: reservation.status
+        },
+        services: servicesWithStatus
+      }
     });
   } catch (error) {
-    console.error('Error updating reservation:', error);
-    res.status(500).json({
-      error: 'Failed to update reservation',
-      details: error.message
+    console.error('Error fetching reservation services:', error);
+    res.status(500).json({ error: 'Failed to fetch reservation services' });
+  }
+});
+
+// Enable a service for a reservation
+router.post('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+    const { enabled_by } = req.body; // Admin user ID who enabled the service
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get all services to find the one we want to enable
+    const allServices = await guestServicesService.getAllServices();
+    const service = allServices.find(s => s.id === serviceIdNum);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    if (!service.admin_approval_required) {
+      return res.status(400).json({ 
+        error: 'This service does not require admin approval and is automatically available' 
+      });
+    }
+
+    if (!service.is_active) {
+      return res.status(400).json({ error: 'Service is not active' });
+    }
+
+    // Enable the service for the reservation using service key
+    const result = await guestServicesService.enableServiceForReservation(
+      reservationId,
+      service.service_key,
+      enabled_by || null
+    );
+
+    res.status(200).json({
+      message: 'Service enabled successfully',
+      data: {
+        reservation_id: reservationId,
+        service_id: serviceIdNum,
+        service_name: service.name,
+        enabled_at: result.enabled_at,
+        enabled_by: result.enabled_by
+      }
+    });
+  } catch (error) {
+    console.error('Error enabling service for reservation:', error);
+    if (error.message.includes('already enabled')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to enable service for reservation' });
+    }
+  }
+});
+
+// Disable a service for a reservation
+router.delete('/:id/services/:serviceId/enable', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Check if service is enabled for this reservation
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const enabledService = reservationAddons.find(s => s.service_id === serviceIdNum && s.admin_enabled);
+
+    if (!enabledService) {
+      return res.status(404).json({ error: 'Service is not enabled for this reservation' });
+    }
+
+    // Check if service has been purchased
+    const purchasedService = reservationAddons.find(s => s.service_id === serviceIdNum && s.purchase_status === 'paid');
+
+    if (purchasedService) {
+      return res.status(400).json({ 
+        error: 'Cannot disable service that has already been purchased by the guest' 
+      });
+    }
+
+    // Get service details to disable by service key
+    const allServices = await guestServicesService.getAllServices();
+    const serviceDetails = allServices.find(s => s.id === serviceIdNum);
+    
+    if (!serviceDetails) {
+      return res.status(404).json({ error: 'Service details not found' });
+    }
+
+    // Disable the service
+    const result = await guestServicesService.disableServiceForReservation(reservationId, serviceDetails.service_key, req.user?.id);
+
+    res.status(200).json({
+      message: 'Service disabled successfully',
+      data: {
+        reservation_id: reservationId,
+        service_id: serviceIdNum,
+        disabled_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error disabling service for reservation:', error);
+    res.status(500).json({ error: 'Failed to disable service for reservation' });
+  }
+});
+
+// Get purchased services for a reservation (admin view)
+router.get('/:id/services/purchased', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId } = req.params;
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get purchased services with full details - use the correct method
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const purchasedServices = reservationAddons.filter(addon => addon.purchase_status === 'paid');
+
+    // Calculate total amount and effective times
+    const totalAmount = purchasedServices.reduce((sum, service) => sum + (service.amount_paid || service.calculated_amount || 0), 0);
+    
+    // Get effective times with service overrides
+    const effectiveTimes = await guestServicesService.calculateEffectiveTimes(reservationId);
+
+    res.status(200).json({
+      message: 'Purchased services retrieved successfully',
+      data: {
+        reservation: {
+          id: reservation.id,
+          booking_name: reservation.booking_name,
+          check_in_date: reservation.check_in_date,
+          check_out_date: reservation.check_out_date,
+          original_access_time: reservation.access_time,
+          original_departure_time: reservation.departure_time || '10:00:00'
+        },
+        purchased_services: purchasedServices,
+        summary: {
+          total_services: purchasedServices.length,
+          total_amount: totalAmount,
+          currency: purchasedServices[0]?.currency || 'JPY',
+          effective_access_time: effectiveTimes.accessTime,
+          effective_departure_time: effectiveTimes.departureTime,
+          time_modifications: {
+            access_time_changed: effectiveTimes.accessTime !== reservation.access_time,
+            departure_time_changed: effectiveTimes.departureTime !== (reservation.departure_time || '10:00:00')
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching purchased services:', error);
+    res.status(500).json({ error: 'Failed to fetch purchased services' });
+  }
+});
+
+// REFUND/VOID ENDPOINTS
+
+// Refund a purchased service payment (full or partial)
+router.post('/:id/services/:serviceId/refund', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+    const { amount, reason = 'requested_by_customer' } = req.body;
+
+    console.log('🔥 REFUND ENDPOINT HIT! Processing refund request:', { reservationId, serviceId, amount, reason });
+
+    // Validate service ID
+    console.log('🔍 Step 1: Validating service ID...');
+    if (!serviceId || serviceId.trim() === '') {
+      console.log('❌ Invalid service ID');
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+    console.log('✅ Service ID validated:', serviceId);
+
+    // Check if reservation exists
+    console.log('🔍 Step 2: Checking if reservation exists...');
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      console.log('❌ Reservation not found');
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+    console.log('✅ Reservation found:', reservation.id);
+
+    // Get purchased services for this reservation
+    console.log('🔍 Step 3: Getting reservation services...');
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    console.log('✅ Retrieved', reservationAddons.length, 'services for reservation');
+    
+    const purchasedService = reservationAddons.find(s => 
+      s.service_id === serviceId && 
+      s.purchase_status === 'paid' &&
+      s.stripe_payment_intent_id
+    );
+
+    if (!purchasedService) {
+      console.log('❌ No paid service found. Services:', reservationAddons.map(s => ({ 
+        id: s.service_id, 
+        status: s.purchase_status, 
+        has_stripe_id: !!s.stripe_payment_intent_id 
+      })));
+      
+      // Check if service exists but is already refunded
+      const refundedService = reservationAddons.find(s => 
+        s.service_id === serviceId && 
+        (s.purchase_status === 'refunded' || s.purchase_status === 'partially_refunded')
+      );
+      
+      if (refundedService) {
+        return res.status(409).json({ 
+          error: 'Service has already been refunded',
+          details: {
+            service_id: serviceId,
+            current_status: refundedService.purchase_status,
+            refund_amount: refundedService.refund_amount,
+            refunded_at: refundedService.refunded_at
+          }
+        });
+      }
+      
+      return res.status(404).json({ 
+        error: 'No paid service found for this reservation and service ID',
+        details: {
+          available_services: reservationAddons.map(s => ({
+            service_id: s.service_id,
+            status: s.purchase_status,
+            service_name: s.guest_services?.name
+          }))
+        }
+      });
+    }
+    console.log('✅ Found purchased service:', purchasedService.service_id);
+
+    if (!purchasedService.stripe_payment_intent_id) {
+      console.log('❌ No Stripe payment intent ID');
+      return res.status(400).json({ 
+        error: 'No Stripe payment intent ID found for this service' 
+      });
+    }
+    console.log('✅ Stripe payment intent ID found:', purchasedService.stripe_payment_intent_id);
+
+    // Validate refund amount if specified
+    if (amount !== null && amount !== undefined) {
+      if (amount <= 0) {
+        return res.status(400).json({ 
+          error: 'Refund amount must be greater than 0' 
+        });
+      }
+      if (amount > purchasedService.calculated_amount) {
+        return res.status(400).json({ 
+          error: `Refund amount (${amount}) cannot exceed original payment amount (${purchasedService.calculated_amount})` 
+        });
+      }
+    }
+
+    // Process refund through Stripe service
+    console.log('🔍 Step 4: Processing Stripe refund...');
+    const stripeService = require('../services/stripeService');
+    const refundResult = await stripeService.refundPayment(
+      purchasedService.stripe_payment_intent_id,
+      amount, // null for full refund, amount for partial refund
+      reason,
+      {
+        reservation_id: reservationId,
+        service_id: serviceId,
+        admin_refund: true,
+        refunded_by_user_id: req.user?.id
+      }
+    );
+    console.log('✅ Stripe refund completed:', refundResult);
+
+    // Update reservation addon status
+    console.log('🔍 Step 5: Updating addon status...');
+    const { error: updateError } = await guestServicesService.updateReservationAddonRefundStatus(
+      reservationId,
+      serviceId,
+      {
+        refund_id: refundResult.refundId,
+        refund_amount: refundResult.amount,
+        refund_reason: reason,
+        refunded_at: new Date().toISOString(),
+        purchase_status: amount && amount < purchasedService.calculated_amount ? 'partially_refunded' : 'refunded'
+      }
+    );
+
+    if (updateError) {
+      console.error('❌ Error updating addon refund status:', updateError);
+      // Don't fail the request since Stripe refund succeeded
+    } else {
+      console.log('✅ Addon status updated successfully');
+    }
+
+    console.log('🔍 Step 6: Sending success response...');
+    res.status(200).json({
+      message: 'Refund processed successfully',
+      data: {
+        refund: refundResult,
+        service: {
+          service_id: serviceId,
+          service_name: purchasedService.guest_services?.name || 'Unknown Service',
+          original_amount: purchasedService.calculated_amount,
+          refunded_amount: refundResult.amount,
+          refund_type: amount ? 'partial' : 'full'
+        },
+        reservation: {
+          id: reservationId,
+          booking_name: reservation.booking_name
+        }
+      }
+    });
+    console.log('✅ Response sent successfully!');
+  } catch (error) {
+    console.error('❌ REFUND ERROR:', error);
+    console.error('❌ Stack trace:', error.stack);
+    
+    // Enhanced error handling with specific error types
+    let statusCode = 500;
+    let errorMessage = 'Failed to process refund';
+    let errorDetails = error.message;
+    
+    if (error.message.includes('already been fully refunded')) {
+      statusCode = 409;
+      errorMessage = 'Payment already refunded';
+      errorDetails = 'This charge has already been fully refunded in Stripe. The database has been updated to reflect the current status.';
+    } else if (error.message.includes('would exceed available refund amount')) {
+      statusCode = 400;
+      errorMessage = 'Invalid refund amount';
+      errorDetails = error.message;
+    } else if (error.message.includes('Cannot refund payment with status')) {
+      statusCode = 400;
+      errorMessage = 'Payment cannot be refunded';
+      errorDetails = error.message;
+    } else if (error.message.includes('not found')) {
+      statusCode = 404;
+      errorMessage = 'Payment not found';
+      errorDetails = error.message;
+    }
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: errorDetails,
+      timestamp: new Date().toISOString(),
+      reservation_id: req.params.id || 'unknown',
+      service_id: req.params.serviceId || 'unknown'
+    });
+  }
+});
+
+// Void a service payment (for uncaptured payments only)
+router.post('/:id/services/:serviceId/void', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+    const { reason = 'requested_by_customer' } = req.body;
+
+    console.log('Processing void request:', { reservationId, serviceId, reason });
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get service addon for this reservation
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const serviceAddon = reservationAddons.find(s => 
+      s.service_id === serviceIdNum && 
+      s.stripe_payment_intent_id
+    );
+
+    if (!serviceAddon) {
+      return res.status(404).json({ 
+        error: 'No service payment found for this reservation and service ID' 
+      });
+    }
+
+    if (serviceAddon.purchase_status === 'paid') {
+      return res.status(400).json({ 
+        error: 'Cannot void a completed payment. Use refund instead.' 
+      });
+    }
+
+    if (!serviceAddon.stripe_payment_intent_id) {
+      return res.status(400).json({ 
+        error: 'No Stripe payment intent ID found for this service' 
+      });
+    }
+
+    // Process void through Stripe service
+    const stripeService = require('../services/stripeService');
+    const voidResult = await stripeService.voidPayment(
+      serviceAddon.stripe_payment_intent_id,
+      reason
+    );
+
+    // Update reservation addon status
+    const { error: updateError } = await guestServicesService.updateReservationAddonStatus(
+      reservationId,
+      serviceIdNum,
+      {
+        purchase_status: 'canceled',
+        voided_at: new Date().toISOString(),
+        void_reason: reason
+      }
+    );
+
+    if (updateError) {
+      console.error('Error updating addon void status:', updateError);
+      // Don't fail the request since Stripe void succeeded
+    }
+
+    res.status(200).json({
+      message: 'Payment voided successfully',
+      data: {
+        void: voidResult,
+        service: {
+          service_id: serviceIdNum,
+          service_name: serviceAddon.guest_services?.name || 'Unknown Service',
+          amount: voidResult.amount,
+          void_reason: reason
+        },
+        reservation: {
+          id: reservationId,
+          booking_name: reservation.booking_name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error processing void:', error);
+    res.status(500).json({ 
+      error: 'Failed to void payment',
+      details: error.message 
+    });
+  }
+});
+
+// Get refund history for a service payment
+router.get('/:id/services/:serviceId/refund-history', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+
+    console.log('Getting refund history:', { reservationId, serviceId });
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get service addon for this reservation
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const serviceAddon = reservationAddons.find(s => s.service_id === serviceIdNum);
+
+    if (!serviceAddon) {
+      return res.status(404).json({ 
+        error: 'No service found for this reservation and service ID' 
+      });
+    }
+
+    if (!serviceAddon.stripe_payment_intent_id) {
+      return res.status(400).json({ 
+        error: 'No Stripe payment intent ID found for this service' 
+      });
+    }
+
+    // Get refund history from Stripe
+    const stripeService = require('../services/stripeService');
+    const refundHistory = await stripeService.getRefundHistory(serviceAddon.stripe_payment_intent_id);
+
+    res.status(200).json({
+      message: 'Refund history retrieved successfully',
+      data: {
+        service: {
+          service_id: serviceIdNum,
+          service_name: serviceAddon.guest_services?.name || 'Unknown Service',
+          original_amount: serviceAddon.calculated_amount,
+          payment_status: serviceAddon.purchase_status,
+          stripe_payment_intent_id: serviceAddon.stripe_payment_intent_id
+        },
+        refund_history: refundHistory,
+        reservation: {
+          id: reservationId,
+          booking_name: reservation.booking_name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting refund history:', error);
+    res.status(500).json({ 
+      error: 'Failed to get refund history',
+      details: error.message 
     });
   }
 });
@@ -858,6 +1341,286 @@ router.get('/services/all', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching all services:', error);
     res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+
+// Void a service payment (for uncaptured payments only)
+router.post('/:id/services/:serviceId/void', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+    const { reason = 'requested_by_customer' } = req.body;
+
+    console.log('Processing void request:', { reservationId, serviceId, reason });
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get service addon for this reservation
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const serviceAddon = reservationAddons.find(s => 
+      s.service_id === serviceIdNum && 
+      s.stripe_payment_intent_id
+    );
+
+    if (!serviceAddon) {
+      return res.status(404).json({ 
+        error: 'No service payment found for this reservation and service ID' 
+      });
+    }
+
+    if (serviceAddon.purchase_status === 'paid') {
+      return res.status(400).json({ 
+        error: 'Cannot void a completed payment. Use refund instead.' 
+      });
+    }
+
+    if (!serviceAddon.stripe_payment_intent_id) {
+      return res.status(400).json({ 
+        error: 'No Stripe payment intent ID found for this service' 
+      });
+    }
+
+    // Process void through Stripe service
+    const stripeService = require('../services/stripeService');
+    const voidResult = await stripeService.voidPayment(
+      serviceAddon.stripe_payment_intent_id,
+      reason
+    );
+
+    // Update reservation addon status
+    const { error: updateError } = await guestServicesService.updateReservationAddonStatus(
+      reservationId,
+      serviceIdNum,
+      {
+        purchase_status: 'canceled',
+        voided_at: new Date().toISOString(),
+        void_reason: reason
+      }
+    );
+
+    if (updateError) {
+      console.error('Error updating addon void status:', updateError);
+      // Don't fail the request since Stripe void succeeded
+    }
+
+    res.status(200).json({
+      message: 'Payment voided successfully',
+      data: {
+        void: voidResult,
+        service: {
+          service_id: serviceIdNum,
+          service_name: serviceAddon.guest_services?.name || 'Unknown Service',
+          amount: voidResult.amount,
+          void_reason: reason
+        },
+        reservation: {
+          id: reservationId,
+          booking_name: reservation.booking_name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error processing void:', error);
+    res.status(500).json({ 
+      error: 'Failed to void payment',
+      details: error.message 
+    });
+  }
+});
+
+// Get refund history for a service payment
+router.get('/:id/services/:serviceId/refund-history', adminAuth, async (req, res) => {
+  try {
+    const { id: reservationId, serviceId } = req.params;
+
+    console.log('Getting refund history:', { reservationId, serviceId });
+
+    // Validate service ID
+    const serviceIdNum = parseInt(serviceId);
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'Invalid service ID' });
+    }
+
+    // Check if reservation exists
+    const reservation = await reservationService.getReservationFullDetails(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    // Get service addon for this reservation
+    const reservationAddons = await guestServicesService.getReservationServices(reservationId);
+    const serviceAddon = reservationAddons.find(s => s.service_id === serviceIdNum);
+
+    if (!serviceAddon) {
+      return res.status(404).json({ 
+        error: 'No service found for this reservation and service ID' 
+      });
+    }
+
+    if (!serviceAddon.stripe_payment_intent_id) {
+      return res.status(400).json({ 
+        error: 'No Stripe payment intent ID found for this service' 
+      });
+    }
+
+    // Get refund history from Stripe
+    const stripeService = require('../services/stripeService');
+    const refundHistory = await stripeService.getRefundHistory(serviceAddon.stripe_payment_intent_id);
+
+    res.status(200).json({
+      message: 'Refund history retrieved successfully',
+      data: {
+        service: {
+          service_id: serviceIdNum,
+          service_name: serviceAddon.guest_services?.name || 'Unknown Service',
+          original_amount: serviceAddon.calculated_amount,
+          payment_status: serviceAddon.purchase_status,
+          stripe_payment_intent_id: serviceAddon.stripe_payment_intent_id
+        },
+        refund_history: refundHistory,
+        reservation: {
+          id: reservationId,
+          booking_name: reservation.booking_name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting refund history:', error);
+    res.status(500).json({ 
+      error: 'Failed to get refund history',
+      details: error.message 
+    });
+  }
+});
+
+// Get specific reservation details (MUST be after all specific nested routes)
+router.get('/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const reservation = await reservationService.getReservationFullDetails(id);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    res.status(200).json({
+      message: 'Reservation details retrieved successfully',
+      data: {
+        reservation
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching reservation details:', error);
+    res.status(500).json({ error: 'Failed to fetch reservation details' });
+  }
+});
+
+// Update reservation (includes both booking info and guest info) (MUST be after all specific nested routes)
+router.put('/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    console.log('PUT /reservations/:id - Received data:', { id, updateData });
+
+    // Check if reservation exists
+    const existingReservation = await reservationService.getReservationFullDetails(id);
+    if (!existingReservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    console.log('Existing reservation found:', existingReservation.id);
+
+    // Prepare complete update data (including guest information)
+    const reservationUpdateData = {};
+
+    // Booking contact information (kept in reservations table)
+    if (updateData.bookingFirstname !== undefined) reservationUpdateData.bookingFirstname = updateData.bookingFirstname;
+    if (updateData.bookingLastname !== undefined) reservationUpdateData.bookingLastname = updateData.bookingLastname;
+    if (updateData.bookingEmail !== undefined) reservationUpdateData.bookingEmail = updateData.bookingEmail;
+    if (updateData.bookingPhone !== undefined) reservationUpdateData.bookingPhone = updateData.bookingPhone;
+
+    // Reservation details
+    if (updateData.checkInDate !== undefined) reservationUpdateData.checkInDate = updateData.checkInDate;
+    if (updateData.checkOutDate !== undefined) reservationUpdateData.checkOutDate = updateData.checkOutDate;
+    if (updateData.numGuests !== undefined) reservationUpdateData.numGuests = updateData.numGuests;
+    if (updateData.numAdults !== undefined) reservationUpdateData.numAdults = updateData.numAdults;
+    if (updateData.numChildren !== undefined) reservationUpdateData.numChildren = updateData.numChildren;
+    if (updateData.totalAmount !== undefined) reservationUpdateData.totalAmount = updateData.totalAmount;
+    if (updateData.price !== undefined) reservationUpdateData.price = updateData.price;
+    if (updateData.commission !== undefined) reservationUpdateData.commission = updateData.commission;
+    if (updateData.currency !== undefined) reservationUpdateData.currency = updateData.currency;
+    if (updateData.status !== undefined) reservationUpdateData.status = updateData.status;
+    if (updateData.beds24BookingId !== undefined) reservationUpdateData.beds24BookingId = updateData.beds24BookingId;
+    if (updateData.specialRequests !== undefined) reservationUpdateData.specialRequests = updateData.specialRequests;
+    if (updateData.bookingSource !== undefined) reservationUpdateData.bookingSource = updateData.bookingSource;
+    if (updateData.comments !== undefined) reservationUpdateData.comments = updateData.comments;
+
+    // Beds24 specific fields
+    if (updateData.apiReference !== undefined) reservationUpdateData.apiReference = updateData.apiReference;
+    if (updateData.rateDescription !== undefined) reservationUpdateData.rateDescription = updateData.rateDescription;
+    if (updateData.apiMessage !== undefined) reservationUpdateData.apiMessage = updateData.apiMessage;
+    if (updateData.bookingTime !== undefined) reservationUpdateData.bookingTime = updateData.bookingTime;
+    if (updateData.timeStamp !== undefined) reservationUpdateData.timeStamp = updateData.timeStamp;
+    if (updateData.lang !== undefined) reservationUpdateData.lang = updateData.lang;
+
+    // Room assignment
+    if (updateData.propertyId !== undefined) reservationUpdateData.propertyId = updateData.propertyId;
+    if (updateData.roomTypeId !== undefined) reservationUpdateData.roomTypeId = updateData.roomTypeId;
+    if (updateData.roomUnitId !== undefined) reservationUpdateData.roomUnitId = updateData.roomUnitId;
+
+    // Guest personal information (will be handled by service method)
+    if (updateData.guestFirstname !== undefined) reservationUpdateData.guestFirstname = updateData.guestFirstname;
+    if (updateData.guestLastname !== undefined) reservationUpdateData.guestLastname = updateData.guestLastname;
+    if (updateData.guestMail !== undefined) reservationUpdateData.guestMail = updateData.guestMail;
+    if (updateData.guestContact !== undefined) reservationUpdateData.guestContact = updateData.guestContact;
+    if (updateData.guestAddress !== undefined) reservationUpdateData.guestAddress = updateData.guestAddress;
+
+    // Check-in specific information
+    if (updateData.estimatedCheckinTime !== undefined) reservationUpdateData.estimatedCheckinTime = updateData.estimatedCheckinTime;
+    if (updateData.travelPurpose !== undefined) reservationUpdateData.travelPurpose = updateData.travelPurpose;
+    if (updateData.passportUrl !== undefined) reservationUpdateData.passportUrl = updateData.passportUrl;
+
+    // Emergency contact
+    if (updateData.emergencyContactName !== undefined) reservationUpdateData.emergencyContactName = updateData.emergencyContactName;
+    if (updateData.emergencyContactPhone !== undefined) reservationUpdateData.emergencyContactPhone = updateData.emergencyContactPhone;
+
+    // Administrative fields
+    if (updateData.agreementAccepted !== undefined) reservationUpdateData.agreementAccepted = updateData.agreementAccepted;
+    if (updateData.adminVerified !== undefined) reservationUpdateData.adminVerified = updateData.adminVerified;
+    if (updateData.accessRead !== undefined) reservationUpdateData.accessRead = updateData.accessRead;
+
+    console.log('Mapped complete update data:', reservationUpdateData);
+
+    // Update reservation using service (this will now handle guest info too)
+    const updatedReservation = await reservationService.updateReservation(id, reservationUpdateData);
+
+    console.log('Reservation updated successfully:', updatedReservation.id);
+
+    // Get updated reservation with guest information for response
+    const updatedReservationWithGuests = await reservationService.getReservationFullDetails(id);
+
+    res.status(200).json({
+      message: 'Reservation updated successfully',
+      reservation: updatedReservationWithGuests
+    });
+  } catch (error) {
+    console.error('Error updating reservation:', error);
+    res.status(500).json({
+      error: 'Failed to update reservation',
+      details: error.message
+    });
   }
 });
 

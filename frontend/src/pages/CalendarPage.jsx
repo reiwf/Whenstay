@@ -57,7 +57,7 @@ export default function CalendarPage() {
 
 
         {/* Calendar Timeline */}
-        <div className="min-h-screen">
+        <div className="min-h-screen ">
           <CalendarTimeline
             propertyId={selectedPropertyId}
             onPropertyChange={handlePropertyChange}

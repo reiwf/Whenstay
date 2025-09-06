@@ -12,7 +12,8 @@ import {
   X,
   DollarSign,
   Calendar,
-  Zap
+  Zap,
+  CreditCard
 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -51,6 +52,7 @@ const Sidebar = ({
         { id: 'properties', label: t('properties'), icon: Building },
         { id: 'pricing', label: t('pricing'), icon: DollarSign },
         { id: 'automation', label: t('automation'), icon: Zap },
+        { id: 'payments', label: 'Payments', icon: CreditCard },
         { id: 'market-settings', label: t('marketSettings'), icon: Settings },
         { id: 'users', label: t('users'), icon: Users }
       )
@@ -105,6 +107,9 @@ const Sidebar = ({
     } else if (itemId === 'automation') {
       // Navigate to the dedicated automation page
       navigate('/automation')
+    } else if (itemId === 'payments') {
+      // Navigate to the dedicated payments page
+      navigate('/payments')
     } else if (itemId === 'dashboard') {
       // For dashboard items, navigate to dashboard and let onSectionChange handle the section
       if (location.pathname !== '/dashboard') {

@@ -29,6 +29,11 @@ export function useRealtimeCommunication() {
   const [reservationCache, setReservationCache] = useState(new Map())
   const [pendingThreadSelection, setPendingThreadSelection] = useState(null)
   
+  // PHASE 3C: Thread list caching for instant subsequent loads
+  const [threadsCache, setThreadsCache] = useState(new Map())
+  const [lastCacheTime, setLastCacheTime] = useState(null)
+  const CACHE_TTL = 2 * 60 * 1000 // 2 minutes cache TTL
+  
   // Refs for real-time subscriptions
   const threadsChannelRef = useRef(null)
   const messagesChannelRef = useRef(null)
@@ -36,6 +41,10 @@ export function useRealtimeCommunication() {
   const typingTimeoutRef = useRef(null)
   const messageListRef = useRef(null)
   const threadSelectionTimeoutRef = useRef(null)
+  
+  // Refs to track subscription state and prevent duplicate setups
+  const subscriptionsInitialized = useRef(false)
+  const isLoadingThreads = useRef(false)
 
   // Auto-scroll to bottom of messages
   const scrollToBottom = useCallback((smooth = true) => {
@@ -358,28 +367,108 @@ export function useRealtimeCommunication() {
     }
   }, [])
 
-  // Load message threads with real-time setup
+  // OPTIMIZED: Progressive + cached loading WITHOUT subscription setup
   const loadThreads = useCallback(async (params = {}) => {
-    try {
-      setLoading(true)
-      
-      const response = await adminAPI.getCommunicationThreads(params)
-      const threadsData = response.data.threads || []
-      setThreads(threadsData)
-      
-      // Setup real-time subscriptions
-      setupThreadsSubscription()
-      setupGlobalDeliverySubscription()
-      
-      return threadsData
-    } catch (error) {
-      console.error('Error loading threads:', error)
-      toast.error('Failed to load message threads')
-      throw error
-    } finally {
-      setLoading(false)
+    // Prevent concurrent loading
+    if (isLoadingThreads.current) {
+      console.log('⚠️ Thread loading already in progress, skipping duplicate request');
+      return threads;
     }
-  }, [setupThreadsSubscription, setupGlobalDeliverySubscription])
+    
+    const cacheKey = JSON.stringify(params || {});
+    const now = Date.now();
+    
+    try {
+      isLoadingThreads.current = true;
+      console.log('🚀 Progressive thread loading started');
+      
+      // STAGE 0: INSTANT CACHE CHECK - show cached data immediately if available
+      if (threadsCache.has(cacheKey) && lastCacheTime && (now - lastCacheTime) < CACHE_TTL) {
+        console.log('⚡ INSTANT: Using cached threads data');
+        const cachedThreads = threadsCache.get(cacheKey);
+        setThreads(cachedThreads);
+        setLoading(false);
+        
+        // Still fetch fresh data in background for next time (but no subscriptions here)
+        console.log('🔄 Background refresh started...');
+        adminAPI.getCommunicationThreads(params)
+          .then(response => {
+            const freshThreads = response.data.threads || [];
+            const processedThreads = freshThreads.map(thread => ({
+              ...thread,
+              unread_count: thread.unread_count || 0
+            }));
+            
+            // Update cache and state with fresh data
+            setThreadsCache(prev => new Map(prev).set(cacheKey, processedThreads));
+            setLastCacheTime(now);
+            setThreads(processedThreads);
+            console.log('✅ Background refresh complete');
+          })
+          .catch(error => {
+            console.warn('Background refresh failed:', error);
+          })
+          .finally(() => {
+            isLoadingThreads.current = false;
+          });
+        
+        return cachedThreads;
+      }
+      
+      // STAGE 1: Fresh data fetch with loading indicator
+      setLoading(true);
+      console.log('⚡ Stage 1: Loading fresh thread data...');
+      
+      const response = await adminAPI.getCommunicationThreads(params);
+      const threadsData = response.data.threads || [];
+      
+      // Process threads data
+      const processedThreads = threadsData.map(thread => ({
+        ...thread,
+        unread_count: thread.unread_count || 0
+      }));
+      
+      // Update cache
+      setThreadsCache(prev => new Map(prev).set(cacheKey, processedThreads));
+      setLastCacheTime(now);
+      
+      // Clear old cache entries (keep only last 3 to prevent memory bloat)
+      if (threadsCache.size > 3) {
+        const oldestKey = Array.from(threadsCache.keys())[0];
+        setThreadsCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(oldestKey);
+          return newCache;
+        });
+      }
+      
+      // Immediately show threads
+      setThreads(processedThreads);
+      setLoading(false);
+      
+      console.log(`✅ Stage 1 complete: ${processedThreads.length} threads displayed & cached`);
+      console.log('🎯 Progressive + cached loading complete');
+      return processedThreads;
+      
+    } catch (error) {
+      console.error('Error loading threads:', error);
+      toast.error('Failed to load message threads');
+      
+      // Fallback to cache if network fails
+      if (threadsCache.has(cacheKey)) {
+        console.log('🛡️ Network failed, falling back to cache');
+        const cachedThreads = threadsCache.get(cacheKey);
+        setThreads(cachedThreads);
+        setLoading(false);
+        toast.success('Showing cached conversations');
+        return cachedThreads;
+      }
+      
+      throw error;
+    } finally {
+      isLoadingThreads.current = false;
+    }
+  }, [threadsCache, lastCacheTime, CACHE_TTL, threads])
 
   // Load messages for a thread with real-time setup
   const loadMessages = useCallback(async (threadId, params = {}) => {
@@ -1107,21 +1196,46 @@ export function useRealtimeCommunication() {
     }
   }, [loadThreads, loadMessages, selectedThread])
 
+  // Initialize subscriptions once on mount (separate from data loading)
+  useEffect(() => {
+    if (!subscriptionsInitialized.current && supabase) {
+      console.log('🔌 Initializing realtime subscriptions...');
+      subscriptionsInitialized.current = true;
+      
+      // Setup threads and global delivery subscriptions
+      setupThreadsSubscription();
+      setupGlobalDeliverySubscription();
+      
+      console.log('✅ Realtime subscriptions initialized');
+    }
+  }, [setupThreadsSubscription, setupGlobalDeliverySubscription]);
+
   // Cleanup subscriptions on unmount
   useEffect(() => {
     return () => {
+      console.log('🧹 Cleaning up realtime subscriptions on unmount...');
+      
       if (threadsChannelRef.current) {
         supabase.removeChannel(threadsChannelRef.current)
+        threadsChannelRef.current = null
       }
       if (messagesChannelRef.current) {
         supabase.removeChannel(messagesChannelRef.current)
+        messagesChannelRef.current = null
       }
       if (globalMessagesChannelRef.current) {
         supabase.removeChannel(globalMessagesChannelRef.current)
+        globalMessagesChannelRef.current = null
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = null
       }
+      
+      // Reset initialization flag to allow re-initialization if component remounts
+      subscriptionsInitialized.current = false
+      
+      console.log('✅ Realtime subscriptions cleanup complete');
     }
   }, [])
 

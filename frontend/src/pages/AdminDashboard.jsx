@@ -5,7 +5,7 @@ import { RefreshCw, CheckCircle, Clock, PlaneLanding, PlaneTakeoff , Calendar, U
 import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import DashboardLayout from '../components/layout/DashboardLayout'
-import { StatsCard, DataTable, EmptyState } from '../components/ui'
+import { StatsCard, DataTableAdvanced , EmptyState } from '../components/ui'
 
 // Import custom hooks
 import { useAdminData } from '../hooks/useAdminData'
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {todayArrivals.length > 0 ? (
-                  <DataTable
+                  <DataTableAdvanced
                     columns={[
                       {
                         key: 'guest_name',
@@ -245,7 +245,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {todayDepartures.length > 0 ? (
-                  <DataTable
+                  <DataTableAdvanced
                     columns={[
                       {
                         key: 'guest_name',
@@ -294,7 +294,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {inHouseGuests.length > 0 ? (
-                  <DataTable
+                  <DataTableAdvanced
                     columns={[
                       {
                         key: 'guest_name',

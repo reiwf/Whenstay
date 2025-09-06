@@ -16,6 +16,7 @@ import PricingPage from './pages/PricingPage'
 import MarketSettingsPage from './pages/MarketSettingsPage'
 import CalendarPage from './pages/CalendarPage'
 import AutomationPage from './pages/AutomationPage'
+import PaymentPage from './pages/PaymentPage'
 import AcceptInvitationPage from './pages/AcceptInvitationPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -133,6 +134,15 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin']}>
                 <AutomationPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/payments" 
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <PaymentPage />
               </ProtectedRoute>
             } 
           />

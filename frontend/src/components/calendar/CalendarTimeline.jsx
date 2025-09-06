@@ -94,7 +94,7 @@ export default function CalendarTimeline({
 
       // Use provided start date or current range
       const targetStartDate = startDate || dateRange.startDate;
-      const targetEndDate = DateUtils.addDays(targetStartDate, 31);
+      const targetEndDate = DateUtils.addDays(targetStartDate, 28);
 
       const response = await api.get(`/calendar/timeline/${propertyId}`, {
         params: {
@@ -113,7 +113,7 @@ export default function CalendarTimeline({
           setDateRange({
             startDate: targetStartDate,
             endDate: targetEndDate,
-            totalDays: 31,
+            totalDays: 28,
             dates: DateUtils.generateDateRange(targetStartDate, targetEndDate)
           });
         }
@@ -473,26 +473,28 @@ export default function CalendarTimeline({
         onStagingToggle={() => setShowStagingRow(v => !v)}
       />
 
-      {/* Timeline Grid */}
-      <div className="relative">
-        <TimelineGrid
-          roomHierarchy={roomHierarchy}
-          reservations={timelineData?.reservations || []}
-          segments={timelineData?.segments || []}
-          dates={dateRange.dates}
-          startDate={dateRange.startDate}
-          onReservationMove={handleReservationMove}
-          onReservationResize={handleReservationResize}
-          onReservationSplit={handleReservationSplit}
-          onReservationSwap={handleReservationSwap}
-          loading={loading || isNavigating}
-          isResizeMode={isResizeMode}
-          isHorizontalMode={isHorizontalMode}
-          showStagingRow={showStagingRow}
-          isNavigating={isNavigating}
-          cachedTimelineData={cachedTimelineData}
-        />
-
+      {/* Timeline Grid Container - Properly handle horizontal scrolling */}
+      <div className="relative w-full overflow-hidden">
+        {/* Scrollable Timeline Container */}
+        <div className="w-full overflow-x-auto overflow-y-auto ">
+          <TimelineGrid
+            roomHierarchy={roomHierarchy}
+            reservations={timelineData?.reservations || []}
+            segments={timelineData?.segments || []}
+            dates={dateRange.dates}
+            startDate={dateRange.startDate}
+            onReservationMove={handleReservationMove}
+            onReservationResize={handleReservationResize}
+            onReservationSplit={handleReservationSplit}
+            onReservationSwap={handleReservationSwap}
+            loading={loading || isNavigating}
+            isResizeMode={isResizeMode}
+            isHorizontalMode={isHorizontalMode}
+            showStagingRow={showStagingRow}
+            isNavigating={isNavigating}
+            cachedTimelineData={cachedTimelineData}
+          />
+        </div>
       </div>
       {/* Gap Fill Modal */}
       <GapFillModal

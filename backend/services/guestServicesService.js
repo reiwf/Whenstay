@@ -266,13 +266,15 @@ class GuestServicesService {
    */
   async createServiceCheckout(reservationId, serviceKey, guestToken, req) {
     try {
+      console.log(`Creating service checkout for reservation ${reservationId}, service ${serviceKey}`);
+      
       // Get reservation details
       const reservation = await reservationService.getReservationByToken(guestToken);
       if (!reservation || reservation.id !== reservationId) {
         throw new Error('Reservation not found or token mismatch');
       }
 
-      // Get the enabled service addon
+      // Get the enabled service addon - now including 'pending' status for retry scenarios
       const { data: addon, error: addonError } = await supabaseAdmin
         .from('reservation_addons')
         .select(`
@@ -288,11 +290,47 @@ class GuestServicesService {
         .eq('reservation_id', reservationId)
         .eq('guest_services.service_key', serviceKey)
         .eq('admin_enabled', true)
-        .in('purchase_status', ['available', 'failed'])
+        .in('purchase_status', ['available', 'failed', 'pending'])
         .single();
 
       if (addonError || !addon) {
+        console.error(`Service addon not found for reservation ${reservationId}, service ${serviceKey}:`, addonError);
         throw new Error('Service not available for purchase');
+      }
+
+      // Handle pending payments - cleanup old session and reset status
+      if (addon.purchase_status === 'pending') {
+        console.log(`Found pending payment for reservation ${reservationId}, service ${serviceKey}. Cleaning up...`);
+        
+        // Cancel any existing Stripe session if it exists
+        if (addon.stripe_payment_intent_id) {
+          try {
+            // Check if it's a checkout session ID (starts with 'cs_') or payment intent ('pi_')
+            if (addon.stripe_payment_intent_id.startsWith('cs_')) {
+              console.log(`Attempting to expire existing Stripe checkout session: ${addon.stripe_payment_intent_id}`);
+              await stripeService.stripe.checkout.sessions.expire(addon.stripe_payment_intent_id);
+            }
+          } catch (stripeError) {
+            console.log(`Failed to expire old Stripe session (non-critical): ${stripeError.message}`);
+            // Non-critical error - continue with new session creation
+          }
+        }
+
+        // Reset the addon status to available for retry
+        await supabaseAdmin
+          .from('reservation_addons')
+          .update({ 
+            purchase_status: 'available',
+            stripe_payment_intent_id: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', addon.id);
+
+        console.log(`Reset pending payment status for addon ${addon.id} to allow retry`);
+        
+        // Update the addon object for the rest of the function
+        addon.purchase_status = 'available';
+        addon.stripe_payment_intent_id = null;
       }
 
       const service = addon.guest_services;
@@ -596,6 +634,62 @@ class GuestServicesService {
     } catch (error) {
       console.error('Error removing accommodation tax exemption:', error);
       throw new Error(`Failed to remove accommodation tax exemption: ${error.message}`);
+    }
+  }
+
+  /**
+   * Admin: Update reservation addon refund status
+   * Used for refund operations
+   */
+  async updateReservationAddonRefundStatus(reservationId, serviceId, refundData) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('reservation_addons')
+        .update({
+          purchase_status: refundData.purchase_status,
+          refund_amount: refundData.refund_amount,
+          refunded_at: refundData.refunded_at,
+          updated_at: new Date().toISOString()
+        })
+        .eq('reservation_id', reservationId)
+        .eq('service_id', serviceId);
+
+      if (error) throw error;
+
+      console.log(`Refund status updated for reservation ${reservationId}, service ${serviceId}`);
+      return { success: true };
+
+    } catch (error) {
+      console.error('Error updating addon refund status:', error);
+      throw new Error(`Failed to update refund status: ${error.message}`);
+    }
+  }
+
+  /**
+   * Admin: Update reservation addon status
+   * Used for void operations and general status updates
+   */
+  async updateReservationAddonStatus(reservationId, serviceId, statusData) {
+    try {
+      const updateData = {
+        ...statusData,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabaseAdmin
+        .from('reservation_addons')
+        .update(updateData)
+        .eq('reservation_id', reservationId)
+        .eq('service_id', serviceId);
+
+      if (error) throw error;
+
+      console.log(`Addon status updated for reservation ${reservationId}, service ${serviceId}`);
+      return { success: true };
+
+    } catch (error) {
+      console.error('Error updating addon status:', error);
+      throw new Error(`Failed to update addon status: ${error.message}`);
     }
   }
 }

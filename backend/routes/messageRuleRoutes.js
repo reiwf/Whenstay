@@ -14,7 +14,12 @@ router.get('/rules', async (req, res) => {
       .from('message_rules')
       .select(`
         *,
-        message_templates(*)
+        message_rule_templates(
+          template_id,
+          is_primary,
+          priority,
+          message_templates(*)
+        )
       `)
       .order('code');
 
@@ -28,9 +33,28 @@ router.get('/rules', async (req, res) => {
       throw error;
     }
 
+    // Transform the data to maintain backward compatibility
+    const transformedRules = (rules || []).map(rule => {
+      // Find primary template for backward compatibility
+      const primaryTemplate = rule.message_rule_templates?.find(mrt => mrt.is_primary);
+      
+      return {
+        ...rule,
+        // Add primary template data directly to rule for backward compatibility
+        template_id: primaryTemplate?.template_id || null,
+        message_templates: primaryTemplate?.message_templates || null,
+        // Keep all templates available for advanced use cases
+        all_templates: rule.message_rule_templates?.map(mrt => ({
+          ...mrt.message_templates,
+          is_primary: mrt.is_primary,
+          priority: mrt.priority
+        })) || []
+      };
+    });
+
     res.json({
       success: true,
-      rules: rules || []
+      rules: transformedRules
     });
 
   } catch (error) {
@@ -73,7 +97,12 @@ router.put('/rules/:ruleId', async (req, res) => {
       .eq('id', ruleId)
       .select(`
         *,
-        message_templates(*)
+        message_rule_templates(
+          template_id,
+          is_primary,
+          priority,
+          message_templates(*)
+        )
       `)
       .single();
 

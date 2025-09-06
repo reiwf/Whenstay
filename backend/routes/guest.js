@@ -697,6 +697,8 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
   try {
     const { token, serviceId } = req.params;
 
+    console.log(`Guest payment request: token=${token}, serviceId=${serviceId}`);
+
     if (!token) {
       return res.status(400).json({ error: 'Check-in token is required' });
     }
@@ -708,6 +710,7 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
     // Get reservation data to validate token and get reservation ID
     const reservationData = await reservationService.getReservationByToken(token);
     if (!reservationData) {
+      console.error(`Reservation not found for token: ${token}`);
       return res.status(404).json({ error: 'Reservation not found or invalid token' });
     }
 
@@ -717,8 +720,16 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
     const serviceToPurchase = availableServices.find(s => s.id === serviceId);
 
     if (!serviceToPurchase) {
-      return res.status(404).json({ error: 'Service not found or not available for purchase' });
+      console.error(`Service not found: serviceId=${serviceId}, reservationId=${reservationData.id}`);
+      console.error(`Available services:`, availableServices.map(s => ({ id: s.id, name: s.name, status: s.payment_status })));
+      return res.status(404).json({ 
+        error: 'Service not found or not available for purchase',
+        details: 'This service may have already been paid or is no longer available.'
+      });
     }
+
+    // Log service details for debugging
+    console.log(`Creating checkout for service: ${serviceToPurchase.name} (${serviceToPurchase.service_type}), status: ${serviceToPurchase.payment_status}`);
 
     // Create Stripe checkout session
     const checkoutSession = await guestServicesService.createServiceCheckout(
@@ -727,6 +738,8 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
       token,
       req
     );
+
+    console.log(`Successfully created checkout session: ${checkoutSession.sessionId}`);
 
     res.json({
       checkout_url: checkoutSession.checkoutUrl,
@@ -741,9 +754,26 @@ router.post('/:token/services/:serviceId/purchase', async (req, res) => {
 
   } catch (error) {
     console.error('Error creating service checkout:', error);
+    
+    // Provide more specific error messages based on the error
+    if (error.message.includes('Service not available for purchase')) {
+      return res.status(404).json({ 
+        error: 'Service not available for purchase',
+        details: 'This service may not be enabled for your reservation or may have already been completed.'
+      });
+    }
+    
+    if (error.message.includes('Reservation not found')) {
+      return res.status(404).json({ 
+        error: 'Reservation not found',
+        details: 'Invalid reservation token or reservation may have been cancelled.'
+      });
+    }
+
+    // Generic error response
     res.status(500).json({ 
       error: 'Failed to create checkout session',
-      details: error.message 
+      details: 'There was an issue processing your payment request. Please try again or contact support if the problem persists.'
     });
   }
 });

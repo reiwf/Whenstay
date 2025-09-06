@@ -88,6 +88,16 @@ CREATE TYPE auth.factor_type AS ENUM (
 
 
 --
+-- Name: oauth_registration_type; Type: TYPE; Schema: auth; Owner: -
+--
+
+CREATE TYPE auth.oauth_registration_type AS ENUM (
+    'dynamic',
+    'manual'
+);
+
+
+--
 -- Name: one_time_token_type; Type: TYPE; Schema: auth; Owner: -
 --
 
@@ -98,6 +108,17 @@ CREATE TYPE auth.one_time_token_type AS ENUM (
     'email_change_token_new',
     'email_change_token_current',
     'phone_change_token'
+);
+
+
+--
+-- Name: backfill_policy; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.backfill_policy AS ENUM (
+    'none',
+    'skip_if_past',
+    'until_checkin'
 );
 
 
@@ -135,6 +156,20 @@ CREATE TYPE public.cleaning_task_type AS ENUM (
 
 
 --
+-- Name: message_rule_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.message_rule_type AS ENUM (
+    'ON_CREATE_DELAY_MIN',
+    'BEFORE_ARRIVAL_DAYS_AT_TIME',
+    'ARRIVAL_DAY_HOURS_BEFORE_CHECKIN',
+    'AFTER_CHECKIN_HOURS',
+    'BEFORE_CHECKOUT_HOURS',
+    'AFTER_DEPARTURE_DAYS'
+);
+
+
+--
 -- Name: reservation_status; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -148,6 +183,20 @@ CREATE TYPE public.reservation_status AS ENUM (
     'checked_out',
     'no_show',
     'new'
+);
+
+
+--
+-- Name: scheduled_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.scheduled_status AS ENUM (
+    'pending',
+    'processing',
+    'sent',
+    'failed',
+    'canceled',
+    'skipped'
 );
 
 
@@ -360,6 +409,28 @@ $$;
 
 
 --
+-- Name: cancel_pending_for_reservation(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cancel_pending_for_reservation(p_res uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+  UPDATE scheduled_messages
+  SET status = 'canceled', updated_at = now()
+  WHERE reservation_id = p_res
+    AND status IN ('pending','processing')
+    AND (lease_until IS NULL OR lease_until < now());
+$$;
+
+
+--
+-- Name: FUNCTION cancel_pending_for_reservation(p_res uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.cancel_pending_for_reservation(p_res uuid) IS 'Cancels all pending/processing messages for a reservation (used when dates change)';
+
+
+--
 -- Name: check_same_day_checkin(date, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -388,7 +459,7 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.scheduled_messages (
     id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
-    thread_id uuid NOT NULL,
+    thread_id uuid,
     template_id uuid NOT NULL,
     reservation_id uuid,
     rule_id uuid,
@@ -400,22 +471,90 @@ CREATE TABLE public.scheduled_messages (
     locked_at timestamp with time zone,
     attempts integer DEFAULT 0 NOT NULL,
     cancellation_reason text,
-    created_by uuid,
+    created_by text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
+    idempotency_key text,
+    claimed_by text,
+    lease_until timestamp with time zone,
     CONSTRAINT scheduled_messages_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text]))),
-    CONSTRAINT scheduled_messages_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'sent'::text, 'canceled'::text, 'failed'::text])))
+    CONSTRAINT scheduled_messages_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'pending'::text, 'processing'::text, 'sent'::text, 'failed'::text, 'canceled'::text, 'skipped'::text]))),
+    CONSTRAINT scheduled_messages_thread_or_reservation_check CHECK (((thread_id IS NOT NULL) OR (reservation_id IS NOT NULL)))
 );
 
 
 --
--- Name: claim_due_scheduled_messages(integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: COLUMN scheduled_messages.idempotency_key; Type: COMMENT; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_due_scheduled_messages(p_limit integer DEFAULT 50) RETURNS SETOF public.scheduled_messages
+COMMENT ON COLUMN public.scheduled_messages.idempotency_key IS 'Prevents duplicate message generation: rule_id:reservation_id:scheduled_at_utc';
+
+
+--
+-- Name: COLUMN scheduled_messages.claimed_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scheduled_messages.claimed_by IS 'Instance ID that claimed this message for processing';
+
+
+--
+-- Name: COLUMN scheduled_messages.lease_until; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scheduled_messages.lease_until IS 'Lease expiration to prevent processing conflicts';
+
+
+--
+-- Name: CONSTRAINT scheduled_messages_thread_or_reservation_check ON scheduled_messages; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON CONSTRAINT scheduled_messages_thread_or_reservation_check ON public.scheduled_messages IS 'Ensures either thread_id (for existing threads) or reservation_id (for deferred thread creation) is provided';
+
+
+--
+-- Name: claim_due_scheduled_messages(integer, text, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_due_scheduled_messages(p_limit integer DEFAULT 50, p_instance_id text DEFAULT 'default'::text, p_lease_seconds integer DEFAULT 300) RETURNS SETOF public.scheduled_messages
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  RETURN QUERY
+  UPDATE scheduled_messages sm
+  SET status = 'processing',
+      claimed_by = p_instance_id,
+      lease_until = now() + make_interval(secs => p_lease_seconds),
+      attempts = sm.attempts + 1,
+      updated_at = now()
+  WHERE sm.id IN (
+    SELECT id FROM scheduled_messages
+    WHERE status = 'pending'
+      AND run_at <= now()
+      AND (lease_until IS NULL OR lease_until < now())
+      -- Support both legacy (with thread_id) and new (with reservation_id) scheduled messages
+      AND (thread_id IS NOT NULL OR reservation_id IS NOT NULL)
+    ORDER BY run_at ASC
+    LIMIT p_limit
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING sm.*;
+END $$;
+
+
+--
+-- Name: FUNCTION claim_due_scheduled_messages(p_limit integer, p_instance_id text, p_lease_seconds integer); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.claim_due_scheduled_messages(p_limit integer, p_instance_id text, p_lease_seconds integer) IS 'Atomically claims due scheduled messages with lease-based concurrency control';
+
+
+--
+-- Name: claim_due_scheduled_messages_old(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_due_scheduled_messages_old(p_limit integer DEFAULT 50) RETURNS SETOF public.scheduled_messages
+    LANGUAGE plpgsql
+    AS $$BEGIN
     RETURN QUERY
     WITH c AS (
         SELECT id FROM public.scheduled_messages
@@ -431,7 +570,7 @@ BEGIN
     FROM c
     WHERE sm.id = c.id
     RETURNING sm.*;
-END $$;
+END$$;
 
 
 --
@@ -461,6 +600,36 @@ $$;
 
 
 --
+-- Name: cleanup_expired_leases(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cleanup_expired_leases() RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  updated_count integer;
+BEGIN
+  UPDATE scheduled_messages 
+  SET status = 'pending',
+      claimed_by = NULL,
+      lease_until = NULL,
+      updated_at = now()
+  WHERE status = 'processing' 
+    AND lease_until < now() - interval '1 minute';
+  
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END $$;
+
+
+--
+-- Name: FUNCTION cleanup_expired_leases(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.cleanup_expired_leases() IS 'Releases expired leases back to pending status for retry';
+
+
+--
 -- Name: cleanup_pricing_queue(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -487,41 +656,50 @@ $$;
 CREATE FUNCTION public.create_cleaning_task_for_reservation(reservation_uuid uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
-       DECLARE
-         res_record RECORD;
-         default_cleaner_id uuid;
-         is_priority boolean;
-       BEGIN
-         SELECT * INTO res_record FROM reservations WHERE id = reservation_uuid;
-         
-         IF res_record.room_unit_id IS NULL THEN
-           RETURN;
-         END IF;
-         
-         SELECT get_property_default_cleaner(res_record.room_unit_id) INTO default_cleaner_id;
-         SELECT check_same_day_checkin(res_record.check_out_date, res_record.room_unit_id) INTO is_priority;
-         
-         IF EXISTS (SELECT 1 FROM cleaning_tasks WHERE reservation_id = reservation_uuid) THEN
-           RETURN;
-         END IF;
-         
-         INSERT INTO cleaning_tasks (
-           reservation_id,
-           room_unit_id,
-           task_date,
-           task_type,
-           priority,
-           assigned_cleaner_id
-         ) VALUES (
-           reservation_uuid,
-           res_record.room_unit_id,
-           res_record.check_out_date,
-           'checkout',
-           is_priority,
-           default_cleaner_id
-         );
-       END;
-       $$;
+DECLARE
+  res_record RECORD;
+  default_cleaner_id uuid;
+  is_priority boolean;
+BEGIN
+  SELECT * INTO res_record FROM reservations WHERE id = reservation_uuid;
+  
+  IF res_record.room_unit_id IS NULL THEN
+    RETURN;
+  END IF;
+  
+  SELECT get_property_default_cleaner(res_record.room_unit_id) INTO default_cleaner_id;
+  SELECT check_same_day_checkin(res_record.check_out_date, res_record.room_unit_id) INTO is_priority;
+  
+  IF EXISTS (SELECT 1 FROM cleaning_tasks WHERE reservation_id = reservation_uuid) THEN
+    RETURN;
+  END IF;
+  
+  INSERT INTO cleaning_tasks (
+    reservation_id,
+    room_unit_id,
+    property_id,
+    task_date,
+    task_type,
+    priority,  -- FIX: Convert boolean to proper enum value
+    cleaner_id
+  ) VALUES (
+    reservation_uuid,
+    res_record.room_unit_id,
+    res_record.property_id,
+    res_record.check_out_date,
+    'checkout',
+    CASE WHEN is_priority THEN 'high' ELSE 'normal' END,  -- FIX: Proper conversion
+    default_cleaner_id
+  );
+END;
+$$;
+
+
+--
+-- Name: FUNCTION create_cleaning_task_for_reservation(reservation_uuid uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.create_cleaning_task_for_reservation(reservation_uuid uuid) IS 'Creates cleaning task for reservation checkout. Fixed 2025-09-04: Properly converts boolean priority to enum values.';
 
 
 --
@@ -704,12 +882,32 @@ $$;
 
 
 --
+-- Name: generate_idempotency_key(uuid, uuid, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.generate_idempotency_key(p_rule_id uuid, p_reservation_id uuid, p_scheduled_at timestamp with time zone) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT p_rule_id::text || ':' || p_reservation_id::text || ':' || 
+         to_char(p_scheduled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+$$;
+
+
+--
+-- Name: FUNCTION generate_idempotency_key(p_rule_id uuid, p_reservation_id uuid, p_scheduled_at timestamp with time zone); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.generate_idempotency_key(p_rule_id uuid, p_reservation_id uuid, p_scheduled_at timestamp with time zone) IS 'Generates consistent idempotency keys for preventing duplicate scheduled messages';
+
+
+--
 -- Name: get_calendar_timeline(uuid, date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date date DEFAULT (CURRENT_DATE - '1 day'::interval), p_end_date date DEFAULT (CURRENT_DATE + '29 days'::interval)) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_order integer, room_unit_id uuid, room_unit_number text, reservation_id uuid, segment_id uuid, booking_name text, start_date date, end_date date, status text, color text, label text, is_segment boolean)
+CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date date DEFAULT (CURRENT_DATE - '1 day'::interval), p_end_date date DEFAULT (CURRENT_DATE + '29 days'::interval)) RETURNS TABLE(room_type_id uuid, room_type_name text, room_type_order integer, room_unit_id uuid, room_unit_number text, reservation_id uuid, segment_id uuid, booking_name text, start_date date, end_date date, status text, color text, label text, is_segment boolean, group_room_count integer, is_group_master boolean, booking_group_master_id text, booking_group_ids jsonb)
     LANGUAGE sql STABLE
-    AS $$-- First get ALL room units for the property (including those with no reservations)
+    AS $$
+    -- First get ALL room units for the property (including those with no reservations)
     SELECT 
         rt.id as room_type_id,
         rt.name as room_type_name,
@@ -724,7 +922,12 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
         NULL::text as status,
         NULL::text as color,
         NULL::text as label,
-        false as is_segment
+        false as is_segment,
+        -- Group booking fields (NULL for empty room rows)
+        NULL::integer as group_room_count,
+        NULL::boolean as is_group_master,
+        NULL::text as booking_group_master_id,
+        NULL::jsonb as booking_group_ids
     FROM room_types rt
     JOIN room_units ru ON rt.id = ru.room_type_id
     WHERE rt.property_id = p_property_id
@@ -772,7 +975,12 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
             ELSE '#b5945a'
         END as color,
         r.booking_name as label,
-        false as is_segment
+        false as is_segment,
+        -- Group booking fields from reservations table
+        r.group_room_count,
+        r.is_group_master,
+        r.booking_group_master_id,
+        r.booking_group_ids
     FROM reservations r
     JOIN room_units ru ON r.room_unit_id = ru.id
     JOIN room_types rt ON ru.room_type_id = rt.id
@@ -811,7 +1019,12 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
             END
         ) as color,
         COALESCE(rs.label, r.booking_name) as label,
-        true as is_segment
+        true as is_segment,
+        -- Group booking fields from parent reservation
+        r.group_room_count,
+        r.is_group_master,
+        r.booking_group_master_id,
+        r.booking_group_ids
     FROM reservation_segments rs
     JOIN reservations r ON rs.reservation_id = r.id
     JOIN room_units ru ON rs.room_unit_id = ru.id
@@ -838,7 +1051,12 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
         r.status::text,
         '#f59e0b' as color, -- Orange color for unassigned
         r.booking_name as label,
-        false as is_segment
+        false as is_segment,
+        -- Group booking fields from reservations table
+        r.group_room_count,
+        r.is_group_master,
+        r.booking_group_master_id,
+        r.booking_group_ids
     FROM reservations r
     JOIN room_types rt ON r.room_type_id = rt.id
     WHERE rt.property_id = p_property_id
@@ -852,7 +1070,15 @@ CREATE FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date da
         WHERE rs.reservation_id = r.id
     )
     
-    ORDER BY room_type_name, room_unit_number, start_date;$$;
+    ORDER BY room_type_name, room_unit_number, start_date;
+$$;
+
+
+--
+-- Name: FUNCTION get_calendar_timeline(p_property_id uuid, p_start_date date, p_end_date date); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_calendar_timeline(p_property_id uuid, p_start_date date, p_end_date date) IS 'Calendar timeline function with group booking fields support - returns reservation and room data for calendar display';
 
 
 --
@@ -1181,6 +1407,66 @@ $$;
 
 
 --
+-- Name: get_threads_with_unread_counts(uuid[], uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_threads_with_unread_counts(p_thread_ids uuid[], p_user_id uuid) RETURNS TABLE(thread_id uuid, unread_count bigint)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RETURN QUERY
+  WITH participant_reads AS (
+    -- Get last read timestamps for user across all specified threads
+    SELECT 
+      mp.thread_id,
+      COALESCE(mp.last_read_at, '1970-01-01T00:00:00Z'::timestamptz) as last_read_at
+    FROM message_participants mp
+    WHERE mp.user_id = p_user_id
+      AND mp.thread_id = ANY(p_thread_ids)
+  ),
+  thread_defaults AS (
+    -- Ensure we have an entry for every thread, even if user hasn't participated
+    SELECT 
+      unnest(p_thread_ids) as thread_id,
+      '1970-01-01T00:00:00Z'::timestamptz as default_read_at
+  ),
+  combined_reads AS (
+    -- Combine actual reads with defaults
+    SELECT 
+      td.thread_id,
+      COALESCE(pr.last_read_at, td.default_read_at) as last_read_at
+    FROM thread_defaults td
+    LEFT JOIN participant_reads pr ON td.thread_id = pr.thread_id
+  ),
+  unread_counts AS (
+    -- Calculate unread counts efficiently using window functions
+    SELECT 
+      cr.thread_id,
+      COUNT(m.id) as unread_count
+    FROM combined_reads cr
+    LEFT JOIN messages m ON m.thread_id = cr.thread_id
+      AND m.direction = 'incoming'
+      AND m.created_at > cr.last_read_at
+    GROUP BY cr.thread_id
+  )
+  SELECT 
+    uc.thread_id,
+    uc.unread_count
+  FROM unread_counts uc
+  ORDER BY uc.thread_id;
+END;
+$$;
+
+
+--
+-- Name: FUNCTION get_threads_with_unread_counts(p_thread_ids uuid[], p_user_id uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.get_threads_with_unread_counts(p_thread_ids uuid[], p_user_id uuid) IS 'Optimized function to calculate unread message counts for multiple threads in a single query. 
+Eliminates N+1 query problem that was causing slow thread loading performance.';
+
+
+--
 -- Name: get_translated_text(uuid, character varying, character varying); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1304,6 +1590,89 @@ CREATE FUNCTION public.handle_reservation_cleaning_task() RETURNS trigger
         RETURN NULL;
       END;
       $$;
+
+
+--
+-- Name: handle_reservation_cleaning_task_consolidated(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.handle_reservation_cleaning_task_consolidated() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.room_unit_id IS NOT NULL AND NEW.status IN ('confirmed', 'checked_in', 'new') THEN
+      PERFORM create_cleaning_task_for_reservation(NEW.id);
+      PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+    END IF;
+    RETURN NEW;
+  END IF;
+  
+  IF TG_OP = 'UPDATE' THEN
+    -- Handle status changes that should create cleaning tasks
+    IF OLD.status NOT IN ('confirmed', 'checked_in', 'new') AND NEW.status IN ('confirmed', 'checked_in', 'new') AND NEW.room_unit_id IS NOT NULL THEN
+      PERFORM create_cleaning_task_for_reservation(NEW.id);
+      PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+    END IF;
+    
+    -- Handle date changes
+    IF OLD.check_out_date != NEW.check_out_date AND NEW.room_unit_id IS NOT NULL THEN
+      UPDATE cleaning_tasks 
+      SET task_date = NEW.check_out_date,
+          priority = CASE WHEN check_same_day_checkin(NEW.check_out_date, NEW.room_unit_id) THEN 'high' ELSE 'normal' END
+      WHERE reservation_id = NEW.id;
+      
+      PERFORM update_cleaning_task_priorities(OLD.check_out_date, COALESCE(NEW.room_unit_id, OLD.room_unit_id));
+      PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+    END IF;
+    
+    -- Handle room changes
+    IF OLD.room_unit_id != NEW.room_unit_id AND NEW.room_unit_id IS NOT NULL THEN
+      UPDATE cleaning_tasks 
+      SET room_unit_id = NEW.room_unit_id,
+          priority = CASE WHEN check_same_day_checkin(NEW.check_out_date, NEW.room_unit_id) THEN 'high' ELSE 'normal' END,
+          cleaner_id = get_property_default_cleaner(NEW.room_unit_id)
+      WHERE reservation_id = NEW.id;
+      
+      IF OLD.room_unit_id IS NOT NULL THEN
+        PERFORM update_cleaning_task_priorities(NEW.check_out_date, OLD.room_unit_id);
+      END IF;
+      PERFORM update_cleaning_task_priorities(NEW.check_out_date, NEW.room_unit_id);
+    END IF;
+    
+    -- Handle cancellations
+    IF NEW.status = 'cancelled' THEN
+      UPDATE cleaning_tasks 
+      SET status = 'cancelled'
+      WHERE reservation_id = NEW.id AND status = 'pending';
+    END IF;
+    
+    RETURN NEW;
+  END IF;
+  
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.room_unit_id IS NOT NULL THEN
+      PERFORM update_cleaning_task_priorities(OLD.check_out_date, OLD.room_unit_id);
+    END IF;
+    RETURN OLD;
+  END IF;
+  
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: increment_attempts(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.increment_attempts(p_id uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+  UPDATE scheduled_messages
+  SET attempts = attempts + 1, updated_at = now()
+  WHERE id = p_id;
+$$;
 
 
 --
@@ -1930,6 +2299,58 @@ $$;
 
 
 --
+-- Name: resolve_thread_for_scheduled_message(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.resolve_thread_for_scheduled_message(p_scheduled_message_id uuid) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_thread_id uuid;
+  v_reservation_id uuid;
+BEGIN
+  -- Get current thread_id and reservation_id
+  SELECT thread_id, reservation_id 
+  INTO v_thread_id, v_reservation_id
+  FROM scheduled_messages 
+  WHERE id = p_scheduled_message_id;
+  
+  -- If thread_id already exists, return it
+  IF v_thread_id IS NOT NULL THEN
+    RETURN v_thread_id;
+  END IF;
+  
+  -- If no thread_id but we have reservation_id, find existing thread for that reservation
+  IF v_reservation_id IS NOT NULL THEN
+    SELECT mt.id INTO v_thread_id
+    FROM message_threads mt
+    WHERE mt.reservation_id = v_reservation_id
+    ORDER BY mt.created_at DESC
+    LIMIT 1;
+    
+    -- If found, update the scheduled message with the resolved thread_id
+    IF v_thread_id IS NOT NULL THEN
+      UPDATE scheduled_messages 
+      SET thread_id = v_thread_id, updated_at = now()
+      WHERE id = p_scheduled_message_id;
+      
+      RETURN v_thread_id;
+    END IF;
+  END IF;
+  
+  -- No thread found - application layer will need to create one
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: FUNCTION resolve_thread_for_scheduled_message(p_scheduled_message_id uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.resolve_thread_for_scheduled_message(p_scheduled_message_id uuid) IS 'Attempts to resolve thread_id for scheduled messages created with null thread_id';
+
+
+--
 -- Name: revoke_checkin_token(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2544,11 +2965,20 @@ DECLARE
 BEGIN
   SELECT check_same_day_checkin(task_date, unit_id) INTO is_priority;
   
+  -- Fix: Explicitly qualify the table column to avoid ambiguity
   UPDATE cleaning_tasks 
   SET priority = CASE WHEN is_priority THEN 'high' ELSE 'normal' END
-  WHERE task_date = task_date AND room_unit_id = unit_id;
+  WHERE cleaning_tasks.task_date = update_cleaning_task_priorities.task_date 
+    AND cleaning_tasks.room_unit_id = update_cleaning_task_priorities.unit_id;
 END;
 $$;
+
+
+--
+-- Name: FUNCTION update_cleaning_task_priorities(task_date date, unit_id uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.update_cleaning_task_priorities(task_date date, unit_id uuid) IS 'Updates cleaning task priorities for a specific date and room unit. Fixed 2025-09-05: Resolved ambiguous column reference by qualifying table columns.';
 
 
 --
@@ -3545,6 +3975,29 @@ CREATE TABLE auth.mfa_factors (
 --
 
 COMMENT ON TABLE auth.mfa_factors IS 'auth: stores metadata about factors';
+
+
+--
+-- Name: oauth_clients; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.oauth_clients (
+    id uuid NOT NULL,
+    client_id text NOT NULL,
+    client_secret_hash text NOT NULL,
+    registration_type auth.oauth_registration_type NOT NULL,
+    redirect_uris text NOT NULL,
+    grant_types text NOT NULL,
+    client_name text,
+    client_uri text,
+    logo_uri text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT oauth_clients_client_name_length CHECK ((char_length(client_name) <= 1024)),
+    CONSTRAINT oauth_clients_client_uri_length CHECK ((char_length(client_uri) <= 2048)),
+    CONSTRAINT oauth_clients_logo_uri_length CHECK ((char_length(logo_uri) <= 2048))
+);
 
 
 --
@@ -4793,6 +5246,92 @@ CREATE TABLE public.message_participants (
 
 
 --
+-- Name: message_rule_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_rule_templates (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    rule_id uuid NOT NULL,
+    template_id uuid NOT NULL,
+    is_primary boolean DEFAULT false NOT NULL,
+    priority integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE message_rule_templates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.message_rule_templates IS 'Junction table for Many-to-Many relationship between message rules and templates. Allows multiple templates per rule for different channels/languages.';
+
+
+--
+-- Name: COLUMN message_rule_templates.is_primary; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_rule_templates.is_primary IS 'Indicates the default/fallback template for this rule when no specific match is found';
+
+
+--
+-- Name: COLUMN message_rule_templates.priority; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_rule_templates.priority IS 'Higher priority templates are preferred when multiple templates match the same criteria';
+
+
+--
+-- Name: message_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_rules (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    type public.message_rule_type NOT NULL,
+    days integer,
+    hours integer,
+    at_time time without time zone,
+    delay_minutes integer,
+    backfill public.backfill_policy DEFAULT 'skip_if_past'::public.backfill_policy NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    timezone text DEFAULT 'Asia/Tokyo'::text NOT NULL,
+    property_id uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE message_rules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.message_rules IS 'Message rules now use Many-to-Many relationship with templates via message_rule_templates junction table';
+
+
+--
+-- Name: COLUMN message_rules.code; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_rules.code IS 'Simple identifier: A, B, C, D, E, F, G, H for the 8 message types';
+
+
+--
+-- Name: COLUMN message_rules.type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_rules.type IS 'Defines when the message should be sent relative to reservation dates';
+
+
+--
+-- Name: COLUMN message_rules.backfill; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.message_rules.backfill IS 'Policy for handling messages when reservation is created after the scheduled time';
+
+
+--
 -- Name: message_templates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4809,7 +5348,7 @@ CREATE TABLE public.message_templates (
     created_at timestamp with time zone DEFAULT now(),
     enabled boolean DEFAULT true NOT NULL,
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT message_templates_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'sms'::text])))
+    CONSTRAINT message_templates_channel_check CHECK ((channel = ANY (ARRAY['airbnb'::text, 'booking.com'::text, 'whatsapp'::text, 'inapp'::text, 'email'::text, 'beds24'::text])))
 );
 
 
@@ -4818,6 +5357,42 @@ CREATE TABLE public.message_templates (
 --
 
 COMMENT ON COLUMN public.message_templates.enabled IS 'Controls whether this template is active for automation scheduling. When false, templates are completely skipped during automation processing.';
+
+
+--
+-- Name: message_rules_with_channel; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.message_rules_with_channel AS
+ SELECT mr.id,
+    mr.code,
+    mr.name,
+    mr.type,
+    mr.days,
+    mr.hours,
+    mr.at_time,
+    mr.delay_minutes,
+    mr.backfill,
+    mr.enabled,
+    mr.timezone,
+    mr.property_id,
+    mr.created_at,
+    mr.updated_at,
+    pt.id AS template_id,
+    pt.channel,
+    pt.name AS template_name,
+    pt.content AS template_content,
+    pt.language AS template_language
+   FROM ((public.message_rules mr
+     LEFT JOIN public.message_rule_templates mrt ON (((mr.id = mrt.rule_id) AND (mrt.is_primary = true))))
+     LEFT JOIN public.message_templates pt ON ((mrt.template_id = pt.id)));
+
+
+--
+-- Name: VIEW message_rules_with_channel; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.message_rules_with_channel IS 'Updated view showing message rules with their primary template information for backward compatibility';
 
 
 --
@@ -4859,6 +5434,94 @@ COMMENT ON COLUMN public.payment_intents.service_type IS 'Type of service: accom
 --
 
 COMMENT ON COLUMN public.payment_intents.status IS 'Stripe payment intent status';
+
+
+--
+-- Name: payment_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payment_transactions (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    payment_intent_id uuid,
+    stripe_transaction_id character varying(100) NOT NULL,
+    transaction_type character varying(20) NOT NULL,
+    amount numeric(10,2) NOT NULL,
+    currency character varying(3) DEFAULT 'JPY'::character varying NOT NULL,
+    status character varying(50) NOT NULL,
+    stripe_data jsonb,
+    processed_at timestamp with time zone DEFAULT now(),
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT payment_transactions_amount_positive CHECK ((amount > (0)::numeric)),
+    CONSTRAINT payment_transactions_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'succeeded'::character varying, 'failed'::character varying, 'canceled'::character varying, 'requires_action'::character varying])::text[]))),
+    CONSTRAINT payment_transactions_type_check CHECK (((transaction_type)::text = ANY ((ARRAY['payment'::character varying, 'refund'::character varying, 'partial_refund'::character varying, 'void'::character varying])::text[])))
+);
+
+
+--
+-- Name: TABLE payment_transactions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.payment_transactions IS 'Comprehensive tracking of all payment events including payments, refunds, and voids';
+
+
+--
+-- Name: COLUMN payment_transactions.transaction_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payment_transactions.transaction_type IS 'Type of transaction: payment, refund, partial_refund, void';
+
+
+--
+-- Name: COLUMN payment_transactions.stripe_data; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payment_transactions.stripe_data IS 'Complete Stripe object data for audit trail';
+
+
+--
+-- Name: payment_transactions_detailed; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.payment_transactions_detailed AS
+ SELECT pt.id,
+    pt.payment_intent_id,
+    pt.stripe_transaction_id,
+    pt.transaction_type,
+    pt.amount,
+    pt.currency,
+    pt.status,
+    pt.processed_at,
+    pt.created_at,
+    pt.updated_at,
+    pi.reservation_id,
+    pi.service_type,
+    r.beds24_booking_id,
+    r.booking_name,
+    r.booking_email,
+    r.check_in_date,
+    r.check_out_date,
+    p.name AS property_name,
+    ( SELECT COALESCE(sum(pt2.amount), (0)::numeric) AS "coalesce"
+           FROM public.payment_transactions pt2
+          WHERE ((pt2.payment_intent_id = pt.payment_intent_id) AND ((pt2.transaction_type)::text = ANY ((ARRAY['refund'::character varying, 'partial_refund'::character varying])::text[])) AND ((pt2.status)::text = 'succeeded'::text))) AS total_refunded,
+        CASE
+            WHEN ((pt.transaction_type)::text = 'payment'::text) THEN (pt.amount - ( SELECT COALESCE(sum(pt2.amount), (0)::numeric) AS "coalesce"
+               FROM public.payment_transactions pt2
+              WHERE ((pt2.payment_intent_id = pt.payment_intent_id) AND ((pt2.transaction_type)::text = ANY ((ARRAY['refund'::character varying, 'partial_refund'::character varying])::text[])) AND ((pt2.status)::text = 'succeeded'::text))))
+            ELSE pt.amount
+        END AS net_amount
+   FROM (((public.payment_transactions pt
+     LEFT JOIN public.payment_intents pi ON ((pt.payment_intent_id = pi.id)))
+     LEFT JOIN public.reservations r ON ((pi.reservation_id = r.id)))
+     LEFT JOIN public.properties p ON ((r.property_id = p.id)));
+
+
+--
+-- Name: VIEW payment_transactions_detailed; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.payment_transactions_detailed IS 'Detailed view of payment transactions with reservation and refund summary data';
 
 
 --
@@ -4998,13 +5661,18 @@ COMMENT ON TABLE public.property_images IS 'Images for properties and rooms';
 CREATE TABLE public.user_profiles (
     id uuid NOT NULL,
     role public.user_role NOT NULL,
-    first_name character varying(255) NOT NULL,
-    last_name character varying(255) NOT NULL,
+    first_name character varying(255),
+    last_name character varying(255),
     phone character varying(50),
     company_name character varying(255),
     is_active boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    invitation_token character varying(64),
+    invitation_expires_at timestamp with time zone,
+    invited_by uuid,
+    invitation_status character varying(20) DEFAULT 'active'::character varying,
+    CONSTRAINT user_profiles_invitation_status_check CHECK (((invitation_status)::text = ANY ((ARRAY['active'::character varying, 'pending'::character varying, 'accepted'::character varying, 'expired'::character varying])::text[])))
 );
 
 
@@ -5013,6 +5681,34 @@ CREATE TABLE public.user_profiles (
 --
 
 COMMENT ON TABLE public.user_profiles IS 'User profiles linked to Supabase Auth users';
+
+
+--
+-- Name: COLUMN user_profiles.invitation_token; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_profiles.invitation_token IS 'Secure token for email invitation links. NULL for regular users.';
+
+
+--
+-- Name: COLUMN user_profiles.invitation_expires_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_profiles.invitation_expires_at IS 'Expiration timestamp for invitation token. 24 hours from creation.';
+
+
+--
+-- Name: COLUMN user_profiles.invited_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_profiles.invited_by IS 'ID of the admin user who sent the invitation.';
+
+
+--
+-- Name: COLUMN user_profiles.invitation_status; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_profiles.invitation_status IS 'Status: active (regular user), pending (invitation sent), accepted (invitation completed), expired (token expired)';
 
 
 --
@@ -5113,8 +5809,17 @@ CREATE TABLE public.reservation_addons (
     exempted_by uuid,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT reservation_addons_status_check CHECK (((purchase_status)::text = ANY ((ARRAY['available'::character varying, 'pending'::character varying, 'paid'::character varying, 'failed'::character varying, 'exempted'::character varying])::text[])))
+    refund_amount numeric,
+    refunded_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT reservation_addons_status_check CHECK (((purchase_status)::text = ANY ((ARRAY['available'::character varying, 'pending'::character varying, 'paid'::character varying, 'failed'::character varying, 'exempted'::character varying, 'refunded'::character varying, 'partially_refunded'::character varying])::text[])))
 );
+
+
+--
+-- Name: CONSTRAINT reservation_addons_status_check ON reservation_addons; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON CONSTRAINT reservation_addons_status_check ON public.reservation_addons IS 'Validates purchase_status values: available, pending, paid, failed, exempted, refunded, partially_refunded';
 
 
 --
@@ -5270,6 +5975,10 @@ CREATE VIEW public.reservations_details AS
     r."timeStamp",
     r.lang,
     r.access_read,
+    r.booking_group_master_id,
+    r.is_group_master,
+    r.group_room_count,
+    r.booking_group_ids,
     pg.guest_firstname,
     pg.guest_lastname,
     pg.guest_contact,
@@ -5352,6 +6061,13 @@ CREATE VIEW public.reservations_details AS
      LEFT JOIN public.room_types rt ON ((r.room_type_id = rt.id)))
      LEFT JOIN public.room_units ru ON ((r.room_unit_id = ru.id)))
      LEFT JOIN public.user_profiles up ON ((pg.verified_by = up.id)));
+
+
+--
+-- Name: VIEW reservations_details; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.reservations_details IS 'Comprehensive reservation details view with group booking fields - Updated to include booking_group_master_id, is_group_master, group_room_count, and booking_group_ids';
 
 
 --
@@ -5790,6 +6506,22 @@ ALTER TABLE ONLY auth.mfa_factors
 
 
 --
+-- Name: oauth_clients oauth_clients_client_id_key; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.oauth_clients
+    ADD CONSTRAINT oauth_clients_client_id_key UNIQUE (client_id);
+
+
+--
+-- Name: oauth_clients oauth_clients_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.oauth_clients
+    ADD CONSTRAINT oauth_clients_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: one_time_tokens one_time_tokens_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
 --
 
@@ -6158,6 +6890,22 @@ ALTER TABLE ONLY public.message_participants
 
 
 --
+-- Name: message_rule_templates message_rule_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rule_templates
+    ADD CONSTRAINT message_rule_templates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_rules message_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rules
+    ADD CONSTRAINT message_rules_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: message_templates message_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6195,6 +6943,14 @@ ALTER TABLE ONLY public.payment_intents
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_stripe_payment_intent_id_key UNIQUE (stripe_payment_intent_id);
+
+
+--
+-- Name: payment_transactions payment_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_transactions
+    ADD CONSTRAINT payment_transactions_pkey PRIMARY KEY (id);
 
 
 --
@@ -6470,6 +7226,14 @@ ALTER TABLE ONLY public.message_deliveries
 
 
 --
+-- Name: message_rule_templates unique_primary_per_rule; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rule_templates
+    ADD CONSTRAINT unique_primary_per_rule EXCLUDE USING btree (rule_id WITH =) WHERE ((is_primary = true));
+
+
+--
 -- Name: guest_channel_consents unique_reservation_channel; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6483,6 +7247,14 @@ ALTER TABLE ONLY public.guest_channel_consents
 
 ALTER TABLE ONLY public.accommodation_tax_invoices
     ADD CONSTRAINT unique_reservation_tax UNIQUE (reservation_id);
+
+
+--
+-- Name: message_rule_templates unique_rule_template; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rule_templates
+    ADD CONSTRAINT unique_rule_template UNIQUE (rule_id, template_id);
 
 
 --
@@ -6507,6 +7279,14 @@ ALTER TABLE ONLY public.thread_labels
 
 ALTER TABLE ONLY public.scheduled_messages
     ADD CONSTRAINT unique_thread_template_runtime UNIQUE (thread_id, template_id, run_at);
+
+
+--
+-- Name: user_profiles user_profiles_invitation_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_profiles
+    ADD CONSTRAINT user_profiles_invitation_token_key UNIQUE (invitation_token);
 
 
 --
@@ -6709,6 +7489,20 @@ CREATE UNIQUE INDEX mfa_factors_user_friendly_name_unique ON auth.mfa_factors US
 --
 
 CREATE INDEX mfa_factors_user_id_idx ON auth.mfa_factors USING btree (user_id);
+
+
+--
+-- Name: oauth_clients_client_id_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX oauth_clients_client_id_idx ON auth.oauth_clients USING btree (client_id);
+
+
+--
+-- Name: oauth_clients_deleted_at_idx; Type: INDEX; Schema: auth; Owner: -
+--
+
+CREATE INDEX oauth_clients_deleted_at_idx ON auth.oauth_clients USING btree (deleted_at);
 
 
 --
@@ -7188,6 +7982,48 @@ CREATE INDEX idx_message_participants_user_id ON public.message_participants USI
 
 
 --
+-- Name: idx_message_participants_user_thread; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_participants_user_thread ON public.message_participants USING btree (user_id, thread_id);
+
+
+--
+-- Name: idx_message_rule_templates_primary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_rule_templates_primary ON public.message_rule_templates USING btree (rule_id, is_primary) WHERE (is_primary = true);
+
+
+--
+-- Name: idx_message_rule_templates_rule_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_rule_templates_rule_id ON public.message_rule_templates USING btree (rule_id);
+
+
+--
+-- Name: idx_message_rule_templates_template_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_rule_templates_template_id ON public.message_rule_templates USING btree (template_id);
+
+
+--
+-- Name: idx_message_rules_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_rules_code ON public.message_rules USING btree (code);
+
+
+--
+-- Name: idx_message_rules_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_rules_enabled ON public.message_rules USING btree (enabled, property_id) WHERE (enabled = true);
+
+
+--
 -- Name: idx_message_templates_channel; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7258,6 +8094,13 @@ CREATE INDEX idx_messages_thread_created ON public.messages USING btree (thread_
 
 
 --
+-- Name: idx_messages_thread_direction_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_thread_direction_created ON public.messages USING btree (thread_id, direction, created_at) WHERE (direction = 'incoming'::text);
+
+
+--
 -- Name: idx_messages_unsent_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7283,6 +8126,48 @@ CREATE INDEX idx_payment_intents_service ON public.payment_intents USING btree (
 --
 
 CREATE INDEX idx_payment_intents_stripe ON public.payment_intents USING btree (stripe_payment_intent_id);
+
+
+--
+-- Name: idx_payment_transactions_amount; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_transactions_amount ON public.payment_transactions USING btree (amount);
+
+
+--
+-- Name: idx_payment_transactions_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_transactions_created_at ON public.payment_transactions USING btree (created_at DESC);
+
+
+--
+-- Name: idx_payment_transactions_payment_intent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_transactions_payment_intent_id ON public.payment_transactions USING btree (payment_intent_id);
+
+
+--
+-- Name: idx_payment_transactions_stripe_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_transactions_stripe_id ON public.payment_transactions USING btree (stripe_transaction_id);
+
+
+--
+-- Name: idx_payment_transactions_stripe_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_payment_transactions_stripe_unique ON public.payment_transactions USING btree (stripe_transaction_id);
+
+
+--
+-- Name: idx_payment_transactions_type_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payment_transactions_type_status ON public.payment_transactions USING btree (transaction_type, status);
 
 
 --
@@ -7636,10 +8521,45 @@ CREATE INDEX idx_room_units_unit_number ON public.room_units USING btree (unit_n
 
 
 --
+-- Name: idx_sched_due_lease; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sched_due_lease ON public.scheduled_messages USING btree (status, run_at, lease_until);
+
+
+--
+-- Name: idx_sched_idem; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_sched_idem ON public.scheduled_messages USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+
+--
 -- Name: idx_scheduled_messages_reservation_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_scheduled_messages_reservation_id ON public.scheduled_messages USING btree (reservation_id);
+
+
+--
+-- Name: idx_scheduled_messages_reservation_null_thread; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_reservation_null_thread ON public.scheduled_messages USING btree (reservation_id, status, run_at) WHERE (thread_id IS NULL);
+
+
+--
+-- Name: INDEX idx_scheduled_messages_reservation_null_thread; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON INDEX public.idx_scheduled_messages_reservation_null_thread IS 'Optimizes lookup of scheduled messages that need thread resolution';
+
+
+--
+-- Name: idx_scheduled_messages_rule_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_rule_id ON public.scheduled_messages USING btree (rule_id) WHERE (rule_id IS NOT NULL);
 
 
 --
@@ -7720,6 +8640,20 @@ CREATE INDEX idx_user_profiles_active ON public.user_profiles USING btree (is_ac
 
 
 --
+-- Name: idx_user_profiles_invitation_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_profiles_invitation_status ON public.user_profiles USING btree (invitation_status);
+
+
+--
+-- Name: idx_user_profiles_invitation_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_user_profiles_invitation_token ON public.user_profiles USING btree (invitation_token) WHERE (invitation_token IS NOT NULL);
+
+
+--
 -- Name: idx_user_profiles_role; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7766,6 +8700,13 @@ CREATE UNIQUE INDEX unique_participant_external ON public.message_participants U
 --
 
 CREATE UNIQUE INDEX unique_participant_user ON public.message_participants USING btree (thread_id, participant_type, user_id) WHERE (user_id IS NOT NULL);
+
+
+--
+-- Name: ux_scheduled_messages_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ux_scheduled_messages_idempotency ON public.scheduled_messages USING btree (idempotency_key);
 
 
 --
@@ -7832,13 +8773,6 @@ CREATE UNIQUE INDEX objects_bucket_id_level_idx ON storage.objects USING btree (
 
 
 --
--- Name: reservations auto_manage_cleaning_task; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auto_manage_cleaning_task AFTER INSERT OR UPDATE OF room_unit_id, check_out_date ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
-
-
---
 -- Name: cleaning_tasks check_cleaner_role; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7846,17 +8780,10 @@ CREATE TRIGGER check_cleaner_role BEFORE INSERT OR UPDATE OF cleaner_id ON publi
 
 
 --
--- Name: reservations manage_cleaning_task_trigger; Type: TRIGGER; Schema: public; Owner: -
+-- Name: reservations handle_reservation_cleaning_task_consolidated_trigger; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER manage_cleaning_task_trigger AFTER INSERT OR UPDATE OF check_out_date, room_unit_id, property_id ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
-
-
---
--- Name: reservations manage_cleaning_tasks_trigger; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER manage_cleaning_tasks_trigger AFTER INSERT OR UPDATE OF room_unit_id, check_out_date ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.manage_cleaning_task();
+CREATE TRIGGER handle_reservation_cleaning_task_consolidated_trigger AFTER INSERT OR DELETE OR UPDATE ON public.reservations FOR EACH ROW EXECUTE FUNCTION public.handle_reservation_cleaning_task_consolidated();
 
 
 --
@@ -7948,6 +8875,20 @@ CREATE TRIGGER trg_message_deliveries_status_ts BEFORE INSERT OR UPDATE ON publi
 --
 
 CREATE TRIGGER trg_message_deliveries_updated BEFORE UPDATE ON public.message_deliveries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: message_rule_templates trg_message_rule_templates_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_message_rule_templates_updated_at BEFORE UPDATE ON public.message_rule_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: message_rules trg_message_rules_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_message_rules_updated_at BEFORE UPDATE ON public.message_rules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -8123,6 +9064,13 @@ CREATE TRIGGER update_market_tuning_updated_at BEFORE UPDATE ON public.market_tu
 --
 
 CREATE TRIGGER update_payment_intents_updated_at BEFORE UPDATE ON public.payment_intents FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: payment_transactions update_payment_transactions_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_payment_transactions_updated_at BEFORE UPDATE ON public.payment_transactions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -8408,14 +9356,6 @@ ALTER TABLE ONLY public.cleaning_tasks
 
 
 --
--- Name: scheduled_messages fk_scheduled_messages_rule_id; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.scheduled_messages
-    ADD CONSTRAINT fk_scheduled_messages_rule_id FOREIGN KEY (rule_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
-
-
---
 -- Name: gmail_processed_messages gmail_processed_messages_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8480,6 +9420,30 @@ ALTER TABLE ONLY public.message_participants
 
 
 --
+-- Name: message_rule_templates message_rule_templates_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rule_templates
+    ADD CONSTRAINT message_rule_templates_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.message_rules(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_rule_templates message_rule_templates_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rule_templates
+    ADD CONSTRAINT message_rule_templates_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.message_templates(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_rules message_rules_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_rules
+    ADD CONSTRAINT message_rules_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
+
+
+--
 -- Name: message_templates message_templates_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8533,6 +9497,14 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: payment_transactions payment_transactions_payment_intent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_transactions
+    ADD CONSTRAINT payment_transactions_payment_intent_id_fkey FOREIGN KEY (payment_intent_id) REFERENCES public.payment_intents(id) ON DELETE CASCADE;
 
 
 --
@@ -8736,14 +9708,6 @@ ALTER TABLE ONLY public.room_units
 
 
 --
--- Name: scheduled_messages scheduled_messages_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.scheduled_messages
-    ADD CONSTRAINT scheduled_messages_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id);
-
-
---
 -- Name: scheduled_messages scheduled_messages_reservation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8756,7 +9720,7 @@ ALTER TABLE ONLY public.scheduled_messages
 --
 
 ALTER TABLE ONLY public.scheduled_messages
-    ADD CONSTRAINT scheduled_messages_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
+    ADD CONSTRAINT scheduled_messages_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.message_rules(id) ON DELETE SET NULL;
 
 
 --
@@ -8805,6 +9769,14 @@ ALTER TABLE ONLY public.thread_labels
 
 ALTER TABLE ONLY public.user_profiles
     ADD CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_profiles user_profiles_invited_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_profiles
+    ADD CONSTRAINT user_profiles_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.user_profiles(id);
 
 
 --

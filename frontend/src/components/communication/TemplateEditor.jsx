@@ -73,6 +73,8 @@ export default function TemplateEditor({ template, isOpen, onClose, onSave }) {
       currency: 'JPY',
       booking_source: 'Airbnb',
       special_requests: 'Late check-in requested',
+      check_in_token: 'abc123def456ghi789jkl012mno345pqr678stu901vwx234yz',
+      guest_app_link: `${window.location.origin}/guest/abc123def456ghi789jkl012mno345pqr678stu901vwx234yz`,
       property_name: 'Tokyo Central Apartment',
       property_address: '1-1-1 Shibuya, Tokyo',
       wifi_name: 'TokyoWiFi_Guest',

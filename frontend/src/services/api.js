@@ -61,8 +61,14 @@ const responseErrorInterceptor = (error) => {
     })
     
     // Only redirect to login if we're not on a public route
+    // Add a small delay to prevent immediate redirect during context initialization
     if (!isPublicRoute && window.location.pathname !== '/login') {
-      window.location.href = '/login'
+      setTimeout(() => {
+        // Double-check we're still not authenticated before redirecting
+        if (!localStorage.getItem('authToken')) {
+          window.location.href = '/login'
+        }
+      }, 100)
     }
   }
   
@@ -169,6 +175,16 @@ export const adminAPI = {
   
   disableServiceForReservation: (reservationId, serviceId) => 
     api.delete(`/reservations/${reservationId}/services/${serviceId}/enable`),
+  
+  // Refund/Void Operations
+  refundServicePayment: (reservationId, serviceId, refundData) => 
+    api.post(`/reservations/${reservationId}/services/${serviceId}/refund`, refundData),
+  
+  voidServicePayment: (reservationId, serviceId, voidData) => 
+    api.post(`/reservations/${reservationId}/services/${serviceId}/void`, voidData),
+  
+  getServiceRefundHistory: (reservationId, serviceId) => 
+    api.get(`/reservations/${reservationId}/services/${serviceId}/refund-history`),
   
   // Create new reservation
   createReservation: (reservationData) => 
@@ -374,6 +390,9 @@ export const adminAPI = {
   getAutomationTemplate: (templateId) => 
     api.get(`/automation/templates/${templateId}`),
 
+  createAutomationTemplate: (templateData) => 
+    api.post('/automation/templates', templateData),
+
   updateAutomationTemplate: (templateId, templateData) => 
     api.put(`/automation/templates/${templateId}`, templateData),
 
@@ -382,6 +401,14 @@ export const adminAPI = {
 
   getAutomationTemplateUsage: (templateId) => 
     api.get(`/automation/templates/${templateId}/usage`),
+
+  // Associate template with rule
+  associateTemplateWithRule: (ruleId, templateId, options = {}) => 
+    api.post(`/automation/rules/${ruleId}/templates`, { 
+      templateId, 
+      isPrimary: options.isPrimary || false,
+      priority: options.priority || 0 
+    }),
 }
 
 // Message Rules Management - New Architecture
@@ -504,6 +531,35 @@ export const marketDemandAPI = {
   addEvent: (data) => api.post('/market-demand/events', data),
   updateEvent: (eventId, data) => api.put(`/market-demand/events/${eventId}`, data),
   deleteEvent: (eventId) => api.delete(`/market-demand/events/${eventId}`),
+}
+
+// Payment Management API
+export const paymentAPI = {
+  // Get payments with filtering and pagination
+  getPayments: (params = {}) => api.get('/payments', { params }),
+  
+  // Get payment details by ID
+  getPaymentDetails: (id) => api.get(`/payments/${id}`),
+  
+  // Get payment intent by Stripe ID (for service purchase integration)
+  getPaymentIntentByStripeId: (stripeId) => api.get(`/payments/by-stripe-id/${stripeId}`),
+  
+  // Process refund
+  processRefund: (id, data) => api.post(`/payments/${id}/refund`, data),
+  
+  // Reconcile payments
+  reconcilePayments: (data) => api.post('/payments/reconcile', data),
+  
+  // Get analytics summary
+  getAnalytics: (params = {}) => api.get('/payments/analytics/summary', { params }),
+  
+  // Export payments
+  exportPayments: (params = {}) => {
+    return api.get('/payments/export', { 
+      params,
+      responseType: 'blob' 
+    }).then(response => response.data)
+  }
 }
 
 // Utility functions

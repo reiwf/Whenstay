@@ -32,10 +32,10 @@ export default function CommunicationPage() {
   const [showInboxOverlay, setShowInboxOverlay] = useState(false);
   const [showReservationOverlay, setShowReservationOverlay] = useState(false);
 
-  // Load threads on component mount
+  // Load threads on component mount - no dependencies since subscriptions are handled separately
   useEffect(() => {
     loadThreads();
-  }, [loadThreads]);
+  }, []); // Empty dependency array to run only once on mount
 
   const handleSendMessage = async (content, channel = selectedChannel) => {
     if (!selectedThread) return;

@@ -529,6 +529,17 @@ router.post('/stripe', async (req, res) => {
         await stripeService.handlePaymentCanceled(event.data.object);
         break;
       }
+      case 'refund.created':
+      case 'refund.updated': {
+        await stripeService.handleRefundWebhook(event.data.object);
+        break;
+      }
+      case 'charge.refunded': {
+        // Note: charge.refunded events are handled by refund.created/updated events
+        // This case exists for logging purposes and potential future handling
+        console.log('Charge refunded event received:', event.data.object.id);
+        break;
+      }
       default:
         console.log(`Unhandled Stripe event type: ${event.type}`);
     }

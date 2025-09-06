@@ -19,6 +19,7 @@ export default function CombinedAutomationManager() {
   const [hoveredRule, setHoveredRule] = useState(null);
   const [templatePositions, setTemplatePositions] = useState({});
   const [rulePositions, setRulePositions] = useState({});
+  const [selectedLanguageTabs, setSelectedLanguageTabs] = useState({}); // Track selected language per rule
   const containerRef = useRef(null);
   const templatesRef = useRef(null);
   const rulesRef = useRef(null);
@@ -54,14 +55,64 @@ export default function CombinedAutomationManager() {
     setIsTemplateEditorOpen(true);
   };
 
+  const handleAddLanguage = (rule, existingTemplate = null) => {
+    // Create a new template based on existing one or rule
+    const baseTemplate = existingTemplate || {
+      name: `${rule.name} (New Language)`,
+      content: existingTemplate?.content || `Hello {{guest_name}},\n\nWelcome to {{property_name}}!\n\nCheck-in: {{check_in_date}}\nCheck-out: {{check_out_date}}\n\nBest regards`,
+      language: 'ja', // Default to Japanese
+      enabled: true,
+      channel: 'email' // Will be auto-detected anyway
+    };
+
+    setSelectedTemplate({
+      ...baseTemplate,
+      id: null, // Ensure it's treated as new template
+      isNewLanguageTemplate: true,
+      associatedRuleId: rule.id,
+      associatedRuleName: rule.name
+    });
+    setIsTemplateEditorOpen(true);
+  };
+
   const handleSaveTemplate = async (templateData) => {
     try {
-      await adminAPI.updateAutomationTemplate(templateData.id, templateData);
-      setTemplates(prev => prev.map(t => 
-        t.id === templateData.id ? { ...t, ...templateData } : t
-      ));
+      if (templateData.id) {
+        // Update existing template
+        await adminAPI.updateAutomationTemplate(templateData.id, templateData);
+        setTemplates(prev => prev.map(t => 
+          t.id === templateData.id ? { ...t, ...templateData } : t
+        ));
+      } else {
+        // Create new template
+        const response = await adminAPI.createAutomationTemplate(templateData);
+        const newTemplate = response.data.template;
+        
+        // If this is a new language template for a rule, associate it with the rule
+        if (templateData.isNewLanguageTemplate && templateData.associatedRuleId) {
+          try {
+            await adminAPI.associateTemplateWithRule(
+              templateData.associatedRuleId, 
+              newTemplate.id,
+              { 
+                isPrimary: false, // New language templates are not primary by default
+                priority: 1 
+              }
+            );
+            console.log(`✅ Associated template ${newTemplate.id} with rule ${templateData.associatedRuleId}`);
+          } catch (associationError) {
+            console.error('Error associating template with rule:', associationError);
+            // Continue anyway - template was created successfully
+          }
+        }
+        
+        setTemplates(prev => [...prev, newTemplate]);
+      }
+      
       setIsTemplateEditorOpen(false);
       setSelectedTemplate(null);
+      // Reload data to refresh the groups
+      loadData();
     } catch (err) {
       console.error('Error saving template:', err);
       setError(err.message);
@@ -130,25 +181,25 @@ export default function CombinedAutomationManager() {
     const newTemplatePositions = {};
     const newRulePositions = {};
 
-    // Get template positions
-    templates.forEach(template => {
-      const element = document.querySelector(`[data-template-id="${template.id}"]`);
+    // Get template group positions (now on the right)
+    Object.values(templateGroups).forEach(group => {
+      const element = document.querySelector(`[data-template-id="group-${group.rule.id}"]`);
       if (element) {
         const rect = element.getBoundingClientRect();
-        newTemplatePositions[template.id] = {
-          x: rect.right - containerRect.left,
+        newTemplatePositions[`group-${group.rule.id}`] = {
+          x: rect.left - containerRect.left,
           y: rect.top + rect.height / 2 - containerRect.top
         };
       }
     });
 
-    // Get rule positions
+    // Get rule positions (now on the left)
     rules.forEach(rule => {
       const element = document.querySelector(`[data-rule-id="${rule.id}"]`);
       if (element) {
         const rect = element.getBoundingClientRect();
         newRulePositions[rule.id] = {
-          x: rect.left - containerRect.left,
+          x: rect.right - containerRect.left,
           y: rect.top + rect.height / 2 - containerRect.top
         };
       }
@@ -187,26 +238,75 @@ export default function CombinedAutomationManager() {
     };
   }, []);
 
-  // Find template-rule relationships
-  const getTemplateRuleConnections = () => {
-    const connections = [];
-    templates.forEach(template => {
-      rules.forEach(rule => {
-        // Enhanced connection logic
-        if (rule.template_id === template.id || 
-            (rule.message_templates?.name === template.name) ||
-            (rule.channel === template.channel && rule.enabled)) {
-          connections.push({
-            templateId: template.id,
-            ruleId: rule.id,
-            channel: template.channel,
-            templatePos: templatePositions[template.id],
-            rulePos: rulePositions[rule.id]
-          });
+  // Group templates by rule using proper relationships
+  const getTemplateGroups = () => {
+    const groups = {};
+    
+    // Group templates by rule using proper rule-template relationships
+    rules.forEach(rule => {
+      let ruleTemplates = [];
+      
+      // Method 1: Use rule.template_id if it exists (backward compatibility)
+      if (rule.template_id) {
+        const primaryTemplate = templates.find(template => template.id === rule.template_id);
+        if (primaryTemplate) {
+          ruleTemplates.push(primaryTemplate);
         }
-      });
+      }
+      
+      // Method 2: Use rule.message_templates if it exists (embedded relation)
+      if (rule.message_templates && !ruleTemplates.some(t => t.id === rule.message_templates.id)) {
+        ruleTemplates.push(rule.message_templates);
+      }
+      
+      // Method 3: Use rule.all_templates array if it exists (many-to-many relation)
+      if (rule.all_templates && Array.isArray(rule.all_templates)) {
+        rule.all_templates.forEach(template => {
+          if (!ruleTemplates.some(t => t.id === template.id)) {
+            ruleTemplates.push(template);
+          }
+        });
+      }
+      
+      // Method 4: As fallback, use exact name matching for rule code (safer than includes)
+      if (ruleTemplates.length === 0) {
+        const exactMatch = templates.find(template => 
+          template.name.toLowerCase().startsWith(`${rule.code?.toLowerCase()} -`) ||
+          template.name.toLowerCase() === rule.code?.toLowerCase()
+        );
+        if (exactMatch) {
+          ruleTemplates.push(exactMatch);
+        }
+      }
+      
+      if (ruleTemplates.length > 0) {
+        groups[rule.id] = {
+          rule,
+          templates: ruleTemplates,
+          languages: [...new Set(ruleTemplates.map(t => t.language || 'en'))]
+        };
+      }
     });
-    return connections.filter(c => c.templatePos && c.rulePos);
+    
+    return groups;
+  };
+
+  const getTemplateGroupConnections = () => {
+    const connections = [];
+    const templateGroups = getTemplateGroups();
+    
+    Object.values(templateGroups).forEach(group => {
+      if (group.templates.length > 0) {
+        connections.push({
+          ruleId: group.rule.id,
+          templateGroupId: group.rule.id,
+          rulePos: rulePositions[group.rule.id],
+          templatePos: templatePositions[`group-${group.rule.id}`]
+        });
+      }
+    });
+    
+    return connections.filter(c => c.rulePos && c.templatePos);
   };
 
   // Get subtle colors for connectors
@@ -222,7 +322,8 @@ export default function CombinedAutomationManager() {
   };
 
   const stats = getStats();
-  const connections = getTemplateRuleConnections();
+  const templateGroups = getTemplateGroups();
+  const connections = getTemplateGroupConnections();
 
   if (loading && templates.length === 0 && rules.length === 0) {
     return (
@@ -257,113 +358,8 @@ export default function CombinedAutomationManager() {
 
       {/* Split Panel Layout */}
       <div className="flex-1 flex relative">
-        {/* Left Panel - Templates Timeline */}
-        <div className="w-[40%] bg-gray-50 overflow-y-auto">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Templates</h2>
-              <span className="text-sm text-gray-500">{templates.length} templates</span>
-            </div>
-
-            {templates.length === 0 ? (
-              <div className="text-center py-16">
-                <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 className="text-sm font-medium text-gray-900 mb-1">No templates found</h3>
-                <p className="text-xs text-gray-500">
-                  Templates will appear here when created
-                </p>
-              </div>
-            ) : (
-              <div className="timeline-container relative">
-                {/* Vertical Timeline Spine */}
-                <div className="absolute left-3 top-0 w-0.5 h-full bg-gradient-to-b from-blue-200 via-purple-200 to-green-200"></div>
-                
-                {/* Timeline Items */}
-                <div className="space-y-6">
-                  {templates
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((template, index) => (
-                    <div 
-                      key={template.id} 
-                      className={`relative transition-all duration-200 ${
-                        hoveredTemplate === template.id || connections.some(c => 
-                          c.templateId === template.id && hoveredRule === c.ruleId
-                        ) ? 'opacity-100' : 
-                        (hoveredRule || hoveredTemplate) ? 'opacity-50' : 'opacity-100'
-                      }`}
-                      onMouseEnter={() => setHoveredTemplate(template.id)}
-                      onMouseLeave={() => setHoveredTemplate(null)}
-                      data-template-id={template.id}
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* Timeline marker */}
-                        <div className="flex-shrink-0 mt-2">
-                          <div className={`w-6 h-6 rounded-full border-2 border-white shadow-sm ${
-                            template.channel === 'inapp' ? 'bg-gray-500' :
-                            template.channel === 'email' ? 'bg-green-500' :
-                            template.channel === 'sms' ? 'bg-purple-500' :
-                            template.channel === 'whatsapp' ? 'bg-emerald-500' :
-                            'bg-gray-500'
-                          } flex items-center justify-center transition-all duration-200 ${
-                            hoveredTemplate === template.id ? 'scale-110 shadow-md' : ''
-                          } relative z-10`}>
-                            <div className={`w-2 h-2 rounded-full ${
-                              template.channel === 'inapp' ? 'bg-gray-200' :
-                              template.channel === 'email' ? 'bg-green-200' :
-                              template.channel === 'sms' ? 'bg-purple-200' :
-                              template.channel === 'whatsapp' ? 'bg-emerald-200' :
-                              'bg-gray-200'
-                            }`}></div>
-                        </div>
-                      </div>
-                      
-                      {/* Template content */}
-                      <div className="flex-1 min-w-0">
-                        <div className={`bg-white rounded-lg border border-gray-200 p-4 transition-all duration-200 hover:shadow-sm ${
-                          hoveredTemplate === template.id ? 'shadow-md border-blue-200' : ''
-                        }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">                              
-                              <span className="text-sm font-medium text-gray-900">
-                                {template.name}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => handleEditTemplate(template)}
-                              className="text-xs px-2 py-1 text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
-                            >
-                              Edit
-                            </button>
-                          </div>
-                          <p className="text-xs text-gray-600 line-clamp-2">
-                            {template.content || 'No description'}
-                          </p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              template.channel === 'inapp' ? 'bg-gray-100 text-gray-700' :
-                              template.channel === 'email' ? 'bg-green-100 text-green-700' :
-                              template.channel === 'sms' ? 'bg-purple-100 text-purple-700' :
-                              template.channel === 'whatsapp' ? 'bg-emerald-100 text-emerald-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {template.channel}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Panel - Rules List */}
-        <div className="w-[60%] px-8 bg-gray-50 overflow-y-auto" ref={rulesRef}>
+        {/* Left Panel - Rules List */}
+        <div className="w-[40%] bg-gray-50 overflow-y-auto" ref={rulesRef}>
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900">Rules</h2>
@@ -383,10 +379,7 @@ export default function CombinedAutomationManager() {
             ) : (
               <div className="space-y-4">
                 {rules.map((rule) => {
-                  const connectedTemplate = connections
-                    .filter(c => c.ruleId === rule.id)
-                    .map(c => templates.find(t => t.id === c.templateId)?.name)
-                    .filter(Boolean)[0];
+                  const ruleTemplates = templateGroups[rule.id]?.templates || [];
 
                   return (
                     <div
@@ -394,9 +387,7 @@ export default function CombinedAutomationManager() {
                       onMouseEnter={() => setHoveredRule(rule.id)}
                       onMouseLeave={() => setHoveredRule(null)}
                       className={`transition-all duration-200 ${
-                        hoveredRule === rule.id || connections.some(c => 
-                          c.ruleId === rule.id && hoveredTemplate === c.templateId
-                        ) ? 'opacity-100' : 
+                        hoveredRule === rule.id ? 'opacity-100' : 
                         (hoveredRule || hoveredTemplate) ? 'opacity-50' : 'opacity-100'
                       }`}
                       data-rule-id={rule.id}
@@ -405,11 +396,131 @@ export default function CombinedAutomationManager() {
                         rule={rule}
                         onEdit={() => handleEditRule(rule)}
                         onToggle={handleRuleUpdate}
-                        connectedTemplate={connectedTemplate}
+                        connectedTemplateCount={ruleTemplates.length}
                       />
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Template Groups */}
+        <div className="w-[60%] px-6 bg-gray-50 overflow-y-auto" ref={templatesRef}>
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Template Groups</h2>
+              <span className="text-sm text-gray-500">{Object.keys(templateGroups).length} groups</span>
+            </div>
+
+            {Object.keys(templateGroups).length === 0 ? (
+              <div className="text-center py-16">
+                <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No template groups found</h3>
+                <p className="text-xs text-gray-500">
+                  Template groups will appear here when templates are linked to rules
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {Object.values(templateGroups).map((group) => (
+                  <div 
+                    key={group.rule.id}
+                    className={`transition-all duration-200 ${
+                      hoveredRule === group.rule.id ? 'opacity-100' : 
+                      (hoveredRule || hoveredTemplate) ? 'opacity-50' : 'opacity-100'
+                    }`}
+                    onMouseEnter={() => setHoveredRule(group.rule.id)}
+                    onMouseLeave={() => setHoveredRule(null)}
+                    data-template-id={`group-${group.rule.id}`}
+                  >
+                    <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-gray-900">
+                          Rule {group.rule.code} - {group.rule.name}
+                        </h3>
+                        <span className="text-xs text-gray-500">
+                          {group.templates.length} template{group.templates.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {/* Interactive Language Tabs */}
+                      <div className="mb-3">
+                        <div className="flex gap-1 mb-2">
+                          {group.languages.map((language) => {
+                            const isSelected = selectedLanguageTabs[group.rule.id] === language || 
+                              (!selectedLanguageTabs[group.rule.id] && language === group.languages[0]);
+                            
+                            return (
+                              <button
+                                key={language}
+                                onClick={() => setSelectedLanguageTabs(prev => ({
+                                  ...prev,
+                                  [group.rule.id]: language
+                                }))}
+                                className={`px-2 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                }`}
+                              >
+                                {language.toUpperCase()}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Template Content Preview - Shows selected language */}
+                      {(() => {
+                        const selectedLanguage = selectedLanguageTabs[group.rule.id] || group.languages[0];
+                        const selectedTemplate = group.templates.find(t => t.language === selectedLanguage) || group.templates[0];
+                        
+                        return selectedTemplate && (
+                          <div className="mb-3">
+                            <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-gray-700">
+                                  {selectedTemplate.name}
+                                </span>
+                                <span className="text-gray-500">
+                                  {selectedTemplate.channel}
+                                </span>
+                              </div>
+                              <div className="text-gray-600">
+                                {selectedTemplate.content?.substring(0, 120)}
+                                {selectedTemplate.content?.length > 120 ? '...' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            const selectedLanguage = selectedLanguageTabs[group.rule.id] || group.languages[0];
+                            const selectedTemplate = group.templates.find(t => t.language === selectedLanguage) || group.templates[0];
+                            handleEditTemplate(selectedTemplate);
+                          }}
+                          className="text-xs px-2 py-1 text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          Edit Template
+                        </button>
+                        <button 
+                          onClick={() => handleAddLanguage(group.rule, group.templates[0])}
+                          className="text-xs px-2 py-1 text-green-700 bg-green-50 rounded hover:bg-green-100 transition-colors"
+                        >
+                          + Add Language
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -424,26 +535,26 @@ export default function CombinedAutomationManager() {
           </defs>
           
           {connections.map(connection => {
-            const isActive = hoveredTemplate === connection.templateId || hoveredRule === connection.ruleId;
-            const showConnection = isActive || (!hoveredTemplate && !hoveredRule);
+            const isActive = hoveredRule === connection.ruleId;
+            const showConnection = isActive || !hoveredRule;
             
             if (!showConnection || !connection.templatePos || !connection.rulePos) return null;
 
-            const x1 = connection.templatePos.x;
-            const y1 = connection.templatePos.y;
-            const x2 = connection.rulePos.x;
-            const y2 = connection.rulePos.y;
+            const x1 = connection.rulePos.x;
+            const y1 = connection.rulePos.y;
+            const x2 = connection.templatePos.x;
+            const y2 = connection.templatePos.y;
             
-            // Create curved path for more elegant connection
+            // Create curved path for more elegant connection (left to right now)
             const midX = (x1 + x2) / 2;
-            const curvature = Math.abs(x2 - x1) * 0.3;
+            const curvature = Math.abs(x2 - x1) * 0.2;
             const pathData = `M ${x1} ${y1} Q ${midX + curvature} ${y1} ${midX} ${(y1 + y2) / 2} Q ${midX - curvature} ${y2} ${x2} ${y2}`;
 
             return (
-              <g key={`${connection.templateId}-${connection.ruleId}`}>
+              <g key={`rule-${connection.ruleId}-template-${connection.templateGroupId}`}>
                 <path
                   d={pathData}
-                  stroke={getConnectorColor(connection.channel, isActive)}
+                  stroke={getConnectorColor('email', isActive)}
                   strokeWidth={isActive ? "2" : "1"}
                   fill="none"
                   strokeDasharray={isActive ? "6,3" : "4,6"}
@@ -461,14 +572,14 @@ export default function CombinedAutomationManager() {
                       cx={x1}
                       cy={y1}
                       r="3"
-                      fill={getConnectorColor(connection.channel, true)}
+                      fill={getConnectorColor('email', true)}
                       className="animate-pulse"
                     />
                     <circle
                       cx={x2}
                       cy={y2}
                       r="3"
-                      fill={getConnectorColor(connection.channel, true)}
+                      fill={getConnectorColor('email', true)}
                       className="animate-pulse"
                     />
                   </>

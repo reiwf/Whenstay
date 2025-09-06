@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Move, Scaling } from 'lucide-react';
 import ReservationBar from './ReservationBar';
 import ReservationDrawer from './ReservationDrawer';
-import { DateUtils, GridUtils, ConflictUtils, SnapUtils, ResizeUtils, SwapUtils } from './CalendarUtils';
+import { DateUtils, GridUtils, ConflictUtils, SnapUtils, ResizeUtils, SwapUtils, PerformanceUtils } from './CalendarUtils';
 
 /**
  * TimelineGrid - Main grid component with 2-level room hierarchy
@@ -34,6 +34,8 @@ export default function TimelineGrid({
   const [swapState, setSwapState] = useState(null);
   const [gridConstants, setGridConstants] = useState(GridUtils.getCurrentConstants());
   const [lockedGridConstants, setLockedGridConstants] = useState(null); // Locked constants during drag
+  const [isDragging, setIsDragging] = useState(false); // Global dragging state for performance
+  const [cachedRowPositions, setCachedRowPositions] = useState(null); // Cached row positions during drag
   const [windowWidth, setWindowWidth] = useState(window?.innerWidth || 1200);
   const [roomPositionMap, setRoomPositionMap] = useState(new Map()); // Cached room positions
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -41,6 +43,64 @@ export default function TimelineGrid({
   const gridRef = useRef(null);
   const lastStableTargetRef = React.useRef(null); 
   const lastSwitchYRef = React.useRef(0);
+  
+  // ---- Virtualization state ----
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [visible, setVisible] = useState({
+    dateStart: 0,
+    dateEnd: dates.length,   // non-inclusive end index
+    rowStart: 0,
+    rowEnd: roomHierarchy.length
+  });
+  const OVERSCAN_DAYS = 2;   // small buffer
+
+  function measureViewport() {
+    const el = gridRef.current;
+    if (!el) return;
+
+    // width/height of the scrollable area
+    const w = el.clientWidth - gridConstants.SIDEBAR_WIDTH;
+    const h = el.clientHeight - gridConstants.HEADER_HEIGHT;
+    setViewport({ w: Math.max(0, w), h: Math.max(0, h) });
+
+    updateVisible(el.scrollLeft, el.scrollTop, Math.max(0, w), Math.max(0, h));
+  }
+
+  function updateVisible(scrollLeft, scrollTop, w, h) {
+    const cellW = gridConstants.CELL_WIDTH;
+    const { startIndex, endIndex } = GridUtils.getVisibleDateRange(
+      Math.max(0, scrollLeft),
+      Math.max(0, w),
+      startDate,
+      cellW
+    );
+    const { startIndex: rStart, endIndex: rEnd } = GridUtils.getVisibleRoomRange(
+      Math.max(0, scrollTop),
+      Math.max(0, h),
+      gridConstants.ROW_HEIGHT,
+      gridConstants.HEADER_HEIGHT
+    );
+
+    const ds = Math.max(0, startIndex - OVERSCAN_DAYS);
+    const de = Math.min(dates.length, endIndex + OVERSCAN_DAYS);
+
+    setVisible({
+      dateStart: ds,
+      dateEnd: de,
+      rowStart: Math.max(0, rStart),
+      rowEnd: Math.min(roomHierarchy.length, rEnd)
+    });
+  }
+
+  function handleScroll(e) {
+    const el = e.currentTarget;
+    updateVisible(el.scrollLeft, el.scrollTop, viewport.w, viewport.h);
+  }
+  
+  // Phase 2: RAF throttling and ghost overlay state
+  const [ghostOverlay, setGhostOverlay] = useState(null); // Ghost overlay for smooth dragging
+  const rafPendingRef = useRef(false); // RAF throttling flag
+  const pendingDragEventRef = useRef(null); // Store pending drag event
   
    useEffect(() => {
     setDragState(null);
@@ -82,6 +142,14 @@ export default function TimelineGrid({
     }
   }, [roomHierarchy]);
 
+  // Virtualization viewport measurement
+  useEffect(() => {
+    measureViewport();
+    window.addEventListener('resize', measureViewport);
+    return () => window.removeEventListener('resize', measureViewport);
+    // re-measure when density/columns change
+  }, [gridConstants.CELL_WIDTH, gridConstants.ROW_HEIGHT, gridConstants.SIDEBAR_WIDTH, dates.length, roomHierarchy.length]);
+
   /**
    * Toggle room type expansion
    */
@@ -97,16 +165,105 @@ export default function TimelineGrid({
 
   const unassignedReservations = React.useMemo(() => {
     const all = [...reservations, ...segments];
-    return all
+    const filtered = all
       .filter(r => r && r.roomUnitId == null)
       .sort((a, b) => new Date(a.startDate) - new Date(b.startDate)); // ascending check-in
-  }, [reservations, segments]);
+    
+    // Apply performance filtering to limit to 28-day window
+    return PerformanceUtils.filterReservationsForRender(filtered, startDate, dates);
+  }, [reservations, segments, startDate, dates]);
 
   const hasUnassignedForType = React.useCallback((roomTypeId) => {
     const anyRes = reservations.some(r => r?.roomUnitId == null && r?.roomTypeId === roomTypeId);
     const anySeg = segments.some(s => s?.roomUnitId == null && s?.roomTypeId === roomTypeId);
     return anyRes || anySeg;
   }, [reservations, segments]);
+
+  /**
+   * Calculate availability for a room type on a specific date
+   */
+  const calculateAvailabilityForDate = (roomType, date) => {
+    // Real, sellable units only
+    const realUnits = (roomType.units || []).filter(
+      u => !(u.isUnassigned || u.number === 'UNASSIGNED')
+    );
+    const totalUnits = realUnits.length;
+
+    // Active reservations/segments
+    const allActive = [
+      ...reservations.filter(r => r.status && !['cancelled', 'no_show'].includes(r.status)),
+      ...segments.filter(s => s.status && !['cancelled', 'no_show'].includes(s.status)),
+    ];
+
+    // Assigned occupancy: any unit occupied on this date
+    const occupiedUnits = realUnits.reduce((count, unit) => {
+      const has = allActive.some(r =>
+        r.roomUnitId === unit.id &&
+        date >= r.startDate && date < r.endDate
+      );
+      return count + (has ? 1 : 0);
+    }, 0);
+
+    // Unassigned/allocate occupancy: reservations for THIS room type with no room yet
+    const unassignedCount = allActive.filter(r =>
+      (r.roomUnitId == null) &&
+      (r.roomTypeId === roomType.id) &&
+      (date >= r.startDate && date < r.endDate)
+    ).length;
+
+    // Availability = total - (assigned + unassigned), clamped to [0, total]
+    const available = Math.max(0, Math.min(totalUnits, totalUnits - occupiedUnits - unassignedCount));
+    return available;
+  };
+
+  /**
+   * Get effective data source for reservations/segments during navigation transitions
+   * Uses cached data during navigation to prevent position miscalculation
+   */
+  const getEffectiveDataSource = () => {
+    if (isNavigating && cachedTimelineData) {
+      return {
+        reservations: cachedTimelineData.reservations || [],
+        segments: cachedTimelineData.segments || []
+      };
+    }
+    return {
+      reservations: reservations || [],
+      segments: segments || []
+    };
+  };
+
+  /**
+   * Get all reservations for a specific room unit
+   * Handles both assigned rooms (with roomUnitId) and unassigned reservations (roomUnitId = null)
+   * Uses cached data during navigation transitions to prevent position miscalculation
+   * Applies performance filtering to ensure only reservations within the 28-day window are rendered
+   */
+  const getReservationsForRoom = (roomUnitId, roomTypeId = null) => {
+    const { reservations: effectiveReservations, segments: effectiveSegments } = getEffectiveDataSource();
+    
+    if (roomUnitId === null && roomTypeId) {
+      const regularReservations = effectiveReservations.filter(r =>
+        r.roomUnitId == null && r.roomTypeId === roomTypeId
+      );
+      const segmentReservations = effectiveSegments.filter(s =>
+        s.roomUnitId == null && s.roomTypeId === roomTypeId
+      );
+      const allUnassignedReservations = [...regularReservations, ...segmentReservations]
+        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+      
+      // Apply performance filtering to limit reservations to 28-day window
+      return PerformanceUtils.filterReservationsForRender(allUnassignedReservations, startDate, dates);
+    }
+    
+    // For assigned rooms, get reservations with matching roomUnitId
+    const regularReservations = effectiveReservations.filter(r => r.roomUnitId === roomUnitId);
+    const segmentReservations = effectiveSegments.filter(s => s.roomUnitId === roomUnitId);
+    const allRoomReservations = [...regularReservations, ...segmentReservations];
+    
+    // Apply performance filtering to limit reservations to 28-day window
+    return PerformanceUtils.filterReservationsForRender(allRoomReservations, startDate, dates);
+  };
 
 
   const renderTypeStagingRow = (roomType) => {
@@ -136,7 +293,7 @@ export default function TimelineGrid({
           </div>
         </div>
 
-        {/* timeline area */}
+        {/* timeline area (virtualized) */}
         <div
           className="relative bg-gray-100 border-b border-white"
           style={{
@@ -145,14 +302,17 @@ export default function TimelineGrid({
             height: `${gridConstants.ROW_HEIGHT}px`,
           }}
         >
-          {/* vertical grid lines */}
-          {dates.map((date, index) => (
-            <div
-              key={`staging-gridline-${roomType.id}-${date}`}
-              className="absolute top-0 bottom-0"
-              style={{ left: `${index * gridConstants.CELL_WIDTH}px`, width: '1px' }}
-            />
-          ))}
+          {/* vertical grid lines (virtualized) */}
+          {dates.slice(visible.dateStart, visible.dateEnd).map((date, i) => {
+            const index = visible.dateStart + i;
+            return (
+              <div
+                key={`staging-gridline-${roomType.id}-${date}`}
+                className="absolute top-0 bottom-0 border-r border-gray-100"
+                style={{ left: `${index * gridConstants.CELL_WIDTH}px`, width: '1px' }}
+              />
+            );
+          })}
 
           {/* reservations */}
           {roomReservations.map((reservation) => (
@@ -189,135 +349,162 @@ export default function TimelineGrid({
 
 
   /**
-   * Get effective data source for reservations/segments during navigation transitions
-   * Uses cached data during navigation to prevent position miscalculation
+   * Find target room unit based on Y position in grid - optimized with cached positions
+   * Uses pre-built cache to eliminate DOM queries during drag operations
    */
-  const getEffectiveDataSource = () => {
-    if (isNavigating && cachedTimelineData) {
-      console.log('Using cached timeline data during navigation');
-      return {
-        reservations: cachedTimelineData.reservations || [],
-        segments: cachedTimelineData.segments || []
-      };
-    }
-    return {
-      reservations: reservations || [],
-      segments: segments || []
-    };
-  };
-
-  /**
-   * Get all reservations for a specific room unit
-   * Handles both assigned rooms (with roomUnitId) and unassigned reservations (roomUnitId = null)
-   * Uses cached data during navigation transitions to prevent position miscalculation
-   */
-  const getReservationsForRoom = (roomUnitId, roomTypeId = null) => {
-    const { reservations: effectiveReservations, segments: effectiveSegments } = getEffectiveDataSource();
-    
-    if (roomUnitId === null && roomTypeId) {
-      const regularReservations = effectiveReservations.filter(r =>
-        r.roomUnitId == null && r.roomTypeId === roomTypeId
-      );
-      const segmentReservations = effectiveSegments.filter(s =>
-        s.roomUnitId == null && s.roomTypeId === roomTypeId
-      );
-      return [...regularReservations, ...segmentReservations]
-        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-    }
-    
-    // For assigned rooms, get reservations with matching roomUnitId
-    const regularReservations = effectiveReservations.filter(r => r.roomUnitId === roomUnitId);
-    const segmentReservations = effectiveSegments.filter(s => s.roomUnitId === roomUnitId);
-    return [...regularReservations, ...segmentReservations];
-  };
-
-  /**
-   * Calculate availability for a room type on a specific date
-   */
-  const calculateAvailabilityForDate = (roomType, date) => {
-      // Real, sellable units only
-      const realUnits = (roomType.units || []).filter(
-        u => !(u.isUnassigned || u.number === 'UNASSIGNED')
-      );
-      const totalUnits = realUnits.length;
-
-      // Active reservations/segments
-      const allActive = [
-        ...reservations.filter(r => r.status && !['cancelled', 'no_show'].includes(r.status)),
-        ...segments.filter(s => s.status && !['cancelled', 'no_show'].includes(s.status)),
-      ];
-
-      // Assigned occupancy: any unit occupied on this date
-      const occupiedUnits = realUnits.reduce((count, unit) => {
-        const has = allActive.some(r =>
-          r.roomUnitId === unit.id &&
-          date >= r.startDate && date < r.endDate
-        );
-        return count + (has ? 1 : 0);
-      }, 0);
-
-      // Unassigned/allocate occupancy: reservations for THIS room type with no room yet
-      const unassignedCount = allActive.filter(r =>
-        (r.roomUnitId == null) &&
-        (r.roomTypeId === roomType.id) &&
-        (date >= r.startDate && date < r.endDate)
-      ).length;
-
-      // Availability = total - (assigned + unassigned), clamped to [0, total]
-      const available = Math.max(0, Math.min(totalUnits, totalUnits - occupiedUnits - unassignedCount));
-      return available;
-    };
-
-    const findHitTarget = (yPosition) => {
-      const active = lockedGridConstants || gridConstants;
-      let acc = 0;
-      const types = [...roomHierarchy].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-
-      for (const rt of types) {
-        // Header (non-droppable)
-        const headerEl = document.querySelector(`[data-room-type-header="${rt.id}"]`);
-        const headerH  = headerEl?.offsetHeight || active.ROW_HEIGHT;
-        const headerStart = acc, headerEnd = acc + headerH;
-        if (yPosition >= headerStart && yPosition < headerEnd) {
-          return { rowType: 'header', roomTypeId: rt.id, roomUnitId: undefined };
-        }
-        acc = headerEnd;
-
-        // Allocate row (only when Allocate Mode ON)
-        if (showStagingRow) {
-          const stagingStart = acc, stagingEnd = acc + active.ROW_HEIGHT;
-          if (yPosition >= stagingStart && yPosition < stagingEnd) {
-            return { rowType: 'allocate', roomTypeId: rt.id, roomUnitId: null };
+  const findTargetRoomUnitFromPosition = (yPosition) => {
+    // Use cached row positions if available, otherwise fall back to DOM queries
+    if (cachedRowPositions && cachedRowPositions.length > 0) {
+      // Fast lookup using cached positions
+      const ROW_INSET = Math.round((lockedGridConstants || gridConstants).ROW_HEIGHT * 0.15);
+      
+      for (const row of cachedRowPositions) {
+        const edgeMargin = (row.type === 'allocate') ? (row.bottom - row.top) * 0.20 : 0;
+        
+        const inside = yPosition >= (row.top + edgeMargin) && yPosition < (row.bottom - edgeMargin);
+        
+        if (inside) {
+          // Headers are non-droppable
+          if (row.type === 'header') {
+            return undefined;
           }
-          acc = stagingEnd;
-        }
-
-        // Real unit rows (filter same as render)
-        const units = (rt.units || [])
-          .filter(u => !(showStagingRow && (u.isUnassigned || u.number === 'UNASSIGNED')))
-          .slice()
-          .sort((a,b) => {
-            if (a.isUnassigned && !b.isUnassigned) return 1;
-            if (!a.isUnassigned && b.isUnassigned) return -1;
-            if (a.isUnassigned && b.isUnassigned) return 0;
-            return a.number?.localeCompare?.(b.number, undefined, { numeric: true }) ?? 0;
-          });
-
-        for (const unit of units) {
-          const rowStart = acc, rowEnd = acc + active.ROW_HEIGHT;
-          if (yPosition >= rowStart && yPosition < rowEnd) {
-            return {
-              rowType: unit.isUnassigned ? 'allocate' : 'unit', // safety
-              roomTypeId: rt.id,
-              roomUnitId: unit.isUnassigned ? null : unit.id
-            };
-          }
-          acc = rowEnd;
+          
+          // Return the appropriate room unit ID based on row type
+          return row.roomUnitId;
         }
       }
-      return { rowType: 'none', roomTypeId: undefined, roomUnitId: undefined };
-    };
+      
+      return undefined; // Outside all rows
+    }
+    
+    // Fallback to original DOM-based method (should rarely be used)
+    const activeConstants = lockedGridConstants || gridConstants;
+    let accumulatedHeight = 0;
+    const ROW_INSET = Math.round(activeConstants.ROW_HEIGHT * 0.15);
+    const sortedRoomHierarchy = [...roomHierarchy].sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0));
 
+    for (const roomType of sortedRoomHierarchy) {
+      // 1) header height - use constant instead of DOM query
+      const headerHeight = activeConstants.ROW_HEIGHT;
+      const headerStart = accumulatedHeight;
+      const headerEnd = accumulatedHeight + headerHeight;
+
+      if (yPosition >= headerStart && yPosition < headerEnd) {
+        return undefined; // header does nothing
+      }
+      accumulatedHeight = headerEnd;
+
+      // 2) staging row (if enabled)
+      if (showStagingRow) {
+        const stagingStart = accumulatedHeight;
+        const stagingEnd = accumulatedHeight + activeConstants.ROW_HEIGHT;
+        if (yPosition >= stagingStart && yPosition < stagingEnd) {
+          return null; // unassigned
+        }
+        accumulatedHeight = stagingEnd;
+      }
+
+      // 3) units of this type
+      const units = (roomType.units || [])
+        .filter(u => {
+          if (showStagingRow) return !(u.isUnassigned || u.number === 'UNASSIGNED');
+          if (u.isUnassigned || u.number === 'UNASSIGNED') {
+            return hasUnassignedForType(roomType.id);
+          }
+          return true;
+        })
+        .slice()
+        .sort((a, b) => {
+          if (a.isUnassigned && !b.isUnassigned) return 1;
+          if (!a.isUnassigned && b.isUnassigned) return -1;
+          if (a.isUnassigned && b.isUnassigned) return 0;
+          return a.number?.localeCompare?.(b.number, undefined, { numeric: true }) ?? 0;
+        });
+
+      for (const unit of units) {
+        const rowStart = accumulatedHeight;
+        const rowEnd = accumulatedHeight + activeConstants.ROW_HEIGHT;
+        const edgeMargin = (unit.isUnassigned || unit.isPlaceholder)
+            ? activeConstants.ROW_HEIGHT * 0.20
+            : 0;
+
+        const inside = yPosition >= (rowStart + edgeMargin) && yPosition < (rowEnd - edgeMargin);
+
+        if (inside) {
+          return unit.isUnassigned ? null : unit.id;
+        }
+
+        accumulatedHeight = rowEnd;
+      }
+    }
+
+    return undefined;
+  };
+
+
+  /**
+   * Build cached row position map at drag start for performance
+   */
+  const buildRowPositionCache = (constants) => {
+    const cache = [];
+    let accumulatedHeight = 0;
+    const sortedRoomHierarchy = [...roomHierarchy].sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    for (const roomType of sortedRoomHierarchy) {
+      // 1) Room type header
+      const headerHeight = constants.ROW_HEIGHT; // Use constant instead of DOM query
+      cache.push({
+        type: 'header',
+        roomTypeId: roomType.id,
+        roomUnitId: undefined,
+        top: accumulatedHeight,
+        bottom: accumulatedHeight + headerHeight
+      });
+      accumulatedHeight += headerHeight;
+
+      // 2) Staging row (if enabled)
+      if (showStagingRow) {
+        cache.push({
+          type: 'allocate',
+          roomTypeId: roomType.id,
+          roomUnitId: null,
+          top: accumulatedHeight,
+          bottom: accumulatedHeight + constants.ROW_HEIGHT
+        });
+        accumulatedHeight += constants.ROW_HEIGHT;
+      }
+
+      // 3) Units of this type
+      const units = (roomType.units || [])
+        .filter(u => {
+          if (showStagingRow) return !(u.isUnassigned || u.number === 'UNASSIGNED');
+          if (u.isUnassigned || u.number === 'UNASSIGNED') {
+            return hasUnassignedForType(roomType.id);
+          }
+          return true;
+        })
+        .slice()
+        .sort((a, b) => {
+          if (a.isUnassigned && !b.isUnassigned) return 1;
+          if (!a.isUnassigned && b.isUnassigned) return -1;
+          if (a.isUnassigned && b.isUnassigned) return 0;
+          return a.number?.localeCompare?.(b.number, undefined, { numeric: true }) ?? 0;
+        });
+
+      for (const unit of units) {
+        cache.push({
+          type: unit.isUnassigned ? 'allocate' : 'unit',
+          roomTypeId: roomType.id,
+          roomUnitId: unit.isUnassigned ? null : unit.id,
+          top: accumulatedHeight,
+          bottom: accumulatedHeight + constants.ROW_HEIGHT
+        });
+        accumulatedHeight += constants.ROW_HEIGHT;
+      }
+    }
+
+    return cache;
+  };
 
   /**
    * Handle HTML5 drag start from ReservationBar
@@ -327,7 +514,12 @@ export default function TimelineGrid({
     const currentConstants = GridUtils.getCurrentConstants(windowWidth);
     setLockedGridConstants(currentConstants);
     
-    console.log('Drag started - locking grid constants:', currentConstants);
+    // Build cached row positions to eliminate DOM queries during drag
+    const rowCache = buildRowPositionCache(currentConstants);
+    setCachedRowPositions(rowCache);
+    
+    // Set global dragging state for performance optimizations
+    setIsDragging(true);
     
     setDragState({
       reservation: dragData.reservation,
@@ -343,21 +535,17 @@ export default function TimelineGrid({
   };
 
   /**
-   * Handle HTML5 drag over for drop zones with separated drag type handling
-   * Enhanced with comprehensive error handling and fallback mechanisms
+   * Process drag over with heavy calculations - extracted for RAF throttling
    */
-  const handleDragOver = (event) => {
-    event.preventDefault(); // Allow drop
-    
+  const processDragOver = (event) => {
     if (!dragState) return;
 
-     // add scroll offsets so coordinates are relative to the scrolled content
-      const scrollY = gridRef.current?.scrollTop  || 0;
-      const scrollX = gridRef.current?.scrollLeft || 0;
+    // add scroll offsets so coordinates are relative to the scrolled content
+    const scrollY = gridRef.current?.scrollTop || 0;
+    const scrollX = gridRef.current?.scrollLeft || 0;
 
     const rect = gridRef.current?.getBoundingClientRect();
     if (!rect) {
-      console.warn('Grid ref not available during drag over');
       return;
     }
 
@@ -365,9 +553,14 @@ export default function TimelineGrid({
       // Use locked grid constants during drag to prevent misalignment
       const activeConstants = lockedGridConstants || gridConstants;
       
-      // Calculate position relative to grid using locked sidebar width
-       const relativeX = event.clientX - rect.left - activeConstants.SIDEBAR_WIDTH + scrollX;
-       const relativeY = event.clientY - rect.top + scrollY;
+      // Calculate header heights that are now part of TimelineGrid
+      const monthHeaderHeight = 28; // Height of month header row
+      const dateHeaderHeight = activeConstants.BREAKPOINT === 'mobile' ? 32 : 40; // Date header height based on padding
+      const totalHeaderHeight = monthHeaderHeight + dateHeaderHeight;
+      
+      // Calculate position relative to grid using locked sidebar width and accounting for headers
+      const relativeX = event.clientX - rect.left - activeConstants.SIDEBAR_WIDTH + scrollX;
+      const relativeY = event.clientY - rect.top + scrollY - totalHeaderHeight; // Subtract header heights
 
        let candidateTarget = findTargetRoomUnitFromPosition(relativeY);
 
@@ -395,7 +588,6 @@ export default function TimelineGrid({
 
       // Debug logging for resize operations
       if (dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') {
-        console.log(`Resize drag over: relativeX=${relativeX}, dragType=${dragState.dragType}`);
       }
 
       // Handle different drag types with strict separation
@@ -424,13 +616,6 @@ export default function TimelineGrid({
                 targetReservation.id !== dragState.originalReservation.id &&
                 dragState.originalReservation.roomUnitId !== targetRoomUnitId &&
                 !isHorizontalMode) { // Disable swap in horizontal mode
-              // SWAP OPERATION: Check if swap is possible
-              console.log('Swap detection:', {
-                dragged: dragState.originalReservation.booking_name || dragState.originalReservation.id,
-                target: targetReservation.booking_name || targetReservation.id,
-                draggedId: dragState.originalReservation.id,
-                targetId: targetReservation.id
-              });
               
               const swapPreview = SwapUtils.getSwapPreview(
                 dragState.originalReservation, 
@@ -453,10 +638,8 @@ export default function TimelineGrid({
                   swapType: 'dragged'
                 };
                 previewCreated = true;
-                console.log('Valid swap preview created');
               } else {
                 // Invalid swap - show with special handling to distinguish from regular conflicts
-                console.log('Invalid swap:', swapPreview.reason);
                 updatedReservation = {
                   ...dragState.originalReservation,
                   roomUnitId: targetRoomUnitId,
@@ -499,9 +682,7 @@ export default function TimelineGrid({
           try {
             const dayOffset = Math.round(relativeX / activeConstants.CELL_WIDTH);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
-            
-            console.log(`Horizontal move: dayOffset=${dayOffset}, targetDate=${targetDate}`);
-            
+                      
             // Calculate how many days to shift the entire reservation
             const originalStartOffset = DateUtils.daysBetween(startDate, dragState.originalReservation.startDate);
             const dateDelta = dayOffset - originalStartOffset;
@@ -529,7 +710,6 @@ export default function TimelineGrid({
             };
             
             previewCreated = true;
-            console.log('Horizontal move preview created:', updatedReservation);
           } catch (horizontalMoveError) {
             console.error('Horizontal move failed:', horizontalMoveError);
             updatedReservation = { ...dragState.originalReservation };
@@ -542,9 +722,7 @@ export default function TimelineGrid({
           try {
             const dayOffset = Math.round(relativeX / activeConstants.CELL_WIDTH);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
-            
-            console.log(`Mode-based resize: dayOffset=${dayOffset}, targetDate=${targetDate}`);
-            
+                        
             // Calculate reservation position to determine drag direction
             const reservationDayOffset = DateUtils.daysBetween(startDate, dragState.originalReservation.startDate);
             const reservationDuration = DateUtils.daysBetween(dragState.originalReservation.startDate, dragState.originalReservation.endDate);
@@ -614,7 +792,6 @@ export default function TimelineGrid({
             updatedReservation.originalEndDate = dragState.originalReservation.endDate;
             
             previewCreated = true;
-            console.log('Mode-based resize preview created:', updatedReservation);
           } catch (resizeError) {
             console.error('Mode-based resize failed:', resizeError);
             updatedReservation = { ...dragState.originalReservation };
@@ -630,9 +807,7 @@ export default function TimelineGrid({
             const exactDayOffset = relativeX / activeConstants.CELL_WIDTH;
             const dayOffset = Math.round(exactDayOffset);
             const targetDate = DateUtils.addDays(startDate, dayOffset);
-            
-            console.log(`Resize calculation: exactDayOffset=${exactDayOffset}, dayOffset=${dayOffset}, targetDate=${targetDate}`);
-            
+                        
             // Always create a preview for resize operations, even if validation fails
             let resizePreview;
             try {
@@ -683,7 +858,6 @@ export default function TimelineGrid({
             updatedReservation.originalEndDate = dragState.originalReservation.endDate;
             
             previewCreated = true;
-            console.log('Resize preview created successfully:', updatedReservation);
           } catch (resizeError) {
             console.error('Resize operation failed completely:', resizeError);
             // Create minimal fallback preview to avoid complete failure
@@ -760,8 +934,18 @@ export default function TimelineGrid({
           dragType: dragState.dragType // Add for visual feedback
         };
         
-        setPreviewReservation(preview);
-        // console.log('Preview reservation set:', preview);
+        setPreviewReservation(prev => {
+          if (!prev) return preview;
+          // Very cheap shallow checks to avoid re-renders
+          if (
+            prev.roomUnitId === preview.roomUnitId &&
+            prev.startDate === preview.startDate &&
+            prev.endDate === preview.endDate &&
+            prev.hasConflict === preview.hasConflict &&
+            prev.dragType === preview.dragType
+          ) return prev;
+          return preview;
+        });
       } else {
         console.warn('Failed to create preview reservation');
       }
@@ -791,17 +975,35 @@ export default function TimelineGrid({
   };
 
   /**
+   * Handle HTML5 drag over for drop zones with RAF throttling
+   */
+  const handleDragOver = (event) => {
+    event.preventDefault(); // Allow drop    
+    if (!dragState) return;
+
+    // RAF throttle
+    if (rafPendingRef.current) {
+      pendingDragEventRef.current = event;
+      return;
+    }
+    rafPendingRef.current = true;
+    pendingDragEventRef.current = event;
+    requestAnimationFrame(() => {
+      const e = pendingDragEventRef.current;
+      rafPendingRef.current = false;
+      if (!e) return;
+      pendingDragEventRef.current = null;
+      // Process the drag over with the throttled event
+      processDragOver(e);
+    });
+  };
+
+  /**
    * Handle HTML5 drop event with enhanced reliability
    */
   const handleDrop = (event) => {
     event.preventDefault();
-    
-    console.log('Drop event triggered:', { 
-      hasDragState: !!dragState, 
-      hasPreviewReservation: !!previewReservation,
-      dragType: dragState?.dragType 
-    });
-    
+           
     if (!dragState) {
       console.warn('Drop event without drag state');
       return;
@@ -811,11 +1013,9 @@ export default function TimelineGrid({
       console.warn('Drop event without preview reservation - this indicates a problem in handleDragOver');
       // Try to create a basic preview for resize operations as fallback
       if (dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') {
-        console.log('Attempting fallback drop for resize operation');
         try {
           if (dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') {
             onReservationResize && onReservationResize(dragState.originalReservation, dragState.dragType);
-            console.log('Fallback resize executed successfully');
           }
         } catch (fallbackError) {
           console.error('Fallback resize failed:', fallbackError);
@@ -824,9 +1024,7 @@ export default function TimelineGrid({
       return;
     }
 
-    try {
-      console.log('Processing drop with preview:', previewReservation);
-      
+    try {      
       // For resize operations, be more lenient with conflicts
       if ((dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') && previewReservation.hasConflict) {
         // Check if it's a minor conflict that can be ignored
@@ -835,7 +1033,6 @@ export default function TimelineGrid({
           console.warn('Cannot complete drop: conflicts detected', previewReservation.hasConflict);
           return;
         } else {
-          console.log('Ignoring minor conflict for resize operation');
         }
       } else if (previewReservation.hasConflict && !previewReservation.isSwapPreview) {
         // Don't block swap operations due to conflicts - swap validation handles this separately
@@ -844,18 +1041,12 @@ export default function TimelineGrid({
       }
 
       // Execute the appropriate action based on drag type
-      console.log(`Executing ${dragState.dragType} operation`);
       let operationSuccessful = false;
       
       switch (dragState.dragType) {
         case 'move-vertical':
           // Check if this is a swap operation
           if (swapState && swapState.swapPreview && previewReservation.isSwapPreview) {
-            console.log('Attempting swap operation:', {
-              hasCallback: !!onReservationSwap,
-              draggedRes: swapState.draggedReservation?.id,
-              targetRes: swapState.targetReservation?.id
-            });
             
             if (onReservationSwap) {
               try {
@@ -864,10 +1055,8 @@ export default function TimelineGrid({
                   swapState.draggedReservation, 
                   swapState.targetReservation
                 );
-                console.log('Calling onReservationSwap with:', swapResult);
                 onReservationSwap(swapResult.swappedReservationA, swapResult.swappedReservationB);
                 operationSuccessful = true;
-                console.log('Swap operation completed successfully');
               } catch (swapError) {
                 console.error('Error during swap execution:', swapError);
               }
@@ -881,7 +1070,6 @@ export default function TimelineGrid({
             if (onReservationMove) {
               onReservationMove(previewReservation);
               operationSuccessful = true;
-              console.log('Move operation completed');
             } else {
               console.warn('onReservationMove handler not available');
             }
@@ -892,7 +1080,6 @@ export default function TimelineGrid({
           if (onReservationMove) {
             onReservationMove(previewReservation);
             operationSuccessful = true;
-            console.log('Horizontal move operation completed');
           } else {
             console.warn('onReservationMove handler not available');
           }
@@ -903,7 +1090,6 @@ export default function TimelineGrid({
             const dragDirection = previewReservation.resizePreviewData?.dragDirection || 'resize-right';
             onReservationResize(previewReservation, dragDirection);
             operationSuccessful = true;
-            console.log(`Mode-based resize (${dragDirection}) operation completed`);
           } else {
             console.warn('onReservationResize handler not available');
           }
@@ -913,7 +1099,6 @@ export default function TimelineGrid({
           if (onReservationResize) {
             onReservationResize(previewReservation, dragState.dragType);
             operationSuccessful = true;
-            console.log(`Resize ${dragState.dragType} operation completed`);
           } else {
             console.warn('onReservationResize handler not available');
           }
@@ -922,7 +1107,6 @@ export default function TimelineGrid({
           if (onReservationSplit) {
             onReservationSplit(previewReservation);
             operationSuccessful = true;
-            console.log('Split operation completed');
           } else {
             console.warn('onReservationSplit handler not available');
           }
@@ -940,18 +1124,19 @@ export default function TimelineGrid({
       // Try one more fallback for resize operations
       if (dragState.dragType === 'resize-left' || dragState.dragType === 'resize-right') {
         try {
-          console.log('Attempting emergency fallback for resize');
           onReservationResize && onReservationResize(dragState.originalReservation, dragState.dragType);
         } catch (emergencyError) {
           console.error('Emergency fallback also failed:', emergencyError);
         }
       }
     } finally {
-      // Clean up drag state
-      console.log('Cleaning up drag state');
-      setDragState(null);
-      setPreviewReservation(null);
-      setSwapState(null); // Clear swap state
+      // Immediate cleanup to prevent visual artifacts
+      setTimeout(() => {
+        setDragState(null);
+        setPreviewReservation(null);
+        setSwapState(null);
+        setIsDragging(false);
+      }, 0);
     }
   };
 
@@ -976,98 +1161,32 @@ export default function TimelineGrid({
    */
   const handleDragEnd = (updatedReservation, dragType, isFinal) => {
     if (isFinal) {
-      // Unlock grid constants when drag completes
-      console.log('Drag ended - unlocking grid constants');
-      setLockedGridConstants(null);
-      
-      // Clean up drag state when drag operation completes
+      // Immediate cleanup to prevent visual artifacts
       setDragState(null);
       setPreviewReservation(null);
       setSwapState(null);
+      
+      // Phase 2: Clear RAF throttling state
+      rafPendingRef.current = false;
+      pendingDragEventRef.current = null;
+      
+      // Clear ghost overlay
+      setGhostOverlay(null);
+      
+      // Clear global dragging state for performance optimizations
+      setIsDragging(false);
+      
+      // Clear cached row positions 
+      setCachedRowPositions(null);
+      
+      // Unlock grid constants when drag completes
+      setLockedGridConstants(null);
+      
+      // Clear sticky references
       lastStableTargetRef.current = null;
-      lastSwitchYRef.current = 0; // Also clear swap state
+      lastSwitchYRef.current = 0;
     }
   };
-
-  /**
-   * Find target room unit based on Y position in grid - stabilized with locked constants
-   * Enhanced to handle both assigned rooms and unassigned transitions, including placeholder rows
-   */
-  const findTargetRoomUnitFromPosition = (yPosition) => {
-  const activeConstants = lockedGridConstants || gridConstants;
-  let accumulatedHeight = 0;
-
-   // Ignore the top/bottom edges of a row to avoid bleeding into neighbors
-  const ROW_INSET = Math.round(activeConstants.ROW_HEIGHT * 0.15); // ~15%
-
-  // room types ordered by sort_order
-  const sortedRoomHierarchy = [...roomHierarchy].sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-  for (const roomType of sortedRoomHierarchy) {
-    // 1) header height
-    const headerEl = document.querySelector(`[data-room-type-header="${roomType.id}"]`);
-    const headerHeight = headerEl?.offsetHeight || activeConstants.ROW_HEIGHT;
-    const headerStart = accumulatedHeight;
-    const headerEnd = accumulatedHeight + headerHeight;
-
-       // If pointer is inside header → NOT droppable
-      if (yPosition >= headerStart && yPosition < headerEnd) {
-        return undefined;   // <-- header does nothing
-      }
-    accumulatedHeight = headerEnd;
-
-    // 2) staging row (if enabled) — treat drop here as UNASSIGNED => return null
-    if (showStagingRow) {
-      const stagingStart = accumulatedHeight;
-      const stagingEnd = accumulatedHeight + activeConstants.ROW_HEIGHT;
-      if (yPosition >= stagingStart && yPosition < stagingEnd) {
-        return null; // unassigned
-      }
-      accumulatedHeight = stagingEnd;
-    }
-
-    // 3) units of this type
-      const units = (roomType.units || [])
-        .filter(u => {
-          if (showStagingRow) return !(u.isUnassigned || u.number === 'UNASSIGNED');
-          if (u.isUnassigned || u.number === 'UNASSIGNED') {
-            return hasUnassignedForType(roomType.id);
-          }
-          return true;
-        })
-        .slice()
-        .sort((a, b) => {
-          if (a.isUnassigned && !b.isUnassigned) return 1;
-          if (!a.isUnassigned && b.isUnassigned) return -1;
-          if (a.isUnassigned && b.isUnassigned) return 0;
-          return a.number?.localeCompare?.(b.number, undefined, { numeric: true }) ?? 0;
-        });
-
-    for (const unit of units) {
-      const rowStart = accumulatedHeight;
-      const rowEnd = accumulatedHeight + activeConstants.ROW_HEIGHT;
-      const edgeMargin = (unit.isUnassigned || unit.isPlaceholder)
-          ? activeConstants.ROW_HEIGHT * 0.20   // 20% inner margin for allocation/unassigned
-          : 0;
-
-        const inside =
-          yPosition >= (rowStart + edgeMargin) &&
-          yPosition <  (rowEnd   - edgeMargin);
-
-        if (inside) {
-          // return null for allocation/unassigned so upstream logic knows it’s the allocate row
-          return unit.isUnassigned ? null : unit.id;
-        }
-
-      // if (yPosition >= rowStart + ROW_INSET && yPosition < rowEnd - ROW_INSET) {
-      //   return unit.isUnassigned ? null : unit.id; // unassigned rows still map to null
-      // }
-      accumulatedHeight = rowEnd;
-    }
-  }
-
-  return undefined; // default to unassigned if somehow outside
-};
 
 
   /**
@@ -1158,12 +1277,6 @@ export default function TimelineGrid({
    * Handle reservation click to open drawer
    */
   const handleReservationClick = (reservation) => {
-    console.log('TimelineGrid: Reservation clicked:', {
-      reservation: reservation,
-      hasId: !!reservation?.id,
-      keys: reservation ? Object.keys(reservation) : [],
-      reservationType: typeof reservation
-    });
     
     if (!reservation) {
       console.error('TimelineGrid: No reservation data provided to handleReservationClick');
@@ -1172,7 +1285,6 @@ export default function TimelineGrid({
     
     setSelectedReservation(reservation);
     setIsDrawerOpen(true);
-    console.log('TimelineGrid: Drawer opened with reservation ID:', reservation.id || 'NO_ID');
   };
 
   /**
@@ -1230,19 +1342,18 @@ export default function TimelineGrid({
           </div>
         </button>
 
-        {/* Right Side - Availability Timeline Grid */}
+        {/* Right Side - Availability Timeline Grid (Virtualized) */}
         <div 
-          className="absolute top-0 h-full bg-gradient-to-r from-gray-100 to-gray-50 grid"
+          className="relative"
           style={{ 
-            left: `${gridConstants.SIDEBAR_WIDTH}px`,
-            right: 0,
-            height: `${gridConstants.ROW_HEIGHT}px`,
+            marginLeft: `${gridConstants.SIDEBAR_WIDTH}px`,
             minWidth: `${dates.length * gridConstants.CELL_WIDTH}px`,
-            gridTemplateColumns: `repeat(${dates.length}, ${gridConstants.CELL_WIDTH}px)`
+            height: `${gridConstants.ROW_HEIGHT}px`
           }}
         >
-          {/* Day Header Cells with weekend styling */}
-          {dates.map((date, index) => {
+          {/* Day Header Cells (virtualized) */}
+          {dates.slice(visible.dateStart, visible.dateEnd).map((date, i) => {
+            const index = visible.dateStart + i;
             const dateObj = new Date(date);
             const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
             const isSaturday = dayOfWeek === 6;
@@ -1255,12 +1366,13 @@ export default function TimelineGrid({
               <div
                 key={`header-cell-${roomType.id}-${date}`}
                 className={`
-                  relative ${isToday ? 'bg-orange-50' : 'bg-gray-200'} ${isSaturday || isSunday ? 'bg-gray-300' : 'bg-gray-200'} border-r border-b border-white flex items-center justify-center text-xs transition-all duration-200
-
+                  absolute top-0 h-full border-r border-b border-white flex items-center justify-center text-xs transition-all duration-200 select-none
+                  ${isToday ? 'bg-orange-50 font-semibold' : isWeekend ? 'bg-gray-300' : 'bg-gray-200'}
                 `}
                 style={{
-                  height: `${gridConstants.ROW_HEIGHT}px`,
-                  minHeight: `${gridConstants.ROW_HEIGHT}px`
+                  left: `${index * gridConstants.CELL_WIDTH}px`,
+                  width: `${gridConstants.CELL_WIDTH}px`,
+                  height: `${gridConstants.ROW_HEIGHT}px`
                 }}
                 data-date={date}
                 data-is-weekend={isWeekend}
@@ -1273,7 +1385,6 @@ export default function TimelineGrid({
                     {availableUnits}
                   </div>
                 </div>
-                
               </div>
             );
           })}
@@ -1327,17 +1438,18 @@ export default function TimelineGrid({
           </div>
         </div>
 
-        {/* Grid Timeline Area with proper column structure */}
+        {/* Grid Timeline Area (Virtualized) */}
         <div 
-          className="relative grid"
+          className="relative"
           style={{ 
             marginLeft: `${gridConstants.SIDEBAR_WIDTH}px`,
             minWidth: `${dates.length * gridConstants.CELL_WIDTH}px`,
-            gridTemplateColumns: `repeat(${dates.length}, ${gridConstants.CELL_WIDTH}px)`
+            height: `${gridConstants.ROW_HEIGHT}px`
           }}
         >
-          {/* Day Column Cells with enhanced weekend styling */}
-          {dates.map((date, index) => {
+          {/* Day Column Cells (virtualized) */}
+          {dates.slice(visible.dateStart, visible.dateEnd).map((date, i) => {
+            const index = visible.dateStart + i;
             const isToday = DateUtils.isToday(date);
             const isWeekend = DateUtils.isWeekend(date);
             const isPast = DateUtils.isPast(date);
@@ -1356,9 +1468,9 @@ export default function TimelineGrid({
             
             return (
               <div
-                key={`cell-${date}`}
+                key={`cell-${roomUnit.id}-${date}`}
                 className={`
-                  relative border-r border-b border-white transition-all duration-200 ease-in-out
+                  absolute top-0 bottom-0 border-r border-b border-white transition-all duration-200 ease-in-out select-none
                   ${isUnassigned ? 'bg-gray-100' : 'bg-gray-200'}
                   ${isValidDropZone ? '!bg-emerald-50 border border-emerald-300 shadow-sm' : ''}
                   ${isInvalidDropZone ? '!bg-red-50 border border-red-300 shadow-sm' : ''}
@@ -1369,8 +1481,8 @@ export default function TimelineGrid({
                   ${isPast ? 'opacity-90' : ''}
                 `}
                 style={{
-                  height: `${gridConstants.ROW_HEIGHT}px`,
-                  minHeight: `${gridConstants.ROW_HEIGHT}px`
+                  left: `${index * gridConstants.CELL_WIDTH}px`,
+                  width: `${gridConstants.CELL_WIDTH}px`
                 }}
                 data-date={date}
                 data-room-unit-id={roomUnit.id}
@@ -1445,11 +1557,13 @@ export default function TimelineGrid({
                       onDragEnd={handleDragEnd}
                       onReservationClick={handleReservationClick}
                       isDragging={dragState?.reservation?.id === reservation.id}
+                      globalDragging={isDragging} // Pass global dragging state for performance
                       showHandles={!loading}
                       enableSplit={!reservation.isSegment} // Only allow splitting on main reservations
                       isResizeMode={isResizeMode} // Pass mode state to reservation bars
                       isHorizontalMode={isHorizontalMode} // Pass horizontal mode state to reservation bars
                       isSwapTarget={isSwapTarget} // Add swap target indicator
+                      swapState={swapState} // Pass swap state for proper styling decisions
                     />
                   </div>
                 );
@@ -1531,59 +1645,228 @@ export default function TimelineGrid({
     return renderEmptyState();
   }
 
+  // Width calculations for consistent alignment
+  const datesWidth = dates.length * gridConstants.CELL_WIDTH;
+  const totalWidth = gridConstants.SIDEBAR_WIDTH + datesWidth;
+
   return (
     <div 
-      className={`relative bg-white border-r border-gray-200 ${className}`} 
+      className={`relative bg-white border border-gray-300 rounded-xl overflow-x-hidden overflow-y-auto ${className}`} 
       ref={gridRef}
+      onScroll={handleScroll}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onDragLeave={handleDragLeave}
       style={{
-        width: '100%',
-        minWidth: `${gridConstants.SIDEBAR_WIDTH + (dates.length * gridConstants.CELL_WIDTH)}px`
+        width: `${totalWidth}px`,
+        height: '100%'
       }}
     >
       
-      {/* Room Types and Units */}
-      {roomHierarchy
-        .sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0))
-        .map((roomType) => {
-          const isExpanded = expandedRoomTypes.has(roomType.id);
+      {/* Month Headers Row - Sticky positioned */}
+      <div className=" flex bg-gray-100 border-t border-b border-gray-200" >
+        {/* Sidebar spacer */}
+        <div 
+          className="flex-shrink-0 border-r border-gray-200 bg-gray-300"
+          style={{ width: `${gridConstants.SIDEBAR_WIDTH}px` }}
+        >
+          <div className="px-2 md:px-3 lg:px-4 py-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+            {/* Empty spacer */}
+          </div>
+        </div>
 
-          return (
-            <div key={roomType.id}>
-              {/* Header */}
-              {renderRoomTypeHeader(roomType)}
+        {/* Month Columns - fixed width to match grid */}
+        <div className="relative" style={{ width: `${datesWidth}px` }}>
+          <div className="flex" style={{ width: '100%' }}>
+            {/* Month labels positioned absolutely for centering */}
+            {(() => {
+              const monthLabels = [];
+              let currentMonthStart = 0;
+              let currentMonth = null;
+              
+              dates.forEach((date, index) => {
+                // Create date object in Japan timezone
+                const dateObj = new Date(date + 'T00:00:00+09:00');
+                const monthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
+                
+                if (currentMonth !== monthKey) {
+                  // End previous month if it exists
+                  if (currentMonth !== null) {
+                    const monthWidth = (index - currentMonthStart) * gridConstants.CELL_WIDTH;
+                    const monthPosition = currentMonthStart * gridConstants.CELL_WIDTH;
+                    const prevDateObj = new Date(dates[currentMonthStart]);
+                    const monthText = gridConstants.BREAKPOINT === 'mobile' 
+                      ? prevDateObj.toLocaleDateString('en-US', { timeZone: 'Asia/Tokyo' })
+                      : prevDateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    
+                    monthLabels.push(
+                      <div
+                        key={`month-label-${currentMonth}`}
+                        className="absolute py-1 text-xs font-medium text-gray-600 flex items-center justify-center"
+                        style={{
+                          left: `${monthPosition}px`,
+                          width: `${monthWidth}px`,
+                          height: '100%'
+                        }}
+                      >
+                        {monthText}
+                      </div>
+                    );
+                  }
+                  
+                  // Start new month
+                  currentMonth = monthKey;
+                  currentMonthStart = index;
+                }
+              });
+              
+              // Handle the last month
+              if (currentMonth !== null) {
+                const monthWidth = (dates.length - currentMonthStart) * gridConstants.CELL_WIDTH;
+                const monthPosition = currentMonthStart * gridConstants.CELL_WIDTH;
+                const lastDateObj = new Date(dates[currentMonthStart]);
+                const monthText = gridConstants.BREAKPOINT === 'mobile' 
+                  ? lastDateObj.toLocaleDateString('en-US', { month: 'short' })
+                  : lastDateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                
+                monthLabels.push(
+                  <div
+                    key={`month-label-${currentMonth}`}
+                    className="absolute py-1 text-xs font-medium text-gray-600 flex items-center justify-center"
+                    style={{
+                      left: `${monthPosition}px`,
+                      width: `${monthWidth}px`,
+                      height: '100%'
+                    }}
+                  >
+                    {monthText}
+                  </div>
+                );
+              }
+              
+              return monthLabels;
+            })()}
+            
+            {/* Month boundary lines - only at month transitions */}
+            {dates.map((date, index) => {
+              const currentDate = new Date(date + 'T00:00:00+09:00');
+              const nextDate = index < dates.length - 1 ? new Date(dates[index + 1] + 'T00:00:00+09:00') : null;
+              const isMonthBoundary = nextDate && currentDate.getMonth() !== nextDate.getMonth();
+              
+              return (
+                <div
+                  key={`month-cell-${date}`}
+                  className={`flex-shrink-0 bg-gray-300 ${isMonthBoundary ? 'border-r border-white' : ''}`}
+                  style={{ width: `${gridConstants.CELL_WIDTH}px`, height: '28px' }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
-              {/* Staging row under this header */}
-              {renderTypeStagingRow(roomType)}
+      {/* Date Headers Row - Sticky positioned below month headers */}
+      <div className=" flex bg-gray-50 border-t border-b border-white shadow-sm" >
+        {/* Sidebar spacer - matches TimelineGrid sidebar width */}
+        <div 
+          className="flex-shrink-0 border-r border-white bg-gray-200"
+          style={{ width: `${gridConstants.SIDEBAR_WIDTH}px` }}
+        >
+          <div className="px-2 md:px-3 lg:px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Rooms
+          </div>
+        </div>
 
-              {/* Units (respect expanded) */}
-              {isExpanded && roomType.units && (() => {
-                  // Clone and (optionally) remove unassigned rows when Allocate Mode is ON
-                 let unitsToRender = [...(roomType.units || [])].filter(u => {
-                    // Hide unassigned rows entirely during Allocate Mode
-                    if (showStagingRow) return !(u.isUnassigned || u.number === 'UNASSIGNED');
-                    // When Allocate Mode is OFF: show Unassigned row only if there are items
-                    if (u.isUnassigned || u.number === 'UNASSIGNED') {
-                      return hasUnassignedForType(roomType.id);
+        {/* Date Columns - fixed width to match grid */}
+        <div className="relative" style={{ width: `${datesWidth}px` }}>
+          <div className="flex" style={{ width: '100%' }}>
+            {dates.map((date, index) => {
+              const isToday = DateUtils.isToday(date);
+              const isPast = DateUtils.isPast(date);
+              const isWeekend = DateUtils.isWeekend(date);
+
+              return (
+                <div
+                  key={date}
+                  className={`
+                    flex-shrink-0 border-r border-white text-center transition-colors duration-150 bg-gray-200
+                    ${isToday && !isWeekend ? 'bg-orange-50 border-blue-300' : ''}
+                    ${isToday && isWeekend ? 'bg-blue-50 border-blue-300' : ''}
+                    ${isWeekend && !isToday ? 'bg-gray-300' : ''}
+                    ${!isWeekend && !isToday ? 'bg-gray-200' : ''}
+                    ${isPast ? 'opacity-60' : ''}
+                  `}
+                  style={{ 
+                    width: `${gridConstants.CELL_WIDTH}px`,
+                    padding: gridConstants.BREAKPOINT === 'mobile' ? '6px 4px' : '8px 6px'
+                  }}
+                >
+                  <div className={`
+                    font-medium transition-colors duration-150 
+                    ${isToday ? 'text-gray-700' : 'text-gray-600'}
+                    ${gridConstants.BREAKPOINT === 'mobile' ? 'text-xs' : 'text-xs'}
+                  `}>
+                    {gridConstants.BREAKPOINT === 'mobile' 
+                      ? DateUtils.formatDate(date, 'weekday').substring(0, 2) // Abbreviated for mobile
+                      : DateUtils.formatDate(date, 'weekday')
                     }
-                    return true;
-                  });
-                return unitsToRender
-                  .sort((a,b) => {
-                    if (a.isUnassigned && !b.isUnassigned) return 1;
-                    if (!a.isUnassigned && b.isUnassigned) return -1;
-                    if (a.isUnassigned && b.isUnassigned) return 0;
-                    return a.number.localeCompare(b.number, undefined, { numeric: true });
-                  })
-                  .map((roomUnit) => renderRoomUnitRow(roomUnit, roomType));
-              })()}
-            </div>
-          );
-        })}
+                  </div>
+                  <div className={`
+                    text-xs transition-colors duration-150
+                    ${isToday ? 'text-gray-900' : 'text-gray-900'}
+                    ${gridConstants.BREAKPOINT === 'mobile' ? 'text-xs' : 'text-sm'}
+                  `}>
+                    {new Date(date).getDate()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
-          
+      {/* Scrollable Content Area */}
+      <div style={{ width: `${totalWidth}px` }}>
+        {/* Room Types and Units */}
+        {roomHierarchy
+          .sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0))
+          .map((roomType) => {
+            const isExpanded = expandedRoomTypes.has(roomType.id);
+
+            return (
+              <div key={roomType.id}>
+                {/* Header */}
+                {renderRoomTypeHeader(roomType)}
+
+                {/* Staging row under this header */}
+                {renderTypeStagingRow(roomType)}
+
+                {/* Units (respect expanded) */}
+                {isExpanded && roomType.units && (() => {
+                    // Clone and (optionally) remove unassigned rows when Allocate Mode is ON
+                   let unitsToRender = [...(roomType.units || [])].filter(u => {
+                      // Hide unassigned rows entirely during Allocate Mode
+                      if (showStagingRow) return !(u.isUnassigned || u.number === 'UNASSIGNED');
+                      // When Allocate Mode is OFF: show Unassigned row only if there are items
+                      if (u.isUnassigned || u.number === 'UNASSIGNED') {
+                        return hasUnassignedForType(roomType.id);
+                      }
+                      return true;
+                    });
+                  return unitsToRender
+                    .sort((a,b) => {
+                      if (a.isUnassigned && !b.isUnassigned) return 1;
+                      if (!a.isUnassigned && b.isUnassigned) return -1;
+                      if (a.isUnassigned && b.isUnassigned) return 0;
+                      return a.number.localeCompare(b.number, undefined, { numeric: true });
+                    })
+                    .map((roomUnit) => renderRoomUnitRow(roomUnit, roomType));
+                })()}
+              </div>
+            );
+          })}
+      </div>
+
       {/* Drag Overlay with mode-specific cursor */}
       {dragState && (
         <div 

@@ -73,6 +73,8 @@ const calendarRoutes = require('./routes/calendarRoutes');
 const upsellRoutes = require('./routes/upsellRoutes');
 const translationRoutes = require('./routes/translationRoutes');
 const messageRuleRoutes = require('./routes/messageRuleRoutes');
+const supportRoutes = require('./routes/supportRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 // Debug middleware to log all API requests
 app.use('/api/*', (req, res, next) => {
@@ -100,6 +102,8 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/upsell', upsellRoutes);
 app.use('/api/translations', translationRoutes);
 app.use('/api/message-rules', messageRuleRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Domain-based routing setup
 const frontendPath = process.env.NODE_ENV === 'production' 
@@ -155,6 +159,12 @@ app.get('/privacy', (req, res) => {
 app.get('/commerce', (req, res) => {
   console.log('🚀 Serving commerce page via /commerce route');
   res.sendFile(path.join(landingPath, 'commerce.html'));
+});
+
+// Development route for support page
+app.get('/support', (req, res) => {
+  console.log('🚀 Serving support page via /support route');
+  res.sendFile(path.join(landingPath, 'support.html'));
 });
 
 // Specific route for landing HTML files

@@ -331,11 +331,57 @@ router.get('/templates/:templateId', adminAuth, async (req, res) => {
   }
 });
 
+// Create new template
+router.post('/templates', adminAuth, async (req, res) => {
+  try {
+    const { name, content, variables, language, channel, enabled, property_id } = req.body;
+    const { supabaseAdmin } = require('../config/supabase');
+
+    // Validate input
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Template name is required' });
+    }
+
+    if (!content || content.trim() === '') {
+      return res.status(400).json({ error: 'Template content is required' });
+    }
+
+    const templateData = {
+      name: name.trim(),
+      content: content.trim(),
+      language: language || 'en',
+      channel: channel || 'email',
+      enabled: enabled !== undefined ? enabled : true,
+      variables: variables || [],
+      property_id: property_id || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('message_templates')
+      .insert(templateData)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Template created successfully',
+      template: data
+    });
+  } catch (error) {
+    console.error('Error creating template:', error);
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
 // Update template content
 router.put('/templates/:templateId', adminAuth, async (req, res) => {
   try {
     const { templateId } = req.params;
-    const { name, content, variables, language } = req.body;
+    const { name, content, variables, language, channel, enabled } = req.body;
     const { supabaseAdmin } = require('../config/supabase');
 
     // Validate input
@@ -351,6 +397,8 @@ router.put('/templates/:templateId', adminAuth, async (req, res) => {
     if (name) updateData.name = name.trim();
     if (variables) updateData.variables = variables;
     if (language) updateData.language = language;
+    if (channel) updateData.channel = channel;
+    if (enabled !== undefined) updateData.enabled = enabled;
 
     const { data, error } = await supabaseAdmin
       .from('message_templates')
@@ -404,7 +452,9 @@ router.get('/templates/variables/available', adminAuth, async (req, res) => {
           { key: 'total_amount', label: 'Total Amount', description: 'Total reservation cost' },
           { key: 'currency', label: 'Currency', description: 'Currency code (e.g., JPY, USD)' },
           { key: 'booking_source', label: 'Booking Source', description: 'Platform where booking was made' },
-          { key: 'special_requests', label: 'Special Requests', description: 'Guest special requests or notes' }
+          { key: 'special_requests', label: 'Special Requests', description: 'Guest special requests or notes' },
+          { key: 'check_in_token', label: 'Check-in Token', description: 'Unique guest check-in token for authentication' },
+          { key: 'guest_app_link', label: 'Guest App Magic Link', description: 'Direct link to guest app with authentication' }
         ]
       },
       property: {
@@ -417,8 +467,8 @@ router.get('/templates/variables/available', adminAuth, async (req, res) => {
           { key: 'check_in_instructions', label: 'Check-in Instructions', description: 'Property check-in instructions' },
           { key: 'house_rules', label: 'House Rules', description: 'Property house rules' },
           { key: 'emergency_contact', label: 'Emergency Contact', description: 'Property emergency contact information' },
-          { key: 'access_time', label: 'Access Time', description: 'Property access time' },
-          { key: 'departure_time', label: 'Departure Time', description: 'Property departure time' }
+          { key: 'access_time', label: 'Check-in Time', description: 'Property check-in/access time (e.g., 15:00)' },
+          { key: 'departure_time', label: 'Check-out Time', description: 'Property check-out/departure time (e.g., 11:00)' }
         ]
       },
       room: {
@@ -449,6 +499,74 @@ router.get('/templates/variables/available', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching available variables:', error);
     res.status(500).json({ error: 'Failed to fetch available variables' });
+  }
+});
+
+// Associate template with rule (for new language templates)
+router.post('/rules/:ruleId/templates', adminAuth, async (req, res) => {
+  try {
+    const { ruleId } = req.params;
+    const { templateId, isPrimary = false, priority = 0 } = req.body;
+    const { supabaseAdmin } = require('../config/supabase');
+
+    // Validate that rule and template exist
+    const [ruleCheck, templateCheck] = await Promise.all([
+      supabaseAdmin.from('message_rules').select('id').eq('id', ruleId).single(),
+      supabaseAdmin.from('message_templates').select('id').eq('id', templateId).single()
+    ]);
+
+    if (ruleCheck.error || !ruleCheck.data) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    if (templateCheck.error || !templateCheck.data) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    // Check if association already exists
+    const { data: existing } = await supabaseAdmin
+      .from('message_rule_templates')
+      .select('*')
+      .eq('rule_id', ruleId)
+      .eq('template_id', templateId)
+      .single();
+
+    if (existing) {
+      return res.status(409).json({ error: 'Rule-template association already exists' });
+    }
+
+    // If this should be primary, unmark other primary templates for this rule
+    if (isPrimary) {
+      await supabaseAdmin
+        .from('message_rule_templates')
+        .update({ is_primary: false })
+        .eq('rule_id', ruleId);
+    }
+
+    // Create the association
+    const { data: association, error } = await supabaseAdmin
+      .from('message_rule_templates')
+      .insert({
+        rule_id: ruleId,
+        template_id: templateId,
+        is_primary: isPrimary,
+        priority: priority,
+        created_at: new Date().toISOString()
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Template associated with rule successfully',
+      association
+    });
+
+  } catch (error) {
+    console.error('Error associating template with rule:', error);
+    res.status(500).json({ error: 'Failed to associate template with rule' });
   }
 });
 

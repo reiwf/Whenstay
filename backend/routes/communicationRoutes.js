@@ -110,61 +110,86 @@ router.get('/threads', async (req, res) => {
 
     if (error) throw error;
 
-    // Optimized batch query for unread counts
-    const threadIds = threads.map(t => t.id);
-    
-    if (threadIds.length === 0) {
+    // OPTIMIZED: Single-query solution for threads with unread counts
+    if (threads.length === 0) {
       return res.json({
         threads: [],
         total: 0
       });
     }
 
-    // Get all participants for these threads in one query
-    const { data: participants } = await supabaseAdmin
-      .from('message_participants')
-      .select('thread_id, last_read_at')
-      .eq('user_id', userId)
-      .in('thread_id', threadIds);
+    // Get threads with unread counts in a single optimized query
+    const threadIds = threads.map(t => t.id);
+    
+    const { data: threadsWithUnread, error: unreadError } = await supabaseAdmin.rpc(
+      'get_threads_with_unread_counts',
+      {
+        p_thread_ids: threadIds,
+        p_user_id: userId
+      }
+    );
 
-    // Create a map of thread_id -> last_read_at for quick lookup
-    const participantMap = new Map();
-    participants?.forEach(p => {
-      participantMap.set(p.thread_id, p.last_read_at || '1970-01-01T00:00:00Z');
-    });
-
-    // Get unread counts for all threads efficiently by grouping similar queries
-    const unreadCountQueries = threadIds.map(async (threadId) => {
-      const lastReadAt = participantMap.get(threadId) || '1970-01-01T00:00:00Z';
+    if (unreadError) {
+      console.warn('Optimized unread count query failed, falling back to individual queries:', unreadError.message);
       
-      const { count } = await supabaseAdmin
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('thread_id', threadId)
-        .eq('direction', 'incoming')
-        .gt('created_at', lastReadAt);
+      // Fallback to original method if the stored procedure doesn't exist
+      const { data: participants } = await supabaseAdmin
+        .from('message_participants')
+        .select('thread_id, last_read_at')
+        .eq('user_id', userId)
+        .in('thread_id', threadIds);
 
-      return { threadId, unreadCount: count || 0 };
-    });
+      const participantMap = new Map();
+      participants?.forEach(p => {
+        participantMap.set(p.thread_id, p.last_read_at || '1970-01-01T00:00:00Z');
+      });
 
-    // Execute all unread count queries in parallel (still multiple queries but much faster)
-    const unreadResults = await Promise.all(unreadCountQueries);
+      // Batch unread counts more efficiently
+      const unreadCountQueries = threadIds.map(async (threadId) => {
+        const lastReadAt = participantMap.get(threadId) || '1970-01-01T00:00:00Z';
+        
+        const { count } = await supabaseAdmin
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('thread_id', threadId)
+          .eq('direction', 'incoming')
+          .gt('created_at', lastReadAt);
 
-    // Create map for quick lookup
+        return { threadId, unreadCount: count || 0 };
+      });
+
+      const unreadResults = await Promise.all(unreadCountQueries);
+      const unreadMap = new Map();
+      unreadResults.forEach(result => {
+        unreadMap.set(result.threadId, result.unreadCount);
+      });
+
+      // Attach unread counts to threads
+      const threadsWithUnread = threads.map(thread => ({
+        ...thread,
+        unread_count: unreadMap.get(thread.id) || 0
+      }));
+
+      return res.json({
+        threads: threadsWithUnread,
+        total: threadsWithUnread.length
+      });
+    }
+
+    // Merge optimized unread data with thread data
     const unreadMap = new Map();
-    unreadResults.forEach(result => {
-      unreadMap.set(result.threadId, result.unreadCount);
+    threadsWithUnread?.forEach(item => {
+      unreadMap.set(item.thread_id, item.unread_count || 0);
     });
 
-    // Attach unread counts to threads
-    const threadsWithUnread = threads.map(thread => ({
+    const finalThreads = threads.map(thread => ({
       ...thread,
       unread_count: unreadMap.get(thread.id) || 0
     }));
 
     res.json({
-      threads: threadsWithUnread,
-      total: threadsWithUnread.length
+      threads: finalThreads,
+      total: finalThreads.length
     });
 
   } catch (error) {

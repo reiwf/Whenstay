@@ -5,13 +5,14 @@ import { DateUtils, StatusUtils, GridUtils } from './CalendarUtils';
  * ReservationBar - Individual reservation segment with HTML5 drag/drop, resize, and split functionality
  * Uses native HTML5 Drag API for better browser compatibility and performance
  */
-export default function ReservationBar({
+const ReservationBar = React.memo(function ReservationBar({
   reservation,
   startDate,
   dates = [], // Add dates array to know actual grid width
   onDragStart,
   onDragEnd,
   isDragging = false,
+  globalDragging = false, // Global dragging state for performance optimizations
   isPreview = false,
   hasConflict = false,
   showHandles = true,
@@ -45,7 +46,6 @@ export default function ReservationBar({
   
   // If position is invalid (during navigation transitions), hide the bar temporarily
   if (!isPositionValid()) {
-    console.log('ReservationBar: Invalid position detected, hiding during navigation transition');
     return null;
   }
   
@@ -247,8 +247,6 @@ export default function ReservationBar({
       
       isShrinkOperation = newDuration < originalDuration;
       isExpandOperation = newDuration > originalDuration;
-      
-      console.log(`Duration comparison: original=${originalDuration}, new=${newDuration}, shrink=${isShrinkOperation}, expand=${isExpandOperation}`);
     }
     
     // Enhanced color logic for different drag states
@@ -280,8 +278,8 @@ export default function ReservationBar({
         textColor = '#1e40af';
         borderStyle = 'dashed';
       }
-    } else if (isSwapPreview) {
-      // Swap preview styling - purple theme for sophisticated swap operations
+    } else if (isPreview && isSwapPreview) {
+      // Swap preview styling - purple theme for sophisticated swap operations (ONLY during preview)
       if (swapType === 'dragged') {
         // Dragged reservation preview - bright purple
         backgroundColor = '#f3e8ff';
@@ -301,7 +299,7 @@ export default function ReservationBar({
         textColor = '#7c3aed';
         borderStyle = 'dashed';
       }
-    } else if (isMovePreview) {
+    } else if (isPreview && isMovePreview) {
       // Valid move preview - green theme
       backgroundColor = '#f0fdf4';
       borderColor = '#16a34a';
@@ -314,7 +312,7 @@ export default function ReservationBar({
       textColor = '#f0fdf4';
       borderStyle = 'dashed';
     } else if (isSwapTarget) {
-      // Swap target styling - highlight the target reservation with purple glow
+      // Swap target styling - highlight the target reservation with purple glow (ONLY during active swap state)
       backgroundColor = '#f0fdf4';
       borderColor = '#8b5cf6';
       textColor = '#ffffff';
@@ -376,10 +374,8 @@ export default function ReservationBar({
       top: `${Math.max(2, gridConstants.ROW_HEIGHT * 0.1)}px`,
       height: `${gridConstants.ROW_HEIGHT - Math.max(4, gridConstants.ROW_HEIGHT * 0.2)}px`,
 
-      // Glassy look
+      // Performance optimization: Use lightweight styles during any drag operation
       backgroundColor: reservation.status === 'checked_in' && !isPreview ? backgroundColor : 'rgba(240, 127, 34, 0.4)', 
-      backdropFilter: 'blur(8px) saturate(150%)',
-      WebkitBackdropFilter: 'blur(8px) saturate(150%)', // Safari support
 
       borderWidth: gridConstants.BREAKPOINT === 'mobile' ? '1px' : '1px',
       borderColor: reservation.status === 'checked_in' && !isPreview ? borderColor : 'rgba(255, 187, 131, 0.15)',
@@ -396,20 +392,32 @@ export default function ReservationBar({
       zIndex: isDragging ? 50 : isPreview ? 30 : isHovered ? 20 : 10,
       opacity: isPreview ? (hasConflict || isInvalidResize ? 0.6 : 0.75) : 1,
 
-      transform: isDragging ? 'scale(1.02)' : 'scale(1)',
-      transition: isDragging ? 'none' : 'all 150ms ease-in-out',
+      // GPU acceleration optimizations
+      willChange: globalDragging ? 'transform' : 'auto',
+      transform: isDragging ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
+      transition: isDragging ? 'none' : 'transform 150ms ease, opacity 150ms ease',
 
-      // Glassy shadow
-      boxShadow: isDragging
+      fontSize: gridConstants.BREAKPOINT === 'mobile' ? '10px' : '11px'
+    };
+
+    // Apply expensive visual effects only when not dragging for better performance
+    if (!globalDragging) {
+      // Glassy look - only when idle
+      baseStyle.backdropFilter = 'blur(8px) saturate(150%)';
+      baseStyle.WebkitBackdropFilter = 'blur(8px) saturate(150%)'; // Safari support
+
+      // Glassy shadow - only when idle
+      baseStyle.boxShadow = isDragging
         ? '0 6px 20px rgba(0, 0, 0, 0.25)'
         : isPreview
         ? '0 3px 12px rgba(0, 0, 0, 0.20)'
         : isHovered
         ? '0 4px 16px rgba(0, 0, 0, 0.22)'
-        : '0 1px 4px rgba(0, 0, 0, 0.12)',
-
-      fontSize: gridConstants.BREAKPOINT === 'mobile' ? '10px' : '11px'
-    };
+        : '0 1px 4px rgba(0, 0, 0, 0.12)';
+    } else {
+      // Lightweight styles during drag operations for better performance
+      baseStyle.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)'; // Minimal shadow
+    }
 
           // Size of the cut (px)
       const CUT_SIZE = 0;
@@ -688,4 +696,6 @@ export default function ReservationBar({
       )}
     </div>
   );
-}
+});
+
+export default ReservationBar;
